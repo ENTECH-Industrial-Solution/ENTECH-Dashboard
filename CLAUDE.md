@@ -24,10 +24,37 @@ because `src/lib/env.ts` validates the environment at import time. To smoke-test
 a build without a real database, pass dummy values inline — the build never
 connects, it only imports.
 
+**Any migration that adds a table needs a follow-up.** Run
+`prisma/supabase-02-harden.sql` in the Supabase SQL Editor afterwards; it is
+idempotent and re-asserts RLS and the role lockout on the new tables. See
+"Database hosting" below for why.
+
 ## Architecture
 
-Next.js 15 App Router, TypeScript, Prisma + PostgreSQL, Tailwind v4. Deployed on
-Vercel. No auth library: sessions are hand-rolled in `src/lib/auth/`.
+Next.js 15 App Router, TypeScript, Prisma + PostgreSQL (Supabase), Tailwind v4.
+Deployed on Vercel. No auth library: sessions are hand-rolled in `src/lib/auth/`.
+
+### Database hosting
+
+Supabase is used **only as a Postgres host**. This app does not use Supabase
+Auth, Storage, PostgREST, or `@supabase/supabase-js`, and needs no anon or
+service_role key. Prisma connects over plain Postgres. Do not introduce the
+Supabase client to solve a problem the server layer already handles — it would
+put a second, differently-secured path to the same data.
+
+Tables live in the **`app` schema, not `public`**, selected via `?schema=app` on
+both connection URLs. This is a security requirement, not a preference: Supabase
+exposes `public` over PostgREST to the anon key and grants that role access to
+tables created there by default, which would publish `Employee.passwordHash` and
+`Session.tokenHash` to a key meant for browser code. `prisma/supabase-01-init.sql`
+creates the schema and revokes the API roles; `prisma/supabase-02-harden.sql`
+adds deny-all RLS and must be re-run after any migration that adds a table.
+
+Two connection strings, and they are not interchangeable: `DATABASE_URL` is the
+transaction pooler (port 6543, `pgbouncer=true&connection_limit=1`) because
+serverless invocations would otherwise exhaust the connection limit, while
+`DIRECT_URL` must be a session-level connection (port 5432) because Prisma
+migrate uses advisory locks a transaction pooler cannot carry.
 
 ### The security boundary
 
