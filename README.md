@@ -7,7 +7,7 @@
 - รองรับภาษาไทยและอังกฤษ สลับได้ทันที
 - บันทึกการใช้งานแบบ append-only ลบหรือแก้ไขไม่ได้
 
-**Stack:** Next.js 15 (App Router) · TypeScript · Prisma · PostgreSQL · Tailwind v4 · Vercel
+**Stack:** Next.js 15 (App Router) · TypeScript · Prisma · PostgreSQL · Tailwind v4 · Netlify
 
 ---
 
@@ -47,7 +47,7 @@ string**, and both need `?schema=app`:
 | `DIRECT_URL` | Session pooler, port **5432**, with `?schema=app` — migrations need session-level features a transaction pooler cannot carry |
 | `SESSION_SECRET` | 32+ random characters — `openssl rand -base64 48` |
 | `APP_URL` | Must match the deployed origin exactly in production |
-| `SEED_ADMIN_*` | Bootstrap admin only; remove after the first seed, never set in Vercel |
+| `SEED_ADMIN_*` | Bootstrap admin only; remove after the first seed, never set in production |
 
 A password containing `@ : / ? # &` must be percent-encoded in the URL
 (`@` becomes `%40`), otherwise the connection string parses wrongly.
@@ -74,25 +74,34 @@ npm run dev
 Sign in at http://localhost:3000/login with the seeded `SEED_ADMIN_CODE`. The
 seeded account is forced to change its password on first sign-in.
 
-## Deploying to Vercel
+## Deploying
 
-1. Import the repository in Vercel.
-2. Set `DATABASE_URL`, `DIRECT_URL`, `SESSION_SECRET`, and `APP_URL` as
-   Production environment variables. Do **not** set `SEED_ADMIN_*` there.
-3. Deploy. `npm run build` runs `prisma generate` automatically.
-4. Apply migrations against production once, from your machine:
+Netlify, via GitHub Actions rather than Netlify's Git integration — that
+integration requires a Pro plan to pull a private repository owned by a GitHub
+organization, and so does Vercel. Building in Actions and uploading the finished
+artifact with the Netlify CLI avoids the gate without making the repo public.
+
+One-time setup:
+
+1. Create a Netlify site (skip connecting a Git provider).
+2. Copy its **API ID** from Site configuration to GitHub as `NETLIFY_SITE_ID`.
+3. Create a Netlify **personal access token** and add it as `NETLIFY_AUTH_TOKEN`.
+   Set both without echoing them:
    ```bash
-   npm run db:deploy
+   gh secret set NETLIFY_AUTH_TOKEN
    ```
-5. Re-run `prisma/supabase-02-harden.sql`, then seed the first admin and unset
-   the seed variables.
+4. In Netlify > Site configuration > Environment variables, set `DATABASE_URL`,
+   `DIRECT_URL`, `SESSION_SECRET`, and `APP_URL`. Use a **different**
+   `SESSION_SECRET` from the local one, and do not set `SEED_ADMIN_*`.
+5. Set `APP_URL` to the real site URL once the first deploy assigns one.
 
-Vercel and Supabase both default to `us-east-1`. Put the Vercel function region
-in the same region as the Supabase project, or every query pays a round trip
-across the Atlantic or Pacific.
+After that, pushing to `main` deploys. Migrations stay manual on purpose:
 
-`@node-rs/argon2` ships prebuilt binaries and is declared in
-`serverExternalPackages`, so it runs on Vercel's Node runtime without a build step.
+```bash
+npm run db:deploy
+```
+
+Then re-run `prisma/supabase-02-harden.sql` if the migration added a table.
 
 ## Security model
 

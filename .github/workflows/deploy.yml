@@ -1,0 +1,69 @@
+name: Deploy to Netlify
+
+# Why the build happens here instead of on Netlify:
+#
+# Netlify's Git integration will not pull a private repository owned by a GitHub
+# organization without a Pro plan — the same gate Vercel has. Building in
+# Actions and uploading the result with the Netlify CLI sidesteps that entirely:
+# Actions already has access to this repo, and Netlify only ever receives the
+# finished artifact. The repo stays private and stays in the org.
+#
+# Required repository secrets:
+#   NETLIFY_AUTH_TOKEN  personal access token from Netlify > User settings >
+#                       Applications > Personal access tokens
+#   NETLIFY_SITE_ID     the site's API ID, from Site configuration > General
+#
+# Runtime configuration (DATABASE_URL, DIRECT_URL, SESSION_SECRET, APP_URL)
+# deliberately lives in Netlify's site environment variables, not here. The CLI
+# pulls them down at build time, so there is one source of truth and the
+# production database password never enters GitHub.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never let two deploys race; a cancelled deploy could leave the site on a
+# half-uploaded bundle.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # postinstall runs `prisma generate`, which emits the rhel engines the
+      # Lambda runtime needs. No database connection is involved.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # `--build` runs netlify.toml's build command *and* the Next.js runtime
+      # plugin, which is what turns .next into Netlify Functions. Deploying
+      # without it would upload static files and no server.
+      - name: Build and deploy to production
+        run: npx --yes netlify-cli@17 deploy --build --prod
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}

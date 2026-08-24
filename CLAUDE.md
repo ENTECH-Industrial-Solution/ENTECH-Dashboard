@@ -24,6 +24,25 @@ because `src/lib/env.ts` validates the environment at import time. To smoke-test
 a build without a real database, pass dummy values inline — the build never
 connects, it only imports.
 
+## Deployment
+
+Hosted on Netlify, but **not** through Netlify's Git integration — that gate
+requires Pro for a private organization-owned repo. `.github/workflows/deploy.yml`
+builds in GitHub Actions and uploads with the Netlify CLI, so the repo stays
+private and inside the org. Pushing to `main` deploys.
+
+Runtime config lives in Netlify's site environment variables, never in GitHub
+secrets; the CLI pulls it into the build. GitHub only holds NETLIFY_AUTH_TOKEN
+and NETLIFY_SITE_ID.
+
+**Migrations are not automated.** The workflow never runs `prisma migrate
+deploy` — an auto-migration on every push is a bad trade for a system whose
+completed-task archive is meant to be evidence. Apply them deliberately:
+
+```bash
+npm run db:deploy
+```
+
 **Any migration that adds a table needs a follow-up.** Run
 `prisma/supabase-02-harden.sql` in the Supabase SQL Editor afterwards; it is
 idempotent and re-asserts RLS and the role lockout on the new tables. See
@@ -32,7 +51,7 @@ idempotent and re-asserts RLS and the role lockout on the new tables. See
 ## Architecture
 
 Next.js 15 App Router, TypeScript, Prisma + PostgreSQL (Supabase), Tailwind v4.
-Deployed on Vercel. No auth library: sessions are hand-rolled in `src/lib/auth/`.
+Deployed on Netlify. No auth library: sessions are hand-rolled in `src/lib/auth/`.
 
 ### Database hosting
 
@@ -152,7 +171,7 @@ does not distinguish the cases, and checks `isActive` only *after* the password
 verifies, so account existence is not leaked to an outsider.
 
 Two independent limiters: `src/lib/rate-limit.ts` is per-IP and **in-memory**,
-so on Vercel each instance counts separately — it slows a naive attacker but is
+so each serverless instance counts separately — it slows a naive attacker but is
 not a hard ceiling. The authoritative control is `src/lib/auth/login-throttle.ts`,
 which is database-backed and applies an exponential per-account lockout
 (5 failures → 1 min, doubling to 30 min). If you need a real distributed limit,
@@ -161,7 +180,7 @@ is designed not to change.
 
 ### Passwords
 
-Argon2id via `@node-rs/argon2` (prebuilt binaries, works on Vercel; listed in
+Argon2id via `@node-rs/argon2` (prebuilt binaries; listed in
 `serverExternalPackages`). Admins never choose passwords — `createEmployeeAction`
 and `resetPasswordAction` generate one with a CSPRNG, return the plaintext
 exactly once to the calling admin as `ActionState.data`, and never store or log
