@@ -1,0 +1,206 @@
+// ENTECH Dashboard — data model
+//
+// Design rules that the rest of the codebase depends on:
+//  1. Employees are never hard-deleted. Deactivating preserves the task history
+//     that the completed-task archive exists to prove.
+//  2. TaskEvent and AuditLog are append-only. No update/delete paths are exposed
+//     anywhere in the application layer.
+//  3. Every mutation that matters is written together with its audit row in the
+//     same transaction, so evidence cannot silently drift from state.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskEventType {
+  CREATED
+  ASSIGNED
+  STATUS_CHANGED
+  UPDATED
+  COMMENTED
+  COMPLETED
+  REOPENED
+}
+
+model Employee {
+  id String @id @default(cuid())
+
+  /// Human-facing staff code issued by an admin (e.g. "ENT-0042").
+  /// This is the login identifier — never the database id.
+  employeeCode String @unique
+  fullName     String
+  email        String? @unique
+  department   String?
+  position     String?
+  role         Role    @default(EMPLOYEE)
+
+  /// Argon2id hash. The plaintext password never leaves the server action.
+  passwordHash       String
+  mustChangePassword Boolean  @default(true)
+  passwordChangedAt  DateTime @default(now())
+
+  /// Soft-delete. Deactivated accounts keep their history but cannot log in.
+  isActive      Boolean   @default(true)
+  deactivatedAt DateTime?
+
+  /// Brute-force protection state, enforced in lib/auth/login-throttle.ts
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdById      String?
+  createdBy        Employee?  @relation("EmployeeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdEmployees Employee[] @relation("EmployeeCreatedBy")
+
+  sessions      Session[]
+  assignedTasks Task[]      @relation("TaskAssignee")
+  createdTasks  Task[]      @relation("TaskCreator")
+  taskEvents    TaskEvent[]
+  auditLogs     AuditLog[]
+
+  @@index([isActive, role])
+  @@index([department])
+}
+
+model Session {
+  id String @id @default(cuid())
+
+  /// SHA-256 of the opaque session token. The raw token exists only in the
+  /// user's httpOnly cookie, so a database leak cannot be replayed as a login.
+  tokenHash String @unique
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  ipAddress String?
+  userAgent String?
+
+  /// Hard ceiling regardless of activity.
+  expiresAt DateTime
+  /// Rolling window; refreshed on use, enforced on every request.
+  idleExpiresAt DateTime
+  revokedAt     DateTime?
+
+  createdAt      DateTime @default(now())
+  lastActiveAt   DateTime @default(now())
+
+  @@index([employeeId, revokedAt])
+  @@index([expiresAt])
+}
+
+model Task {
+  id String @id @default(cuid())
+
+  /// Sequential human-readable reference, e.g. "TSK-000123".
+  code        String       @unique
+  title       String
+  description String?
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+
+  assigneeId String
+  assignee   Employee @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: Restrict)
+
+  createdById String
+  createdBy   Employee @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  dueDate   DateTime?
+  startedAt DateTime?
+
+  /// Set once, when status first becomes COMPLETED. Together with the
+  /// TaskEvent trail this is the "evidence" record the archive tab shows.
+  completedAt    DateTime?
+  completionNote String?
+  proofUrl       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events TaskEvent[]
+
+  @@index([assigneeId, status])
+  @@index([status, dueDate])
+  @@index([completedAt])
+}
+
+/// Append-only history for a single task. Written inside the same transaction
+/// as the task mutation it describes.
+model TaskEvent {
+  id String @id @default(cuid())
+
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  actorId String?
+  actor   Employee? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  /// Denormalised so the trail stays readable even if the actor is removed.
+  actorLabel String
+
+  type       TaskEventType
+  fromStatus TaskStatus?
+  toStatus   TaskStatus?
+  note       String?
+
+  createdAt DateTime @default(now())
+
+  @@index([taskId, createdAt])
+}
+
+/// Append-only security/admin trail: logins, employee provisioning, role
+/// changes, deactivations. Never updated, never deleted by application code.
+model AuditLog {
+  id String @id @default(cuid())
+
+  actorId String?
+  actor   Employee? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  /// Denormalised actor description, survives actor removal.
+  actorLabel String
+
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+}
+
+/// Single-row table backing the TSK-###### sequence.
+model Counter {
+  name  String @id
+  value Int    @default(0)
+}
