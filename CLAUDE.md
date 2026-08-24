@@ -50,6 +50,11 @@ tables created there by default, which would publish `Employee.passwordHash` and
 creates the schema and revokes the API roles; `prisma/supabase-02-harden.sql`
 adds deny-all RLS and must be re-run after any migration that adds a table.
 
+Secrets live in `.env`, not `.env.local`. The Prisma CLI and `tsx` read only
+`.env`; Next.js reads both. Keeping one file avoids the migrate-vs-runtime
+config drift that two files invite. `npm run db:seed` passes `--env-file=.env`
+because `tsx` does no env loading of its own.
+
 Two connection strings, and they are not interchangeable: `DATABASE_URL` is the
 transaction pooler (port 6543, `pgbouncer=true&connection_limit=1`) because
 serverless invocations would otherwise exhaust the connection limit, while

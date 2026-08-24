@@ -32,8 +32,11 @@ app never uses Supabase Auth or PostgREST, so its tables belong outside `public`
 
 ```bash
 npm install
-cp .env.example .env.local
+cp .env.example .env
 ```
+
+Use `.env`, not `.env.local`: the Prisma CLI reads only `.env`, while Next.js
+reads both. One file keeps them from drifting apart. It is gitignored.
 
 Both connection strings come from **Project Settings → Database → Connection
 string**, and both need `?schema=app`:
@@ -45,6 +48,9 @@ string**, and both need `?schema=app`:
 | `SESSION_SECRET` | 32+ random characters — `openssl rand -base64 48` |
 | `APP_URL` | Must match the deployed origin exactly in production |
 | `SEED_ADMIN_*` | Bootstrap admin only; remove after the first seed, never set in Vercel |
+
+A password containing `@ : / ? # &` must be percent-encoded in the URL
+(`@` becomes `%40`), otherwise the connection string parses wrongly.
 
 Use the **session pooler** for `DIRECT_URL`, not the direct
 `db.[ref].supabase.co` host: Supabase's direct connection is IPv6-only unless
