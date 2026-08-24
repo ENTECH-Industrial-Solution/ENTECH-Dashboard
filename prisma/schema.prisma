@@ -10,6 +10,14 @@
 
 generator client {
   provider = "prisma-client-js"
+
+  /// The build machine and the runtime are different Linux distributions:
+  /// Netlify builds on Ubuntu (debian-openssl-*) but its functions execute on
+  /// AWS Lambda (Amazon Linux, rhel-openssl-*). "native" alone would ship an
+  /// engine the runtime cannot load, and the failure only shows up on the first
+  /// query in production. Both rhel targets are listed because the exact one
+  /// depends on the Lambda Node version (20+ -> AL2023 -> 3.0.x).
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "rhel-openssl-1.0.x"]
 }
 
 datasource db {
