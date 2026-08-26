@@ -29,12 +29,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (hasSessionCookie && isPublic) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    url.search = "";
-    return NextResponse.redirect(url);
-  }
+  // Deliberately no "cookie present -> bounce away from /login" branch here:
+  // a present cookie can still be stale/revoked, and middleware cannot tell
+  // (see file header). /login's own page component already redirects real,
+  // validated sessions to /dashboard; doing it here too fought that check on
+  // an invalid cookie and produced an infinite redirect loop.
 
   const response = NextResponse.next();
 
