@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 
 import { LocaleProvider } from "@/lib/i18n/client";
 import { getLocale } from "@/lib/i18n/server";
+import { ThemeProvider } from "@/lib/theme/client";
+import { getTheme } from "@/lib/theme/server";
 
 import "./globals.css";
 
@@ -24,12 +26,17 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const locale = await getLocale();
+  const [locale, theme] = await Promise.all([getLocale(), getTheme()]);
 
   return (
-    <html lang={locale}>
+    // "system" writes no attribute at all — globals.css then leaves the choice
+    // to `color-scheme: light dark`, i.e. the device setting. Resolving this on
+    // the server means the first paint is already the right palette.
+    <html lang={locale} data-theme={theme === "system" ? undefined : theme}>
       <body>
-        <LocaleProvider locale={locale}>{children}</LocaleProvider>
+        <ThemeProvider theme={theme}>
+          <LocaleProvider locale={locale}>{children}</LocaleProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

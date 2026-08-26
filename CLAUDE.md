@@ -75,10 +75,46 @@ config drift that two files invite. `npm run db:seed` passes `--env-file=.env`
 because `tsx` does no env loading of its own.
 
 Two connection strings, and they are not interchangeable: `DATABASE_URL` is the
-transaction pooler (port 6543, `pgbouncer=true&connection_limit=1`) because
+transaction pooler (port 6543, `pgbouncer=true&connection_limit=5`) because
 serverless invocations would otherwise exhaust the connection limit, while
 `DIRECT_URL` must be a session-level connection (port 5432) because Prisma
 migrate uses advisory locks a transaction pooler cannot carry.
+
+### Round trips are the performance budget
+
+Every query through the production pooler costs **~250ms of pure overhead**, and
+it is not the network — the TCP handshake to that host is 60ms, and the same
+query on the session connection is ~60ms. It is `pgbouncer=true`, which disables
+Prisma's prepared-statement cache so each query re-parses across several round
+trips.
+
+**That flag cannot be removed.** Transaction pooling hands consecutive queries to
+different server connections, so a prepared statement made on one is gone by the
+next; removing it and running 1200 queries produced 1102 `26000 prepared
+statement "sN" does not exist` failures.
+
+Session mode (`:5432`) has no such problem and is ~3x faster end to end (the
+admin dashboard: 2598ms through the pooler, 926ms direct), and `DEV_DIRECT_DB=1`
+routes **development** through `DIRECT_URL` to get it. It is opt-in, not the
+default, and it is not an option in production at all: session mode holds a
+server connection per client connection, and the pool gives out around a couple
+of dozen. When it does, Supavisor refuses the TCP connection and Prisma reports
+`P1001 Can't reach database server` — which reads like an outage rather than a
+full pool, and is why the reliable connection is what a fresh checkout gets.
+
+So the only lever is **making fewer round trips**, and it is a real constraint,
+not a micro-optimisation: a page that makes a dozen costs three or four seconds.
+Two consequences for new code:
+
+- `connection_limit` must stay above 1. At 1 every `Promise.all` in the query
+  layer silently serialises behind the single connection — a batch of 8 queries
+  measured 3.8s at `connection_limit=1` and 0.97s at 10.
+- Prefer one aggregate query to several that scan the same rows under the same
+  scope. `getTaskSummary()` and `getEmployeeWorkloads()` are raw SQL with
+  `FILTER` clauses for exactly this reason — they were 3 and 4 round trips and
+  are now 1 and 2. Raw SQL there addresses tables schema-qualified (`app."Task"`)
+  rather than trusting `search_path`, and derives its `WHERE` from
+  `scopedAssigneeId()` so the narrowing rule still lives in one place.
 
 ### The security boundary
 
@@ -124,6 +160,14 @@ narrowing by it inside the function (`user.role === "ADMIN" ? {} : { assigneeId:
 There is no client-supplied filter that could widen a result set. Keep new reads
 in this file and follow the same shape.
 
+`assigneeScope()` is the one place that narrowing is expressed. An optional
+`assigneeId` argument can only ever narrow further: for a non-admin the scope is
+pinned to their own id and the argument is discarded outright, never merged over
+the scope, so a person id typed into a URL cannot widen anything.
+
+The single deliberate exception is `getCompletedTasks()`, which is **not**
+narrowed to the caller — see "The two-section model" below.
+
 ### Sessions
 
 Opaque 32-byte token in an httpOnly cookie; only its SHA-256 is stored, so a
@@ -143,6 +187,13 @@ The dashboard's two sections map onto task status:
 - **Active** (`งานที่กำลังดำเนินการ`) — `status != COMPLETED`
 - **History** (`ประวัติงานที่เสร็จแล้ว`) — `status == COMPLETED`
 
+The completed archive is **readable by every signed-in employee**, not just the
+assignee: finished work is a shared record, which is the point of keeping it as
+evidence. Reading is all that grants. Mutation is unchanged and enforced in the
+actions, not the UI — `canMutateTask()` (admin or assignee) guards status and
+completion, and reopening is admin-only. A card rendered for someone else's task
+therefore shows no controls at all.
+
 Completed tasks are **immutable evidence**. `updateTaskStatusAction` refuses to
 touch a `COMPLETED` task; the only way back out is `reopenTaskAction`, which is
 admin-only, demands a written reason, preserves the original `completionNote`
@@ -154,6 +205,85 @@ the archive.
 updates or deletes them, and the admin audit page exposes no such affordance.
 Write the audit row inside the same `$transaction` as the mutation it describes
 (pass `tx` to `writeAudit`) so state and evidence cannot drift apart.
+
+### Field trips
+
+`FieldTrip` records who is off-site, where, and on which days. Admin-only to
+write (`src/server/actions/field-trips.ts`), readable by anyone signed in — the
+schedule exists so the team can see who is out, so `getFieldTrips()` takes no
+`SessionUser` and narrows by nothing but an optional `employeeId`.
+
+Trips have **no page of their own**: assigning one is assigning work, so they
+live inside `/admin/tasks`, and the "new task" button carries a type switch that
+swaps the task fields for the trip fields. Everyone else sees them through the
+calendar and the off-site panel on the dashboard.
+
+Trips are **cancelled, not deleted**: people plan around them, and a trip that
+silently vanishes is worse than one marked cancelled with a reason. Cancelled
+trips stay in the list and drop off the calendar.
+
+The day range is inclusive and expanded per-day in `CalendarSection` — a trip
+from the 3rd to the 5th becomes three calendar entries, clipped to the month on
+show, so one crossing a month boundary appears correctly in both.
+
+`ScheduleRow` pairs the calendar with `AwayPanel`: the calendar answers "what
+happens on the 14th", the panel answers "where is everyone right now". Either
+can be switched off, and whichever remains takes the full width.
+
+### Maps
+
+`frame-src 'self' https://www.google.com` in `next.config.ts` is the one opening
+in an otherwise self-only CSP. It is narrow on purpose — one host, frames only,
+no scripts and no connections — and it is what lets a trip show a real map
+rather than a link.
+
+`src/lib/maps.ts` produces both URLs, and the difference matters:
+
+- `mapsHref()` opens in a new tab and may be a link someone pasted.
+- `mapEmbedSrc()` is the `<iframe src>` and is **always** built from coordinates
+  or a place name, never from a pasted link. A frame loads silently, so its
+  source must be one this code composed; a new tab shows the user where they are
+  going. `output=embed` needs no API key, which matters because this app has none.
+
+A pasted `mapUrl` is also validated against a Google host allowlist in
+`validation.ts` — it is rendered as a link people are invited to click, so an
+arbitrary URL there would turn the trip form into a way to plant one.
+
+`MapEmbed` creates the iframe only once someone opens it: a page can carry a
+dozen trips, and a dozen eagerly-loaded map frames would cost more than the page.
+
+### UI switches
+
+`AppSetting` is a key-value table of admin-controlled toggles. Defaults live in
+`src/lib/settings/settings.ts`, and a row exists only where an admin has
+overridden one — so a fresh database behaves exactly like an untouched install,
+and adding a toggle is a code change, not a migration.
+
+`getSettings()` is cached twice over: `unstable_cache` across requests, and
+React `cache()` within one. Seven booleans that change a few times a year do not
+deserve a round trip per request. The app layout publishes the result through
+`SettingsProvider`, so the task cards (client components) read it with
+`useSettings()` instead of it being drilled through every page.
+
+`setSettingAction` must call `revalidateTag(SETTINGS_CACHE_TAG)` as well as
+`revalidatePath` — re-rendering a page that then reads the stale cached value
+would change nothing. The 60-second `revalidate` ceiling is a backstop, not the
+mechanism: `dashboard.sharedHistory` decides what the query layer selects, so if
+a tag revalidation is ever missed, switching the shared archive off has to take
+effect on its own.
+
+Two of the switches are not cosmetic and are enforced on the server, not by
+hiding elements: `dashboard.sharedHistory` narrows `getCompletedTasks()` in the
+query layer, and `dashboard.showCalendar` skips the month query entirely. If you
+add a switch that governs what someone may *read*, enforce it in
+`src/server/queries.ts` the same way — never only in the component.
+
+### Task dates
+
+Four, and they are not interchangeable. `startDate` and `dueDate` are the
+*planned* window an admin sets when assigning; `startedAt` and `completedAt`
+record what actually happened and are written by the lifecycle actions. The
+calendar buckets by `dueDate`.
 
 ### Employees are never hard-deleted
 

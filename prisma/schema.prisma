@@ -88,11 +88,13 @@ model Employee {
   createdBy        Employee?  @relation("EmployeeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdEmployees Employee[] @relation("EmployeeCreatedBy")
 
-  sessions      Session[]
-  assignedTasks Task[]      @relation("TaskAssignee")
-  createdTasks  Task[]      @relation("TaskCreator")
-  taskEvents    TaskEvent[]
-  auditLogs     AuditLog[]
+  sessions          Session[]
+  assignedTasks     Task[]      @relation("TaskAssignee")
+  createdTasks      Task[]      @relation("TaskCreator")
+  fieldTrips        FieldTrip[] @relation("FieldTripTraveller")
+  createdFieldTrips FieldTrip[] @relation("FieldTripCreator")
+  taskEvents        TaskEvent[]
+  auditLogs         AuditLog[]
 
   @@index([isActive, role])
   @@index([department])
@@ -140,6 +142,10 @@ model Task {
   createdById String
   createdBy   Employee @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
+  /// Planned schedule, chosen by the admin when assigning the work.
+  /// startDate is the planned beginning and dueDate the planned end; they are
+  /// distinct from startedAt/completedAt, which record what actually happened.
+  startDate DateTime?
   dueDate   DateTime?
   startedAt DateTime?
 
@@ -211,4 +217,63 @@ model AuditLog {
 model Counter {
   name  String @id
   value Int    @default(0)
+}
+
+/// A planned trip off-site: who is going, where, and on which days.
+///
+/// The day range is inclusive and interpreted in Asia/Bangkok, so a trip from
+/// the 3rd to the 5th occupies all three cells in the calendar.
+///
+/// Location is stored as a name plus optional coordinates rather than an
+/// embedded map. The CSP forbids third-party frames and the app has no Google
+/// API key, so the UI links out to Google Maps with the pin instead of
+/// embedding one — see src/lib/maps.ts for how the link is built.
+model FieldTrip {
+  id String @id @default(cuid())
+
+  employeeId String
+  employee   Employee @relation("FieldTripTraveller", fields: [employeeId], references: [id], onDelete: Restrict)
+
+  purpose      String
+  locationName String
+  address      String?
+  latitude     Float?
+  longitude    Float?
+
+  /// A pasted Google Maps place link, for when it is more precise than a name
+  /// search. Only Google Maps hosts pass validation before this is stored.
+  mapUrl String?
+
+  startDate DateTime
+  endDate   DateTime
+
+  note String?
+
+  /// Trips are cancelled, not deleted: people plan around them, so the record
+  /// of a cancellation is more useful than a silent disappearance.
+  cancelledAt     DateTime?
+  cancelledReason String?
+
+  createdById String
+  createdBy   Employee @relation("FieldTripCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, startDate])
+  @@index([startDate, endDate])
+}
+
+/// Admin-controlled switches for what the task UI shows.
+///
+/// Key-value rather than a column per switch, so adding a toggle is a code
+/// change with a default (src/lib/settings/settings.ts) rather than a
+/// migration. A row exists only where an admin has overridden the default,
+/// which also means a fresh database behaves exactly like the defaults.
+///
+/// Changes are written with an AuditLog row, like every other admin action.
+model AppSetting {
+  key       String   @id
+  enabled   Boolean
+  updatedAt DateTime @updatedAt
 }

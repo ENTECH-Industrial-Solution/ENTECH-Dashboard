@@ -7,6 +7,15 @@ import { z } from "zod";
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   DIRECT_URL: z.string().url().optional(),
+  /**
+   * Dev-only opt-in: run the app itself through DIRECT_URL instead of the
+   * pooler, which is ~3x faster but shares a small session pool with Prisma
+   * Studio and migrations. See src/lib/db.ts for the full trade.
+   */
+  DEV_DIRECT_DB: z
+    .enum(["0", "1", "false", "true"])
+    .optional()
+    .transform((v) => v === "1" || v === "true"),
   SESSION_SECRET: z
     .string()
     .min(32, "SESSION_SECRET must be at least 32 characters — generate with: openssl rand -base64 48"),

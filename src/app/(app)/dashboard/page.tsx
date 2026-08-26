@@ -1,65 +1,110 @@
 import type { Metadata } from "next";
 
-import { ActiveTaskCard, CompletedTaskCard, type TaskCardData } from "@/components/task-card";
+import { EmployeeFrame } from "@/components/employee-frame";
+import { ScheduleRow } from "@/components/schedule-row";
+import { SummaryTiles } from "@/components/summary-tiles";
+import { ActiveTaskCard, CompletedTaskCard } from "@/components/task-card";
+import { TaskSection } from "@/components/task-section";
 import { EmptyState } from "@/components/ui";
 import { requireUser } from "@/lib/auth/rbac";
+import type { SessionUser } from "@/lib/auth/session";
 import { getTranslations } from "@/lib/i18n/server";
+import { getSettings } from "@/lib/settings/server";
+import { serialiseTask } from "@/lib/serialise";
 import {
   getActiveTasks,
   getCompletedTasks,
+  getEmployeeWorkloads,
   getTaskSummary,
 } from "@/server/queries";
 
 export const metadata: Metadata = { title: "หน้าหลัก / Dashboard" };
 
 /**
- * The main screen, in the two sections the system exists to provide:
+ * The main screen. What it shows depends on how many people the viewer can see:
  *
- *   1. Active   — งานที่กำลังดำเนินการ, still open, actionable.
- *   2. History  — ประวัติงานที่เสร็จแล้ว, completed and locked as evidence.
+ *   Admin    — one frame per employee, each a link into that person's own page.
+ *              The two sections (active / history) live there, per person,
+ *              rather than as one undifferentiated pile of everyone's work.
+ *   Employee — their own two sections directly, since they are the only person
+ *              they can see and a one-frame grid would just be a detour.
  *
- * Admins see every employee's tasks here; employees see only their own. That
- * narrowing happens inside the query layer, not in this component.
+ * The narrowing is done by the query layer, not here.
  */
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ cal?: string }>;
+}) {
   const user = await requireUser();
+  const { cal } = await searchParams;
+
+  return user.role === "ADMIN" ? (
+    <PeopleOverview user={user} cal={cal} />
+  ) : (
+    <PersonalBoard user={user} cal={cal} />
+  );
+}
+
+/** Admin view: the workforce, one frame per person. */
+async function PeopleOverview({ user, cal }: { user: SessionUser; cal?: string }) {
   const t = await getTranslations();
-
-  const [active, completed, summary] = await Promise.all([
-    getActiveTasks(user),
-    getCompletedTasks(user),
+  const [summary, workloads] = await Promise.all([
     getTaskSummary(user),
+    getEmployeeWorkloads(user),
   ]);
-
-  // Dates cross the server/client boundary as ISO strings so the client card
-  // can format them in the viewer's locale without a serialisation warning.
-  const serialise = (task: Awaited<ReturnType<typeof getActiveTasks>>[number]): TaskCardData => ({
-    ...task,
-    dueDate: task.dueDate?.toISOString() ?? null,
-    completedAt: task.completedAt?.toISOString() ?? null,
-    createdAt: task.createdAt.toISOString(),
-  });
 
   return (
     <div className="space-y-8">
-      <section className="grid grid-cols-3 gap-3">
-        <SummaryTile label={t("tasks.active")} value={summary.active} />
-        <SummaryTile
-          label={t("tasks.overdue")}
-          value={summary.overdue}
-          tone={summary.overdue > 0 ? "danger" : undefined}
-        />
-        <SummaryTile label={t("status.COMPLETED")} value={summary.completed} tone="success" />
-      </section>
+      <SummaryTiles summary={summary} people={workloads} />
+
+      <ScheduleRow user={user} cal={cal} basePath="/dashboard" linkTasksTo="person" />
 
       <section className="space-y-3">
         <header>
-          <h2 className="text-lg font-semibold tracking-tight">{t("tasks.active")}</h2>
+          <h2 className="text-lg font-semibold tracking-tight">
+            {t("dashboard.byPerson")}
+          </h2>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            {t("tasks.activeHint")}
+            {t("dashboard.byPersonHint")}
           </p>
         </header>
 
+        {workloads.length === 0 ? (
+          <EmptyState label={t("dashboard.noEmployees")} />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {workloads.map((workload) => (
+              <EmployeeFrame
+                key={workload.id}
+                workload={workload}
+                isSelf={workload.id === user.id}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+/** Employee view: their own work, in the two sections the system exists for. */
+async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string }) {
+  const [t, settings] = await Promise.all([getTranslations(), getSettings()]);
+
+  const [active, completed, summary] = await Promise.all([
+    getActiveTasks(user),
+    getCompletedTasks(user, { limit: 200 }),
+    getTaskSummary(user),
+  ]);
+
+  return (
+    <div className="space-y-8">
+      <SummaryTiles summary={summary} />
+
+      <ScheduleRow user={user} cal={cal} basePath="/dashboard" linkTasksTo="anchor" />
+
+      <TaskSection title={t("tasks.active")} hint={t("tasks.activeHint")}>
         {active.length === 0 ? (
           <EmptyState label={t("tasks.empty")} />
         ) : (
@@ -67,69 +112,37 @@ export default async function DashboardPage() {
             {active.map((task) => (
               <ActiveTaskCard
                 key={task.id}
-                task={serialise(task)}
+                task={serialiseTask(task)}
                 canMutate={user.role === "ADMIN" || task.assignee.id === user.id}
               />
             ))}
           </div>
         )}
-      </section>
+      </TaskSection>
 
-      <section className="space-y-3">
-        <header>
-          <h2 className="text-lg font-semibold tracking-tight">{t("tasks.history")}</h2>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            {t("tasks.historyHint")}
-          </p>
-        </header>
-
+      <TaskSection
+        title={t("tasks.history")}
+        hint={
+          settings["dashboard.sharedHistory"]
+            ? t("tasks.historySharedHint")
+            : t("tasks.historyHint")
+        }
+        footnote={completed.length > 0 ? t("tasks.historyLocked") : undefined}
+      >
         {completed.length === 0 ? (
           <EmptyState label={t("tasks.empty")} />
         ) : (
-          <>
-            <div className="grid gap-3 lg:grid-cols-2">
-              {completed.map((task) => (
-                <CompletedTaskCard
-                  key={task.id}
-                  task={serialise(task)}
-                  isAdmin={user.role === "ADMIN"}
-                />
-              ))}
-            </div>
-            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-              {t("tasks.historyLocked")}
-            </p>
-          </>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {completed.map((task) => (
+              <CompletedTaskCard
+                key={task.id}
+                task={serialiseTask(task)}
+                isAdmin={false}
+              />
+            ))}
+          </div>
         )}
-      </section>
-    </div>
-  );
-}
-
-function SummaryTile({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone?: "success" | "danger";
-}) {
-  const color =
-    tone === "success"
-      ? "var(--success)"
-      : tone === "danger"
-        ? "var(--danger)"
-        : "var(--text)";
-
-  return (
-    <div className="card px-4 py-3">
-      <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-        {label}
-      </div>
-      <div className="mt-1 text-2xl font-semibold tabular-nums" style={{ color }}>
-        {value}
-      </div>
+      </TaskSection>
     </div>
   );
 }

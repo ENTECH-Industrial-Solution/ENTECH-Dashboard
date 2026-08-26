@@ -4,20 +4,24 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { LocaleSwitch } from "@/components/locale-switch";
+import { ThemeSwitch } from "@/components/theme-switch";
 import { useTranslations } from "@/lib/i18n/client";
 import type { SessionUser } from "@/lib/auth/session";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
 import { logoutAction } from "@/server/actions/auth";
 
-const EMPLOYEE_LINKS: { href: string; key: TranslationKey }[] = [
-  { href: "/dashboard", key: "nav.dashboard" },
-];
+type NavLink = { href: string; key: TranslationKey };
 
-const ADMIN_LINKS: { href: string; key: TranslationKey }[] = [
+const EMPLOYEE_LINKS: NavLink[] = [{ href: "/dashboard", key: "nav.dashboard" }];
+
+// Field trips live inside the all-tasks page rather than a page of their own:
+// assigning a trip is assigning work, so it starts from the same button.
+const ADMIN_LINKS: NavLink[] = [
   { href: "/dashboard", key: "nav.dashboard" },
   { href: "/admin/tasks", key: "nav.allTasks" },
   { href: "/admin/employees", key: "nav.employees" },
   { href: "/admin/audit", key: "nav.audit" },
+  { href: "/admin/settings", key: "nav.settings" },
 ];
 
 export function AppNav({ user }: { user: SessionUser }) {
@@ -65,6 +69,7 @@ export function AppNav({ user }: { user: SessionUser }) {
             </div>
           </div>
 
+          <ThemeSwitch />
           <LocaleSwitch />
 
           <form action={logoutAction}>

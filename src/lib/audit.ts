@@ -26,7 +26,11 @@ export type AuditAction =
   | "task.updated"
   | "task.status.changed"
   | "task.completed"
-  | "task.reopened";
+  | "task.reopened"
+  | "fieldTrip.created"
+  | "fieldTrip.updated"
+  | "fieldTrip.cancelled"
+  | "settings.changed";
 
 export async function writeAudit(
   entry: {

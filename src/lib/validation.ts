@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { passwordSchema } from "@/lib/auth/password";
+import { isSettingKey } from "@/lib/settings/settings";
 
 /**
  * Every server action parses its FormData through one of these schemas before
@@ -68,18 +69,141 @@ export const updateEmployeeSchema = createEmployeeSchema
 
 export const employeeIdSchema = z.object({ employeeId: z.string().cuid() });
 
-export const createTaskSchema = z.object({
-  title: z.string().trim().min(1, "กรุณากรอกชื่องาน / Title is required").max(200),
-  description: optionalText(5000),
-  assigneeId: z.string().cuid(),
-  priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
-  dueDate: z
+/** An optional <input type="date"> value: "" means "not set". */
+const optionalDate = z
+  .union([z.string().trim(), z.literal("")])
+  .transform((v) => (v === "" ? null : new Date(v)))
+  .nullable()
+  .refine((d) => d === null || !Number.isNaN(d.getTime()), {
+    message: "วันที่ไม่ถูกต้อง / Invalid date",
+  });
+
+export const createTaskSchema = z
+  .object({
+    title: z.string().trim().min(1, "กรุณากรอกชื่องาน / Title is required").max(200),
+    description: optionalText(5000),
+    assigneeId: z.string().cuid(),
+    priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
+    /// Planned schedule. Both ends are optional, but if both are given the
+    /// start cannot fall after the end.
+    startDate: optionalDate,
+    dueDate: optionalDate,
+  })
+  .refine((d) => !d.startDate || !d.dueDate || d.startDate <= d.dueDate, {
+    message: "วันเริ่มงานต้องไม่เกินกำหนดส่ง / Start date cannot be after the due date",
+    path: ["startDate"],
+  });
+
+/** A required <input type="date"> value. */
+const requiredDate = z
+  .string()
+  .trim()
+  .min(1, "กรุณาระบุวันที่ / A date is required")
+  .transform((v) => new Date(v))
+  .refine((d) => !Number.isNaN(d.getTime()), {
+    message: "วันที่ไม่ถูกต้อง / Invalid date",
+  });
+
+const optionalCoordinate = (limit: number) =>
+  z
     .union([z.string().trim(), z.literal("")])
-    .transform((v) => (v === "" ? null : new Date(v)))
+    .transform((v) => (v === "" ? null : Number(v)))
     .nullable()
-    .refine((d) => d === null || !Number.isNaN(d.getTime()), {
-      message: "วันที่ไม่ถูกต้อง / Invalid date",
-    }),
+    .refine((n) => n === null || (Number.isFinite(n) && Math.abs(n) <= limit), {
+      message: `พิกัดไม่ถูกต้อง / Coordinate must be between -${limit} and ${limit}`,
+    });
+
+/**
+ * A pasted Google Maps link. Restricted to Google's own hosts: this value is
+ * rendered as a link people are invited to click, so an arbitrary URL here
+ * would turn the trip form into a way to plant one.
+ */
+const GOOGLE_MAPS_HOST = /^((www|maps)\.)?google\.(com|co\.[a-z]{2}|[a-z]{2,3})$/;
+
+const googleMapsUrl = z
+  .union([z.string().trim(), z.literal("")])
+  .transform((v) => (v === "" ? null : v))
+  .nullable()
+  .refine(
+    (v) => {
+      if (v === null) return true;
+      try {
+        const url = new URL(v);
+        if (url.protocol !== "https:") return false;
+        return (
+          GOOGLE_MAPS_HOST.test(url.hostname) ||
+          url.hostname === "maps.app.goo.gl" ||
+          url.hostname === "goo.gl"
+        );
+      } catch {
+        return false;
+      }
+    },
+    { message: "ต้องเป็นลิงก์ Google Maps เท่านั้น / Must be a Google Maps link" },
+  );
+
+const fieldTripFields = z.object({
+  employeeId: z.string().cuid(),
+  purpose: z
+    .string()
+    .trim()
+    .min(1, "กรุณาระบุเรื่องที่ไป / A purpose is required")
+    .max(200),
+  locationName: z
+    .string()
+    .trim()
+    .min(1, "กรุณาระบุสถานที่ / A location is required")
+    .max(200),
+  address: optionalText(300),
+  latitude: optionalCoordinate(90),
+  longitude: optionalCoordinate(180),
+  mapUrl: googleMapsUrl,
+  startDate: requiredDate,
+  endDate: requiredDate,
+  note: optionalText(2000),
+});
+
+type FieldTripInput = z.infer<typeof fieldTripFields>;
+
+const endsAfterItStarts = (d: FieldTripInput) => d.startDate <= d.endDate;
+/** Half a coordinate pin is not a location — require both or neither. */
+const coordinatesArePaired = (d: FieldTripInput) =>
+  (d.latitude === null) === (d.longitude === null);
+
+export const createFieldTripSchema = fieldTripFields
+  .refine(endsAfterItStarts, {
+    message: "วันสิ้นสุดต้องไม่ก่อนวันเริ่ม / The end date cannot precede the start",
+    path: ["endDate"],
+  })
+  .refine(coordinatesArePaired, {
+    message: "ต้องกรอกทั้งละติจูดและลองจิจูด / Enter both latitude and longitude",
+    path: ["longitude"],
+  });
+
+export const updateFieldTripSchema = fieldTripFields
+  .extend({ fieldTripId: z.string().cuid() })
+  .refine(endsAfterItStarts, {
+    message: "วันสิ้นสุดต้องไม่ก่อนวันเริ่ม / The end date cannot precede the start",
+    path: ["endDate"],
+  })
+  .refine(coordinatesArePaired, {
+    message: "ต้องกรอกทั้งละติจูดและลองจิจูด / Enter both latitude and longitude",
+    path: ["longitude"],
+  });
+
+export const cancelFieldTripSchema = z.object({
+  fieldTripId: z.string().cuid(),
+  reason: z
+    .string()
+    .trim()
+    .min(1, "กรุณาระบุเหตุผล / A reason is required")
+    .max(500),
+});
+
+/** One UI switch on the admin settings page. */
+export const settingSchema = z.object({
+  key: z.string().refine(isSettingKey, "ไม่รู้จักการตั้งค่านี้ / Unknown setting"),
+  enabled: z.enum(["true", "false"]).transform((v) => v === "true"),
 });
 
 export const updateTaskStatusSchema = z.object({

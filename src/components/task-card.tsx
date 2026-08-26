@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, type ReactNode } from "react";
 
 import { Alert, PriorityBadge, StatusBadge, SubmitButton } from "@/components/ui";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
+import { useSettings } from "@/lib/settings/client";
 import { idleState } from "@/server/actions/types";
 import {
   completeTaskAction,
@@ -18,12 +19,15 @@ export type TaskCardData = {
   description: string | null;
   status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+  /** Planned start, set when the work was assigned. */
+  startDate: string | null;
   dueDate: string | null;
   completedAt: string | null;
   completionNote: string | null;
   proofUrl: string | null;
   createdAt: string;
   assignee: { id: string; employeeCode: string; fullName: string };
+  /** The admin who created and assigned the task. */
   createdBy: { employeeCode: string; fullName: string };
 };
 
@@ -37,6 +41,24 @@ function useFormatter() {
     }).format(new Date(iso));
 }
 
+/** One label/value pair in a card's metadata row. */
+function Meta({
+  label,
+  tone,
+  children,
+}: {
+  label: string;
+  tone?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex gap-1">
+      <dt>{label}:</dt>
+      <dd style={{ color: tone ?? "var(--text)" }}>{children}</dd>
+    </div>
+  );
+}
+
 /** A task still in progress — the assignee can move it or complete it. */
 export function ActiveTaskCard({
   task,
@@ -47,6 +69,7 @@ export function ActiveTaskCard({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const settings = useSettings();
   const [completing, setCompleting] = useState(false);
 
   const [statusState, statusAction] = useActionState(
@@ -62,7 +85,7 @@ export function ActiveTaskCard({
     task.dueDate !== null && new Date(task.dueDate) < new Date();
 
   return (
-    <article className="card p-4 space-y-3">
+    <article id={`task-${task.id}`} className="card scroll-mt-24 p-4 space-y-3">
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
         <div className="min-w-0 flex-1">
           <div
@@ -81,7 +104,7 @@ export function ActiveTaskCard({
         </div>
       </div>
 
-      {task.description && (
+      {settings["task.showDescription"] && task.description && (
         <p
           className="whitespace-pre-wrap text-sm leading-relaxed"
           style={{ color: "var(--text-muted)" }}
@@ -94,20 +117,28 @@ export function ActiveTaskCard({
         className="flex flex-wrap gap-x-4 gap-y-1 text-xs"
         style={{ color: "var(--text-muted)" }}
       >
-        <div className="flex gap-1">
-          <dt>{t("tasks.assignee")}:</dt>
-          <dd style={{ color: "var(--text)" }}>
-            {task.assignee.employeeCode} — {task.assignee.fullName}
-          </dd>
-        </div>
-        {task.dueDate && (
-          <div className="flex gap-1">
-            <dt>{t("tasks.dueDate")}:</dt>
-            <dd style={{ color: overdue ? "var(--danger)" : "var(--text)" }}>
-              {format(task.dueDate)}
-              {overdue && ` · ${t("tasks.overdue")}`}
-            </dd>
-          </div>
+        <Meta label={t("tasks.assignee")}>
+          {task.assignee.employeeCode} — {task.assignee.fullName}
+        </Meta>
+
+        {settings["task.showAssigner"] && (
+          <Meta label={t("tasks.assignedBy")}>
+            {task.createdBy.employeeCode} — {task.createdBy.fullName}
+          </Meta>
+        )}
+
+        {settings["task.showSchedule"] && task.startDate && (
+          <Meta label={t("tasks.startDate")}>{format(task.startDate)}</Meta>
+        )}
+
+        {settings["task.showSchedule"] && task.dueDate && (
+          <Meta
+            label={t("tasks.dueDate")}
+            tone={overdue ? "var(--danger)" : undefined}
+          >
+            {format(task.dueDate)}
+            {overdue && ` · ${t("tasks.overdue")}`}
+          </Meta>
         )}
       </dl>
 
@@ -176,19 +207,23 @@ export function ActiveTaskCard({
               maxLength={5000}
             />
           </div>
-          <div>
-            <label className="label" htmlFor={`proof-${task.id}`}>
-              {t("tasks.proofUrl")}{" "}
-              <span style={{ opacity: 0.7 }}>({t("common.optional")})</span>
-            </label>
-            <input
-              id={`proof-${task.id}`}
-              name="proofUrl"
-              type="url"
-              className="input"
-              placeholder="https://"
-            />
-          </div>
+
+          {settings["task.showProof"] && (
+            <div>
+              <label className="label" htmlFor={`proof-${task.id}`}>
+                {t("tasks.proofUrl")}{" "}
+                <span style={{ opacity: 0.7 }}>({t("common.optional")})</span>
+              </label>
+              <input
+                id={`proof-${task.id}`}
+                name="proofUrl"
+                type="url"
+                className="input"
+                placeholder="https://"
+              />
+            </div>
+          )}
+
           <div className="flex gap-2">
             <SubmitButton className="btn btn-primary">
               {t("common.confirm")}
@@ -220,12 +255,14 @@ export function CompletedTaskCard({
 }) {
   const t = useTranslations();
   const format = useFormatter();
+  const settings = useSettings();
   const [reopening, setReopening] = useState(false);
   const [state, formAction] = useActionState(reopenTaskAction, idleState);
 
   return (
     <article
-      className="card p-4 space-y-3"
+      id={`task-${task.id}`}
+      className="card scroll-mt-24 p-4 space-y-3"
       style={{ background: "var(--surface-muted)" }}
     >
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
@@ -244,17 +281,24 @@ export function CompletedTaskCard({
         className="flex flex-wrap gap-x-4 gap-y-1 text-xs"
         style={{ color: "var(--text-muted)" }}
       >
-        <div className="flex gap-1">
-          <dt>{t("tasks.assignee")}:</dt>
-          <dd style={{ color: "var(--text)" }}>
-            {task.assignee.employeeCode} — {task.assignee.fullName}
-          </dd>
-        </div>
+        <Meta label={t("tasks.assignee")}>
+          {task.assignee.employeeCode} — {task.assignee.fullName}
+        </Meta>
+
+        {settings["task.showAssigner"] && (
+          <Meta label={t("tasks.assignedBy")}>
+            {task.createdBy.employeeCode} — {task.createdBy.fullName}
+          </Meta>
+        )}
+
+        {settings["task.showSchedule"] && task.startDate && (
+          <Meta label={t("tasks.startDate")}>{format(task.startDate)}</Meta>
+        )}
+
         {task.completedAt && (
-          <div className="flex gap-1">
-            <dt>{t("tasks.completedAt")}:</dt>
-            <dd style={{ color: "var(--text)" }}>{format(task.completedAt, true)}</dd>
-          </div>
+          <Meta label={t("tasks.completedAt")}>
+            {format(task.completedAt, true)}
+          </Meta>
         )}
       </dl>
 
@@ -275,6 +319,8 @@ export function CompletedTaskCard({
           <p className="whitespace-pre-wrap leading-relaxed">
             {task.completionNote}
           </p>
+          {/* Not gated: a link already recorded stays visible as evidence even
+              if the field has since been switched off for new completions. */}
           {task.proofUrl && (
             <a
               href={task.proofUrl}

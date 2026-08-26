@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { LocaleSwitch } from "@/components/locale-switch";
+import { ThemeSwitch } from "@/components/theme-switch";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getTranslations } from "@/lib/i18n/server";
 
@@ -30,7 +31,10 @@ export default async function LoginPage({
               {t("app.tagline")}
             </p>
           </div>
-          <LocaleSwitch />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <ThemeSwitch />
+            <LocaleSwitch />
+          </div>
         </div>
 
         <div className="card p-6 space-y-5">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { LocaleSwitch } from "@/components/locale-switch";
+import { ThemeSwitch } from "@/components/theme-switch";
 import { requireUser } from "@/lib/auth/rbac";
 import { getTranslations } from "@/lib/i18n/server";
 
@@ -22,7 +23,10 @@ export default async function ChangePasswordPage() {
               {user.employeeCode} — {user.fullName}
             </p>
           </div>
-          <LocaleSwitch />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <ThemeSwitch />
+            <LocaleSwitch />
+          </div>
         </div>
 
         <div className="card p-6 space-y-5">
