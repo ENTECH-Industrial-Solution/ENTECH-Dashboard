@@ -7,7 +7,7 @@
 - รองรับภาษาไทยและอังกฤษ สลับได้ทันที
 - บันทึกการใช้งานแบบ append-only ลบหรือแก้ไขไม่ได้
 
-**Stack:** Next.js 15 (App Router) · TypeScript · Prisma · PostgreSQL · Tailwind v4 · Netlify
+**Stack:** Next.js 15 (App Router) · TypeScript · Prisma · PostgreSQL · Tailwind v4 · Vercel
 
 ---
 
@@ -76,26 +76,35 @@ seeded account is forced to change its password on first sign-in.
 
 ## Deploying
 
-Netlify, via GitHub Actions rather than Netlify's Git integration — that
-integration requires a Pro plan to pull a private repository owned by a GitHub
-organization, and so does Vercel. Building in Actions and uploading the finished
-artifact with the Netlify CLI avoids the gate without making the repo public.
+Vercel, through its Git integration — pushing to `main` builds and deploys.
+That integration will not pull a *private* repository owned by a GitHub
+organization on a free plan, which is why this repository is public. Treat that
+as a standing constraint: `.env` stays gitignored, nothing secret enters the
+repo, and the server-side guards in `src/lib/auth/rbac.ts` are readable by
+anyone — so none of them may be relaxed on the assumption that the logic is
+private.
 
 One-time setup:
 
-1. Create a Netlify site (skip connecting a Git provider).
-2. Copy its **API ID** from Site configuration to GitHub as `NETLIFY_SITE_ID`.
-3. Create a Netlify **personal access token** and add it as `NETLIFY_AUTH_TOKEN`.
-   Set both without echoing them:
-   ```bash
-   gh secret set NETLIFY_AUTH_TOKEN
-   ```
-4. In Netlify > Site configuration > Environment variables, set `DATABASE_URL`,
-   `DIRECT_URL`, `SESSION_SECRET`, and `APP_URL`. Use a **different**
-   `SESSION_SECRET` from the local one, and do not set `SEED_ADMIN_*`.
-5. Set `APP_URL` to the real site URL once the first deploy assigns one.
+1. Import the repository at vercel.com/new; keep the detected Next.js preset.
+2. Set `DATABASE_URL`, `DIRECT_URL`, and `SESSION_SECRET` as project environment
+   variables. Use a **different** `SESSION_SECRET` from the local one. Do not
+   set `SEED_ADMIN_*` or `DEV_DIRECT_DB` — the first exist only for the local
+   seed, and the second selects a session-mode connection that cannot carry
+   serverless traffic.
+3. Set `APP_URL` to the real site URL once the first deploy assigns one. It has
+   to match exactly: Server Actions check the request Origin against it.
 
-After that, pushing to `main` deploys. Migrations stay manual on purpose:
+`vercel.json` pins functions to `sin1` so they sit beside the database in
+`ap-southeast-1` — the default `iad1` would add a cross-Pacific round trip to
+every query. Confirm it after a deploy; the middle field must be `sin1`:
+
+```bash
+curl -sS -o /dev/null -D - https://entech-dashboard.vercel.app/login | grep -i x-vercel-id
+```
+
+Vercel's build runs `npm run build` and nothing else. `.github/workflows/ci.yml`
+is what typechecks and lints. Migrations stay manual on purpose:
 
 ```bash
 npm run db:deploy

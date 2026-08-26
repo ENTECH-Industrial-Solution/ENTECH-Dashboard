@@ -26,16 +26,44 @@ connects, it only imports.
 
 ## Deployment
 
-Hosted on Netlify, but **not** through Netlify's Git integration — that gate
-requires Pro for a private organization-owned repo. `.github/workflows/deploy.yml`
-builds in GitHub Actions and uploads with the Netlify CLI, so the repo stays
-private and inside the org. Pushing to `main` deploys.
+Hosted on Vercel through its Git integration: pushing to `main` builds and
+deploys. That integration will not pull a *private* repository owned by a
+GitHub organization on a free plan, which is why **this repo is public**. The
+same gate is what previously forced the build-in-Actions, upload-with-the-CLI
+detour on Netlify.
 
-Runtime config lives in Netlify's site environment variables, never in GitHub
-secrets; the CLI pulls it into the build. GitHub only holds NETLIFY_AUTH_TOKEN
-and NETLIFY_SITE_ID.
+Because the repo is public, the server-side guards in `src/lib/auth/rbac.ts`
+are readable by anyone. They are also the only thing protecting the data — do
+not relax one on the assumption that the logic is private. Nothing secret may
+enter the repo; `.env` is gitignored and must stay that way.
 
-**Migrations are not automated.** The workflow never runs `prisma migrate
+The Vercel project runs on the **Hobby** plan, which is free and has no
+billing mechanism at all — a Hobby account cannot buy usage, so exceeding a
+limit pauses the resource rather than producing a bill. Hobby is however
+licensed for non-commercial use, and this is an internal company tool. The
+foreseeable failure mode is Vercel asking for a Pro upgrade, not a charge.
+
+Runtime config lives in Vercel's project environment variables, never in the
+repo. `SEED_ADMIN_*` must **not** be set there — they exist only for the first
+local `npm run db:seed` — and neither must `DEV_DIRECT_DB`, whose session-mode
+connection cannot carry serverless traffic.
+
+`vercel.json` pins functions to `sin1`. This is not a preference: the database
+is in `ap-southeast-1`, and Vercel's default `iad1` would pay a cross-Pacific
+round trip on *every query*, which is the one cost this app cannot absorb (see
+"Round trips are the performance budget"). Verify it from the `x-vercel-id`
+response header, which reads `<edge>::<function-region>::<id>` — the middle
+field must be `sin1`:
+
+```bash
+curl -sS -o /dev/null -D - https://entech-dashboard.vercel.app/login | grep -i x-vercel-id
+```
+
+Vercel's build runs `npm run build` and nothing else — it neither typechecks
+nor lints. `.github/workflows/ci.yml` is what does, and it is the only gate
+between a red `tsc` and production.
+
+**Migrations are not automated.** Neither Vercel nor CI runs `prisma migrate
 deploy` — an auto-migration on every push is a bad trade for a system whose
 completed-task archive is meant to be evidence. Apply them deliberately:
 
@@ -51,7 +79,7 @@ idempotent and re-asserts RLS and the role lockout on the new tables. See
 ## Architecture
 
 Next.js 15 App Router, TypeScript, Prisma + PostgreSQL (Supabase), Tailwind v4.
-Deployed on Netlify. No auth library: sessions are hand-rolled in `src/lib/auth/`.
+Deployed on Vercel. No auth library: sessions are hand-rolled in `src/lib/auth/`.
 
 ### Database hosting
 

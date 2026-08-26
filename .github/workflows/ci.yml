@@ -1,0 +1,46 @@
+name: CI
+
+# Vercel builds and deploys on push to main through its Git integration, and
+# its build command is `npm run build` — nothing more. It does not typecheck
+# and it does not lint, so these gates are the only thing standing between a
+# red `tsc` and production.
+#
+# This workflow deliberately does not deploy anything, and it never runs
+# `prisma migrate deploy`: an auto-migration on every push is a bad trade for
+# a system whose completed-task archive is meant to be evidence.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Typecheck and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # postinstall runs `prisma generate`; the typecheck needs the generated
+      # client's types. No database connection is involved.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
