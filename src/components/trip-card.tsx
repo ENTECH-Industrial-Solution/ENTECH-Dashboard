@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { MapEmbed } from "@/components/map-embed";
+import { MiniMap } from "@/components/map-embed";
 import { SubmitButton } from "@/components/ui";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
 import type { FieldTripRow } from "@/components/trip-form";
@@ -22,47 +22,64 @@ export function dayCount(startIso: string, endIso: string): number {
   return Math.round((Date.parse(endIso) - Date.parse(startIso)) / day) + 1;
 }
 
-/** Renders the location block shared by the trip card and the dashboard panel. */
+/**
+ * Renders the location block shared by the trip card and the dashboard panel.
+ *
+ * The mini map sits beside the details rather than under them, and its size is
+ * a container query, not a viewport one: the same block is a third-width panel
+ * on the dashboard and a full-width card on the admin page, and only the block
+ * itself knows which. Below 224px there is no "beside" left, so it stacks.
+ */
 export function TripLocation({ trip }: { trip: FieldTripRow }) {
   const t = useTranslations();
 
   return (
     <div
-      className="space-y-2 rounded-lg border-s-2 px-3 py-2 text-sm"
+      className="@container rounded-lg border-s-2 px-3 py-2 text-sm"
       style={{
         borderInlineStartColor: "var(--brand)",
         background: "var(--surface-muted)",
       }}
     >
-      <div>
-        <div className="font-medium">{trip.locationName}</div>
-        {trip.address && (
-          <div className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-            {trip.address}
+      <div className="flex flex-col gap-2 @min-[14rem]:flex-row @min-[14rem]:items-start @min-[14rem]:gap-3">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div>
+            <div className="font-medium">{trip.locationName}</div>
+            {trip.address && (
+              <div className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                {trip.address}
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <a
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <a
+              href={trip.mapHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs underline"
+              style={{ color: "var(--brand)" }}
+            >
+              <PinIcon />
+              {t("trips.openMap")}
+            </a>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              {trip.pinned ? t("trips.pinned") : t("trips.searchOnly")}
+              {trip.latitude !== null &&
+                trip.longitude !== null &&
+                ` · ${trip.latitude}, ${trip.longitude}`}
+            </span>
+          </div>
+        </div>
+
+        <MiniMap
+          src={trip.mapEmbedSrc}
           href={trip.mapHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs underline"
-          style={{ color: "var(--brand)" }}
-        >
-          <PinIcon />
-          {t("trips.openMap")}
-        </a>
-        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-          {trip.pinned ? t("trips.pinned") : t("trips.searchOnly")}
-          {trip.latitude !== null &&
-            trip.longitude !== null &&
-            ` · ${trip.latitude}, ${trip.longitude}`}
-        </span>
+          title={trip.locationName}
+          subtitle={trip.address}
+          className="aspect-[4/3] w-full @min-[14rem]:w-28 @2xs:w-32 @sm:w-40 @lg:w-52"
+        />
       </div>
-
-      <MapEmbed src={trip.mapEmbedSrc} title={trip.locationName} />
     </div>
   );
 }

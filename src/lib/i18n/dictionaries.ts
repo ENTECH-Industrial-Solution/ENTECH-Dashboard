@@ -189,8 +189,7 @@ export const dictionary = {
   "trips.empty": { th: "ยังไม่มีรายการในหมวดนี้", en: "Nothing scheduled here" },
   "trips.away": { th: "ออกนอกสถานที่", en: "Off-site" },
   "trips.recordedBy": { th: "ผู้บันทึก", en: "Recorded by" },
-  "trips.showMap": { th: "ดูแผนที่", en: "Show map" },
-  "trips.hideMap": { th: "ซ่อนแผนที่", en: "Hide map" },
+  "trips.expandMap": { th: "ขยายแผนที่", en: "Expand map" },
   "trips.statusTitle": { th: "ใครออกนอกสถานที่", en: "Who is off-site" },
   "trips.statusHint": {
     th: "สถานะของคนที่มีกำหนดออกนอกสถานที่",

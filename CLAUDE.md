@@ -277,8 +277,23 @@ A pasted `mapUrl` is also validated against a Google host allowlist in
 `validation.ts` — it is rendered as a link people are invited to click, so an
 arbitrary URL there would turn the trip form into a way to plant one.
 
-`MapEmbed` creates the iframe only once someone opens it: a page can carry a
-dozen trips, and a dozen eagerly-loaded map frames would cost more than the page.
+`MiniMap` shows the map as a thumbnail beside the location and opens the same
+map full size, in a portalled dialog, when it is clicked. Two rules keep that
+affordable:
+
+- The iframe is created only when the thumbnail comes near the viewport
+  (`IntersectionObserver`, 300px margin), and never a second time. A page can
+  carry a dozen trips, and a dozen eagerly-loaded Google frames cost more than
+  the page — below the fold they cost nothing. What *is* on screen does load,
+  which is the price of not making people click to find out where a place is.
+- The thumbnail is a button with `pointer-events: none` on the frame, so a
+  112px map cannot swallow a click or a page scroll. Only the dialog's map is
+  interactive.
+
+The thumbnail's size is a **container** query, not a viewport one: the same
+block is a third-width panel on the dashboard and a full-width card on
+`/admin/tasks`, and only the block knows which. Below a 224px container there
+is no "beside" left and it stacks.
 
 ### UI switches
 
