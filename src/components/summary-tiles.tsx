@@ -1,5 +1,6 @@
+import { WorkloadPills, type WorkloadPillRow } from "@/components/workload-pills";
 import { getTranslations } from "@/lib/i18n/server";
-import type { EmployeeWorkload } from "@/server/queries";
+import type { EmployeeWorkload, WorkloadMetric } from "@/server/queries";
 
 /**
  * The three headline counts, shared by the dashboard and a person's page.
@@ -14,6 +15,10 @@ import type { EmployeeWorkload } from "@/server/queries";
  *
  * With one person (an employee's own dashboard, or one person's page) the
  * breakdown is skipped — a single full-width bar restates the number above it.
+ *
+ * Each capsule opens onto the tasks behind it, loaded on demand — see
+ * `WorkloadPills`. That is why the list is a client component while the tile
+ * around it stays server-rendered: only the capsules need state.
  */
 export async function SummaryTiles({
   summary,
@@ -23,9 +28,12 @@ export async function SummaryTiles({
   people?: EmployeeWorkload[];
 }) {
   const t = await getTranslations();
-  const moreLabel = t("dashboard.morePeople");
+  // Two different "+N": more people the tile could not list, and more tasks a
+  // capsule could not list. They are never the same word.
+  const morePeople = t("dashboard.morePeople");
+  const moreTasks = t("dashboard.moreTasks");
 
-  const breakdown = (metric: "active" | "overdue" | "completed") => {
+  const breakdown = (metric: WorkloadMetric) => {
     if (!people || people.length < 2) return undefined;
 
     const rows = people
@@ -45,28 +53,32 @@ export async function SummaryTiles({
       <SummaryTile
         label={t("tasks.active")}
         value={summary.active}
+        metric="active"
         rows={breakdown("active")}
-        moreLabel={moreLabel}
+        morePeople={morePeople}
+        moreTasks={moreTasks}
       />
       <SummaryTile
         label={t("tasks.overdue")}
         value={summary.overdue}
         tone={summary.overdue > 0 ? "danger" : undefined}
+        metric="overdue"
         rows={breakdown("overdue")}
-        moreLabel={moreLabel}
+        morePeople={morePeople}
+        moreTasks={moreTasks}
       />
       <SummaryTile
         label={t("status.COMPLETED")}
         value={summary.completed}
         tone="success"
+        metric="completed"
         rows={breakdown("completed")}
-        moreLabel={moreLabel}
+        morePeople={morePeople}
+        moreTasks={moreTasks}
       />
     </section>
   );
 }
-
-type Row = { id: string; name: string; value: number };
 
 /** Beyond this the tile turns into a list; the rest collapse into a count. */
 const MAX_ROWS = 4;
@@ -75,14 +87,18 @@ function SummaryTile({
   label,
   value,
   tone,
+  metric,
   rows,
-  moreLabel,
+  morePeople,
+  moreTasks,
 }: {
   label: string;
   value: number;
   tone?: "success" | "danger";
-  rows?: Row[];
-  moreLabel: string;
+  metric: WorkloadMetric;
+  rows?: WorkloadPillRow[];
+  morePeople: string;
+  moreTasks: string;
 }) {
   const color =
     tone === "success"
@@ -93,7 +109,6 @@ function SummaryTile({
 
   const shown = rows?.slice(0, MAX_ROWS) ?? [];
   const hidden = (rows?.length ?? 0) - shown.length;
-  const max = shown[0]?.value ?? 0;
 
   return (
     <div className="card space-y-3 px-4 py-3">
@@ -111,26 +126,16 @@ function SummaryTile({
 
       {shown.length > 0 && (
         <div className="space-y-1.5">
-          {shown.map((row) => (
-            <div key={row.id} className="pill">
-              <span
-                className="pill-fill"
-                style={{
-                  width: `${max === 0 ? 0 : Math.round((row.value / max) * 100)}%`,
-                  background: `color-mix(in oklab, ${color} 32%, var(--surface-muted))`,
-                }}
-              />
-              <span className="pill-label">{row.name}</span>
-              {/* Plain text, not the tone: the number sits on the fill whenever
-                  a bar is near full, and tinted text on a tinted fill measured
-                  below 4.5:1. The tone is already carried by the fill itself. */}
-              <span className="pill-value">{row.value}</span>
-            </div>
-          ))}
+          <WorkloadPills
+            rows={shown}
+            metric={metric}
+            color={color}
+            moreLabel={moreTasks}
+          />
 
           {hidden > 0 && (
             <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-              +{hidden} {moreLabel}
+              +{hidden} {morePeople}
             </div>
           )}
         </div>

@@ -278,6 +278,33 @@ body {
   color: var(--text);
 }
 
+/*
+ * A capsule that opens. In the summary strip every pill is a button: the number
+ * answers "how many", pressing it answers "which". The hover ring is the same
+ * one a jumped-to card gets, so "this responds to you" reads the same way in
+ * both places.
+ */
+button.pill {
+  width: 100%;
+  cursor: pointer;
+  text-align: start;
+  transition: box-shadow 120ms ease;
+}
+button.pill:hover {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+/* One task listed inside an opened capsule. */
+.pill-task {
+  display: block;
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  transition: background-color 120ms ease;
+}
+.pill-task:hover {
+  background: var(--surface-muted);
+}
+
 /* Completed-vs-total bar inside a person frame. */
 .meter {
   height: 0.375rem;

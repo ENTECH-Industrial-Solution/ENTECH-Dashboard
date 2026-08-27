@@ -196,6 +196,37 @@ the scope, so a person id typed into a URL cannot widen anything.
 The single deliberate exception is `getCompletedTasks()`, which is **not**
 narrowed to the caller — see "The two-section model" below.
 
+Reads normally happen while a page renders. The one that does not is
+`getWorkloadTasks()`, reached through `loadWorkloadTasksAction` when someone
+opens a capsule in the summary strip (see "The summary strip"). A read action is
+not a mutation: it skips `runAction` — no FormData, no field errors, nothing to
+revalidate — but keeps the part that matters, never throwing across the
+boundary. It still calls a guard (`assertUser()`), still parses its arguments
+with Zod, and still narrows through `assigneeScope()`, so the id in its payload
+can only select rows the caller could already read. Follow that shape if you add
+another read action; do not let one skip the guard because "it only reads".
+
+### The summary strip
+
+`SummaryTiles` renders the three headline counts, and — when more than one
+person is in view — a capsule per person under each. The tile is a server
+component; only the capsules are client-side, because only they hold state.
+
+Each capsule opens **in place** onto the tasks behind it. Not a dialog: the list
+is a few lines of context for the number directly above it.
+
+That list is fetched **when the capsule is opened**, not with the page. The strip
+carries up to twelve capsules and almost nobody opens more than one, so loading
+every list up front would add a round trip and the whole company's task rows to a
+page that makes three (see "Round trips are the performance budget"). Answers are
+kept per capsule, so reopening one costs nothing, and only the first few tasks
+are listed — the capsule already states the total, so the list says how many it
+left out.
+
+`getWorkloadTasks()` uses the same three predicates `getTaskSummary()` counts
+with. Keep them in step: a list that disagrees with the number that opened it is
+worse than no list.
+
 ### Sessions
 
 Opaque 32-byte token in an httpOnly cookie; only its SHA-256 is stored, so a

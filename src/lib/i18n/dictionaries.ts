@@ -146,6 +146,7 @@ export const dictionary = {
   },
   "dashboard.back": { th: "กลับหน้าหลัก", en: "Back to dashboard" },
   "dashboard.morePeople": { th: "คนอื่น", en: "others" },
+  "dashboard.moreTasks": { th: "งานอื่น", en: "more" },
   "dashboard.personTasks": { th: "งานของพนักงานคนนี้", en: "This employee's work" },
 
   "trips.title": { th: "ตารางออกนอกสถานที่", en: "Field trip schedule" },
@@ -348,6 +349,7 @@ export const dictionary = {
   "common.close": { th: "ปิด", en: "Close" },
   "common.confirm": { th: "ยืนยัน", en: "Confirm" },
   "common.saving": { th: "กำลังบันทึก...", en: "Saving..." },
+  "common.loading": { th: "กำลังโหลด...", en: "Loading..." },
   "common.optional": { th: "ไม่บังคับ", en: "optional" },
   "common.search": { th: "ค้นหา", en: "Search" },
   "common.all": { th: "ทั้งหมด", en: "All" },

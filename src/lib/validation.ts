@@ -234,6 +234,17 @@ export const reopenTaskSchema = z.object({
     .max(1000),
 });
 
+/**
+ * Opening a capsule in the summary strip. A read rather than a mutation, and
+ * the arguments still arrive from the browser, so they are parsed here like
+ * everything else. Widening is not a concern the schema has to cover —
+ * `assigneeScope()` discards this id for a non-admin — but the shape is.
+ */
+export const workloadTasksSchema = z.object({
+  assigneeId: z.string().cuid(),
+  metric: z.enum(["active", "overdue", "completed"]),
+});
+
 /** Narrow FormData to a plain object before Zod sees it. */
 export function formDataToObject(formData: FormData): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
