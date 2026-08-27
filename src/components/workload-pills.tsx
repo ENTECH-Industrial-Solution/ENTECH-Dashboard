@@ -3,14 +3,20 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { PinIcon } from "@/components/trip-card";
 import { StatusBadge } from "@/components/ui";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
 import { loadWorkloadTasksAction } from "@/server/actions/summary";
 
-/** One task in an opened capsule. Dates are ISO — they cross from the server. */
+/**
+ * One line in an opened capsule — a task or a trip. Dates are ISO strings;
+ * they cross from the server. Shaped by `WorkloadEntry` in server/queries.ts.
+ */
 export type WorkloadTaskRow = {
   id: string;
-  code: string;
+  kind: "task" | "trip";
+  /** null for a trip, which carries no reference of its own. */
+  code: string | null;
   title: string;
   status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
   dueDate: string | null;
@@ -169,15 +175,17 @@ function TaskLines({
             whichever end of the dashboard you start from.
           */}
           <Link
-            href={`/dashboard/employee/${assigneeId}#task-${task.id}`}
+            href={`/dashboard/employee/${assigneeId}#${task.kind}-${task.id}`}
             className="pill-task"
           >
             <div className="flex items-start gap-1.5">
+              {/* A trip has no code to sit in this slot, so the pin takes it —
+                  the same mark it wears on the calendar and in the panel. */}
               <span
                 className="shrink-0 text-[11px] leading-5 tabular-nums"
                 style={{ color: "var(--text-muted)" }}
               >
-                {task.code}
+                {task.kind === "trip" ? <PinIcon /> : task.code}
               </span>
               <span className="min-w-0 flex-1 text-xs leading-5">{task.title}</span>
             </div>
@@ -188,7 +196,7 @@ function TaskLines({
                 <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
                   {task.completedAt
                     ? `${t("tasks.completedAt")} ${formatDay(task.completedAt)}`
-                    : `${t("tasks.dueDate")} ${formatDay(task.dueDate!)}`}
+                    : `${task.kind === "trip" ? t("trips.endDate") : t("tasks.dueDate")} ${formatDay(task.dueDate!)}`}
                 </span>
               )}
             </div>

@@ -227,6 +227,22 @@ left out.
 with. Keep them in step: a list that disagrees with the number that opened it is
 worse than no list.
 
+All three numbers count **tasks and field trips together**, and that invariant
+now spans three layers that must agree: `getTaskSummary()` (the headline),
+`getEmployeeWorkloads()` (the per-person capsule values), and
+`getWorkloadTasks()` (the list a capsule opens onto). A trip counts as active
+while it is neither cancelled nor completed, as overdue once its inclusive
+`endDate` is behind the *start of today in Bangkok* — not `now()`, or a trip
+ending today would read as late from one minute past midnight — and as
+completed once it is closed out. Cancelled trips count as nothing anywhere:
+they did not happen.
+
+Counting trips only in the finished number was the tempting half-measure and it
+is wrong: "completed" would climb without "active" ever falling, and the three
+would stop describing one pool of work. `EmployeeWorkload.active` is therefore
+no longer `todo + inProgress + blocked` — those three name TaskStatus values
+and stay task-only.
+
 ### Sessions
 
 Opaque 32-byte token in an httpOnly cookie; only its SHA-256 is stored, so a
