@@ -405,6 +405,74 @@ export async function getEmployeeWorkloads(
   });
 }
 
+/** Which of the summary strip's three numbers a breakdown is drilling into. */
+export type WorkloadMetric = "active" | "overdue" | "completed";
+
+export type WorkloadTask = Awaited<ReturnType<typeof getWorkloadTasks>>[number];
+
+/**
+ * The tasks behind one person's number in the summary strip.
+ *
+ * Read on demand — when someone opens a capsule — rather than with the page.
+ * The strip carries up to twelve capsules and almost nobody opens more than
+ * one, so loading every list up front would add a round trip (and the whole
+ * company's task rows) to a page that currently makes three. See "Round trips
+ * are the performance budget" in CLAUDE.md.
+ *
+ * The predicates are the ones `getTaskSummary()` counts with, so a list
+ * can never disagree with the number that opened it. `limit` is what makes this
+ * cheap: the capsule already states the total, so the list only has to show the
+ * first few and say how many it left out.
+ *
+ * `assigneeId` is passed through `assigneeScope()`, so for a non-admin it is
+ * discarded and the scope stays pinned to their own rows — someone else's id in
+ * the payload cannot widen anything. That pinning is stricter than
+ * `dashboard.sharedHistory` would allow for COMPLETED, which is the safe
+ * direction: these capsules are an admin view of who is carrying what, not the
+ * shared archive.
+ */
+export async function getWorkloadTasks(
+  user: SessionUser,
+  {
+    assigneeId,
+    metric,
+    limit = 5,
+  }: { assigneeId: string; metric: WorkloadMetric; limit?: number },
+) {
+  const predicate =
+    metric === "completed"
+      ? { status: "COMPLETED" as const }
+      : metric === "overdue"
+        ? { status: { not: "COMPLETED" as const }, dueDate: { lt: new Date() } }
+        : { status: { not: "COMPLETED" as const } };
+
+  return db.task.findMany({
+    where: { ...assigneeScope(user, assigneeId), ...predicate },
+    select: {
+      id: true,
+      code: true,
+      title: true,
+      status: true,
+      priority: true,
+      dueDate: true,
+      completedAt: true,
+    },
+    // Each list leads with what the number is about: the most pressing work,
+    // the longest overdue, the most recently finished.
+    orderBy:
+      metric === "completed"
+        ? [{ completedAt: "desc" as const }]
+        : metric === "overdue"
+          ? [{ dueDate: "asc" as const }]
+          : [
+              { priority: "desc" as const },
+              { dueDate: { sort: "asc" as const, nulls: "last" as const } },
+              { createdAt: "desc" as const },
+            ],
+    take: limit,
+  });
+}
+
 /**
  * The header of a single person's page. Returns null — not a throw — when the
  * caller may not see this person, so the page can answer with notFound() and
