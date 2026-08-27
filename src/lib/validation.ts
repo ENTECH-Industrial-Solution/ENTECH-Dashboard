@@ -21,13 +21,23 @@ export const employeeCodeSchema = z
   )
   .transform((v) => v.toUpperCase());
 
+/**
+ * FormData carries no key at all for a control that was never rendered — a
+ * status note the card does not ask for, a field a UI switch has hidden. A
+ * missing value therefore has to mean exactly what an empty one means: not
+ * set. That is why every optional field below is `.nullish()` rather than
+ * `.nullable()` — the latter accepts an empty value but rejects an absent key.
+ */
+const isBlank = (v: string | null | undefined): v is "" | null | undefined =>
+  v === undefined || v === null || v === "";
+
 const optionalText = (max: number) =>
   z
     .string()
     .trim()
     .max(max)
-    .transform((v) => (v === "" ? null : v))
-    .nullable();
+    .nullish()
+    .transform((v) => (isBlank(v) ? null : v));
 
 export const loginSchema = z.object({
   employeeCode: employeeCodeSchema,
@@ -56,8 +66,8 @@ export const createEmployeeSchema = z.object({
   fullName: z.string().trim().min(1, "กรุณากรอกชื่อ / Name is required").max(120),
   email: z
     .union([z.string().trim().email(), z.literal("")])
-    .transform((v) => (v === "" ? null : v))
-    .nullable(),
+    .nullish()
+    .transform((v) => (isBlank(v) ? null : v)),
   department: optionalText(80),
   position: optionalText(80),
   role: z.enum(["ADMIN", "EMPLOYEE"]).default("EMPLOYEE"),
@@ -72,8 +82,8 @@ export const employeeIdSchema = z.object({ employeeId: z.string().cuid() });
 /** An optional <input type="date"> value: "" means "not set". */
 const optionalDate = z
   .union([z.string().trim(), z.literal("")])
-  .transform((v) => (v === "" ? null : new Date(v)))
-  .nullable()
+  .nullish()
+  .transform((v) => (isBlank(v) ? null : new Date(v)))
   .refine((d) => d === null || !Number.isNaN(d.getTime()), {
     message: "วันที่ไม่ถูกต้อง / Invalid date",
   });
@@ -107,8 +117,8 @@ const requiredDate = z
 const optionalCoordinate = (limit: number) =>
   z
     .union([z.string().trim(), z.literal("")])
-    .transform((v) => (v === "" ? null : Number(v)))
-    .nullable()
+    .nullish()
+    .transform((v) => (isBlank(v) ? null : Number(v)))
     .refine((n) => n === null || (Number.isFinite(n) && Math.abs(n) <= limit), {
       message: `พิกัดไม่ถูกต้อง / Coordinate must be between -${limit} and ${limit}`,
     });
@@ -122,8 +132,8 @@ const GOOGLE_MAPS_HOST = /^((www|maps)\.)?google\.(com|co\.[a-z]{2}|[a-z]{2,3})$
 
 const googleMapsUrl = z
   .union([z.string().trim(), z.literal("")])
-  .transform((v) => (v === "" ? null : v))
-  .nullable()
+  .nullish()
+  .transform((v) => (isBlank(v) ? null : v))
   .refine(
     (v) => {
       if (v === null) return true;
@@ -221,8 +231,8 @@ export const completeTaskSchema = z.object({
     .max(5000),
   proofUrl: z
     .union([z.string().trim().url(), z.literal("")])
-    .transform((v) => (v === "" ? null : v))
-    .nullable(),
+    .nullish()
+    .transform((v) => (isBlank(v) ? null : v)),
 });
 
 export const reopenTaskSchema = z.object({
