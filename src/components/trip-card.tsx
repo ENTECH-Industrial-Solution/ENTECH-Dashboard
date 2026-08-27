@@ -1,11 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 
 import { MiniMap } from "@/components/map-embed";
-import { SubmitButton } from "@/components/ui";
+import { Alert, SubmitButton } from "@/components/ui";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
+import type { TranslationKey } from "@/lib/i18n/dictionaries";
 import type { FieldTripRow } from "@/components/trip-form";
+import {
+  completeFieldTripAction,
+  deleteFieldTripAction,
+  startFieldTripAction,
+} from "@/server/actions/field-trips";
+import { idleState } from "@/server/actions/types";
 
 export function useDayFormatter() {
   const locale = useLocale();
@@ -14,6 +21,54 @@ export function useDayFormatter() {
       dateStyle: "medium",
       timeZone: "Asia/Bangkok",
     }).format(new Date(iso));
+}
+
+/** The same, with a time — what actually happened is recorded to the minute. */
+export function useMomentFormatter() {
+  const locale = useLocale();
+  return (iso: string) =>
+    new Intl.DateTimeFormat(locale === "th" ? "th-TH" : "en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Asia/Bangkok",
+    }).format(new Date(iso));
+}
+
+/**
+ * Where a trip stands. Four states, read off the three nullable timestamps in
+ * the order they can only ever happen in — cancelled and completed are both
+ * terminal, and a trip cannot reach one from the other.
+ */
+export type TripState = "SCHEDULED" | "ON_SITE" | "COMPLETED" | "CANCELLED";
+
+export function tripState(trip: FieldTripRow): TripState {
+  if (trip.cancelledAt) return "CANCELLED";
+  if (trip.completedAt) return "COMPLETED";
+  if (trip.startedAt) return "ON_SITE";
+  return "SCHEDULED";
+}
+
+const TRIP_TONE: Record<TripState, { background: string; color: string }> = {
+  SCHEDULED: { background: "var(--warning-soft)", color: "var(--warning)" },
+  ON_SITE: { background: "var(--brand-soft)", color: "var(--brand)" },
+  COMPLETED: { background: "var(--success-soft)", color: "var(--success)" },
+  CANCELLED: { background: "var(--danger-soft)", color: "var(--danger)" },
+};
+
+const TRIP_LABEL: Record<TripState, TranslationKey> = {
+  SCHEDULED: "trips.away",
+  ON_SITE: "trips.onSite",
+  COMPLETED: "trips.done",
+  CANCELLED: "trips.cancelled",
+};
+
+export function TripStatusBadge({ state }: { state: TripState }) {
+  const t = useTranslations();
+  return (
+    <span className="badge shrink-0" style={TRIP_TONE[state]}>
+      {t(TRIP_LABEL[state])}
+    </span>
+  );
 }
 
 /** Inclusive day count, the way people count "how many days am I away". */
@@ -84,23 +139,346 @@ export function TripLocation({ trip }: { trip: FieldTripRow }) {
   );
 }
 
-export function TripCard({
+/**
+ * What was reported when the trip was closed out.
+ *
+ * Renders for a completed trip wherever one appears, including in the lists an
+ * employee cannot act on: the report is the durable half of the record, and a
+ * card that showed the badge but not what was said would be worse than no card.
+ */
+export function TripEvidence({ trip }: { trip: FieldTripRow }) {
+  const t = useTranslations();
+  const formatMoment = useMomentFormatter();
+
+  if (!trip.completedAt) return null;
+
+  return (
+    <div
+      className="rounded-lg border-s-2 px-3 py-2 text-sm"
+      style={{
+        borderInlineStartColor: "var(--success)",
+        background: "var(--surface)",
+      }}
+    >
+      <div className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+        {t("trips.completedAt")}: {formatMoment(trip.completedAt)}
+      </div>
+
+      {trip.completionNote && (
+        <p className="mt-1 whitespace-pre-wrap leading-relaxed">
+          {trip.completionNote}
+        </p>
+      )}
+
+      {trip.proofUrl && (
+        <a
+          href={trip.proofUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 inline-block break-all text-xs underline"
+          style={{ color: "var(--brand)" }}
+        >
+          {trip.proofUrl}
+        </a>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Every action a trip offers, in one row.
+ *
+ * One row rather than two, because they are one decision: a person looking at a
+ * trip is choosing what to do with it, and splitting "what the traveller does"
+ * from "what the admin does" across two rows only made the card look like it
+ * had two unrelated toolbars.
+ *
+ * The buttons are laid out on an auto-filling grid of equal tracks, so every
+ * button on a card is exactly the same width whether the card carries one or
+ * five, and the row reflows by the *card's* width rather than the viewport's —
+ * the same block is a third-width panel on the dashboard and a half-width card
+ * on /admin/tasks. `auto-fill` rather than `auto-fit` on purpose: empty tracks
+ * are kept, so two buttons stay button-sized instead of stretching to half the
+ * card each.
+ *
+ * Which buttons appear is decided on the server and passed in; the guards here
+ * only mirror it. The real enforcement is in src/server/actions/field-trips.ts.
+ */
+export function TripActions({
   trip,
-  isAdmin,
+  canRun = false,
+  canDelete = false,
+  isAdmin = false,
   onEdit,
   cancelAction,
 }: {
   trip: FieldTripRow;
-  isAdmin: boolean;
-  onEdit: () => void;
-  cancelAction: (formData: FormData) => void;
+  canRun?: boolean;
+  canDelete?: boolean;
+  isAdmin?: boolean;
+  onEdit?: () => void;
+  cancelAction?: (formData: FormData) => void;
+}) {
+  const t = useTranslations();
+  const [open, setOpen] = useState<"none" | "finishing" | "cancelling" | "deleting">(
+    "none",
+  );
+
+  const [startState, startAction] = useActionState(startFieldTripAction, idleState);
+  const [completeState, completeAction] = useActionState(
+    completeFieldTripAction,
+    idleState,
+  );
+
+  const state = tripState(trip);
+  const running = state === "SCHEDULED" || state === "ON_SITE";
+
+  // Completing closes the lifecycle; correcting the record is a separate
+  // question, and the answer is that an admin still may — see
+  // updateFieldTripAction. Cancelling stays shut: a trip that was seen through
+  // to the end cannot be made to look as though it never happened.
+  const showStart = canRun && running && !trip.startedAt;
+  const showComplete = canRun && running;
+  const showEdit = isAdmin && onEdit !== undefined && state !== "CANCELLED";
+  const showCancel = isAdmin && cancelAction !== undefined && running;
+
+  const anyButton = showStart || showComplete || showEdit || showCancel || canDelete;
+
+  if (open === "deleting") {
+    return <TripDeleter trip={trip} setDeleting={() => setOpen("none")} />;
+  }
+
+  if (open === "cancelling" && cancelAction) {
+    return (
+      <form action={cancelAction} className="space-y-2 pt-1">
+        <input type="hidden" name="fieldTripId" value={trip.id} />
+        <div>
+          <label className="label" htmlFor={`cancel-${trip.id}`}>
+            {t("trips.cancelReason")}
+          </label>
+          <input
+            id={`cancel-${trip.id}`}
+            name="reason"
+            className="input"
+            required
+            maxLength={500}
+          />
+        </div>
+        <div className="flex gap-2">
+          <SubmitButton className="btn btn-danger">{t("common.confirm")}</SubmitButton>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setOpen("none")}
+          >
+            {t("common.cancel")}
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  if (open === "finishing") {
+    return (
+      <form action={completeAction} className="space-y-3 pt-1">
+        {completeState.status === "error" && (
+          <Alert tone="error">{completeState.message}</Alert>
+        )}
+
+        <input type="hidden" name="fieldTripId" value={trip.id} />
+
+        <div>
+          <label className="label" htmlFor={`tripDone-${trip.id}`}>
+            {t("trips.completionNote")}{" "}
+            <span style={{ opacity: 0.7 }}>({t("common.optional")})</span>
+          </label>
+          <textarea
+            id={`tripDone-${trip.id}`}
+            name="completionNote"
+            className="input"
+            rows={3}
+            maxLength={5000}
+          />
+        </div>
+
+        <div>
+          <label className="label" htmlFor={`tripProof-${trip.id}`}>
+            {t("trips.proofUrl")}{" "}
+            <span style={{ opacity: 0.7 }}>({t("common.optional")})</span>
+          </label>
+          <input
+            id={`tripProof-${trip.id}`}
+            name="proofUrl"
+            type="url"
+            className="input"
+            placeholder="https://"
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <SubmitButton className="btn btn-primary">{t("common.confirm")}</SubmitButton>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setOpen("none")}
+          >
+            {t("common.cancel")}
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  if (!anyButton) return null;
+
+  return (
+    <div className="space-y-2 pt-1">
+      {startState.status === "error" && (
+        <Alert tone="error">{startState.message}</Alert>
+      )}
+      {completeState.status === "error" && (
+        <Alert tone="error">{completeState.message}</Alert>
+      )}
+
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-2">
+        {showStart && (
+          <form action={startAction} className="contents">
+            <input type="hidden" name="fieldTripId" value={trip.id} />
+            <SubmitButton className="btn btn-secondary w-full">
+              {t("trips.start")}
+            </SubmitButton>
+          </form>
+        )}
+
+        {showComplete && (
+          <button
+            type="button"
+            className="btn btn-primary w-full"
+            onClick={() => setOpen("finishing")}
+          >
+            {t("trips.complete")}
+          </button>
+        )}
+
+        {showEdit && (
+          <button
+            type="button"
+            className="btn btn-secondary w-full"
+            onClick={onEdit}
+          >
+            {t("trips.edit")}
+          </button>
+        )}
+
+        {showCancel && (
+          <button
+            type="button"
+            className="btn btn-secondary w-full"
+            onClick={() => setOpen("cancelling")}
+          >
+            {t("trips.cancelTrip")}
+          </button>
+        )}
+
+        {canDelete && (
+          <button
+            type="button"
+            className="btn btn-secondary w-full"
+            style={{ color: "var(--danger)" }}
+            onClick={() => setOpen("deleting")}
+          >
+            {t("trips.delete")}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The delete confirmation, inline on the trip card. The same bargain the task
+ * one strikes: a typed reason instead of a reflexive OK, collected here because
+ * once the row is gone the audit entry is the only place it can live.
+ */
+function TripDeleter({
+  trip,
+  setDeleting,
+}: {
+  trip: FieldTripRow;
+  setDeleting: (value: boolean) => void;
+}) {
+  const t = useTranslations();
+  const [state, formAction] = useActionState(deleteFieldTripAction, idleState);
+
+  return (
+    <form action={formAction} className="space-y-2 pt-1">
+      <Alert tone="warning">{t("trips.deleteWarning")}</Alert>
+      {state.status === "error" && <Alert tone="error">{state.message}</Alert>}
+
+      <input type="hidden" name="fieldTripId" value={trip.id} />
+
+      <div>
+        <label className="label" htmlFor={`deleteTrip-${trip.id}`}>
+          {t("trips.deleteReason")}
+        </label>
+        <input
+          id={`deleteTrip-${trip.id}`}
+          name="reason"
+          className="input"
+          required
+          maxLength={1000}
+        />
+      </div>
+
+      <div className="flex gap-2">
+        <SubmitButton className="btn btn-danger">
+          {t("trips.deleteConfirm")}
+        </SubmitButton>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => setDeleting(false)}
+        >
+          {t("common.cancel")}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * A trip as a card.
+ *
+ * The admin controls are optional so a server component can render the same
+ * card read-only — that is what the off-site history sections do.
+ */
+export function TripCard({
+  trip,
+  isAdmin = false,
+  canRun = false,
+  canDelete = false,
+  onEdit,
+  cancelAction,
+}: {
+  trip: FieldTripRow;
+  isAdmin?: boolean;
+  canRun?: boolean;
+  /**
+   * Separate from `isAdmin`, and deliberately so: editing is offered only on a
+   * trip that is still ahead, while deleting has to reach the cancelled and
+   * completed ones too — those are exactly the rows that pile up.
+   */
+  canDelete?: boolean;
+  onEdit?: () => void;
+  cancelAction?: (formData: FormData) => void;
 }) {
   const t = useTranslations();
   const formatDay = useDayFormatter();
-  const [cancelling, setCancelling] = useState(false);
+  const formatMoment = useMomentFormatter();
 
   const days = dayCount(trip.startDate, trip.endDate);
-  const cancelled = trip.cancelledAt !== null;
+  const state = tripState(trip);
+  const cancelled = state === "CANCELLED";
 
   return (
     <article
@@ -121,16 +499,7 @@ export function TripCard({
           </div>
         </div>
 
-        <span
-          className="badge shrink-0"
-          style={
-            cancelled
-              ? { background: "var(--danger-soft)", color: "var(--danger)" }
-              : { background: "var(--warning-soft)", color: "var(--warning)" }
-          }
-        >
-          {cancelled ? t("trips.cancelled") : t("trips.away")}
-        </span>
+        <TripStatusBadge state={state} />
       </div>
 
       <dl
@@ -145,6 +514,15 @@ export function TripCard({
             {` · ${days} ${t("trips.days")}`}
           </dd>
         </div>
+
+        {/* The planned days above, what happened below — never merged, for the
+            same reason Task keeps dueDate apart from completedAt. */}
+        {trip.startedAt && (
+          <div className="flex gap-1">
+            <dt>{t("trips.startedAt")}:</dt>
+            <dd style={{ color: "var(--text)" }}>{formatMoment(trip.startedAt)}</dd>
+          </div>
+        )}
       </dl>
 
       <TripLocation trip={trip} />
@@ -164,52 +542,26 @@ export function TripCard({
         </p>
       )}
 
-      {isAdmin && !cancelled && (
-        <div className="flex flex-wrap gap-2 pt-1">
-          {cancelling ? (
-            <form action={cancelAction} className="w-full space-y-2">
-              <input type="hidden" name="fieldTripId" value={trip.id} />
-              <div>
-                <label className="label" htmlFor={`cancel-${trip.id}`}>
-                  {t("trips.cancelReason")}
-                </label>
-                <input
-                  id={`cancel-${trip.id}`}
-                  name="reason"
-                  className="input"
-                  required
-                  maxLength={500}
-                />
-              </div>
-              <div className="flex gap-2">
-                <SubmitButton className="btn btn-danger">
-                  {t("common.confirm")}
-                </SubmitButton>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setCancelling(false)}
-                >
-                  {t("common.cancel")}
-                </button>
-              </div>
-            </form>
-          ) : (
-            <>
-              <button type="button" className="btn btn-secondary" onClick={onEdit}>
-                {t("trips.edit")}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setCancelling(true)}
-              >
-                {t("trips.cancelTrip")}
-              </button>
-            </>
-          )}
-        </div>
+      <TripEvidence trip={trip} />
+
+      {/* The actions sit with the record they act on, not stranded under the
+          footnote: what someone reads last on a finished trip is the report,
+          and the buttons belong next to it. */}
+      <TripActions
+        trip={trip}
+        canRun={canRun}
+        canDelete={canDelete}
+        isAdmin={isAdmin}
+        onEdit={onEdit}
+        cancelAction={cancelAction}
+      />
+
+      {isAdmin && state === "COMPLETED" && (
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          {t("trips.completedLocked")}
+        </p>
       )}
+
     </article>
   );
 }

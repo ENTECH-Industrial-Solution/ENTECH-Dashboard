@@ -39,6 +39,38 @@ const optionalText = (max: number) =>
     .nullish()
     .transform((v) => (isBlank(v) ? null : v));
 
+/** An optional link. A missing key and an empty value both mean "no link". */
+const optionalUrl = z
+  .union([z.string().trim().url(), z.literal("")])
+  .nullish()
+  .transform((v) => (isBlank(v) ? null : v));
+
+/**
+ * The edit-form counterparts, and the one place this file departs from the rule
+ * above — deliberately, because an edit form is not a create form.
+ *
+ * A create form has nothing to preserve, so an absent key can safely mean "not
+ * set". An edit form renders some fields only when they apply, and a key it
+ * never rendered has not been *cleared* — it has not been *touched*. Reading
+ * absence as null there would wipe the completion record that
+ * `reopenTaskAction` goes out of its way to keep.
+ *
+ * So absent yields `undefined`, which Prisma takes as "leave this column
+ * alone", while an empty value from a field that *was* rendered still clears.
+ */
+const untouchedOrText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "" ? null : v));
+
+const untouchedOrUrl = z
+  .union([z.string().trim().url(), z.literal("")])
+  .optional()
+  .transform((v) => (v === undefined ? undefined : v === "" ? null : v));
+
 export const loginSchema = z.object({
   employeeCode: employeeCodeSchema,
   // Deliberately not passwordSchema: existing passwords must not be rejected by
@@ -88,21 +120,45 @@ const optionalDate = z
     message: "วันที่ไม่ถูกต้อง / Invalid date",
   });
 
-export const createTaskSchema = z
-  .object({
-    title: z.string().trim().min(1, "กรุณากรอกชื่องาน / Title is required").max(200),
-    description: optionalText(5000),
-    assigneeId: z.string().cuid(),
-    priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
-    /// Planned schedule. Both ends are optional, but if both are given the
-    /// start cannot fall after the end.
-    startDate: optionalDate,
-    dueDate: optionalDate,
+const taskFields = z.object({
+  title: z.string().trim().min(1, "กรุณากรอกชื่องาน / Title is required").max(200),
+  description: optionalText(5000),
+  assigneeId: z.string().cuid(),
+  priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
+  /// Planned schedule. Both ends are optional, but if both are given the
+  /// start cannot fall after the end.
+  startDate: optionalDate,
+  dueDate: optionalDate,
+});
+
+const scheduleIsOrdered = (d: z.infer<typeof taskFields>) =>
+  !d.startDate || !d.dueDate || d.startDate <= d.dueDate;
+
+const SCHEDULE_ORDER = {
+  message: "วันเริ่มงานต้องไม่เกินกำหนดส่ง / Start date cannot be after the due date",
+  path: ["startDate"],
+};
+
+export const createTaskSchema = taskFields.refine(scheduleIsOrdered, SCHEDULE_ORDER);
+
+/**
+ * Editing a task after it exists — every field that is content rather than
+ * record. What is *not* here is as deliberate as what is: `code` is the task's
+ * identity, `status` has its own action with its own transitions, and
+ * `createdAt`/`startedAt`/`completedAt` are timestamps the system wrote about
+ * things that happened. Those are not data to correct, they are the record.
+ *
+ * The completion pair is editable because an archived task is now editable at
+ * all (see updateTaskAction) — and because a note with a typo in it is worse
+ * evidence than a corrected one, provided the correction is itself recorded.
+ */
+export const updateTaskSchema = taskFields
+  .extend({
+    taskId: z.string().cuid(),
+    completionNote: untouchedOrText(5000),
+    proofUrl: untouchedOrUrl,
   })
-  .refine((d) => !d.startDate || !d.dueDate || d.startDate <= d.dueDate, {
-    message: "วันเริ่มงานต้องไม่เกินกำหนดส่ง / Start date cannot be after the due date",
-    path: ["startDate"],
-  });
+  .refine(scheduleIsOrdered, SCHEDULE_ORDER);
 
 /** A required <input type="date"> value. */
 const requiredDate = z
@@ -190,8 +246,20 @@ export const createFieldTripSchema = fieldTripFields
     path: ["longitude"],
   });
 
+/**
+ * Editing a trip after it exists, including one already closed out.
+ *
+ * The completion pair rides along for the same reason it does on a task: once
+ * an archived record is editable at all, the half of it people most want to fix
+ * is the report — and a summary with a typo in it is worse evidence than a
+ * corrected one, provided the correction is itself recorded.
+ */
 export const updateFieldTripSchema = fieldTripFields
-  .extend({ fieldTripId: z.string().cuid() })
+  .extend({
+    fieldTripId: z.string().cuid(),
+    completionNote: untouchedOrText(5000),
+    proofUrl: untouchedOrUrl,
+  })
   .refine(endsAfterItStarts, {
     message: "วันสิ้นสุดต้องไม่ก่อนวันเริ่ม / The end date cannot precede the start",
     path: ["endDate"],
@@ -208,6 +276,34 @@ export const cancelFieldTripSchema = z.object({
     .trim()
     .min(1, "กรุณาระบุเหตุผล / A reason is required")
     .max(500),
+});
+
+/** Starting a trip carries nothing but the trip: the timestamp is the server's. */
+export const startFieldTripSchema = z.object({ fieldTripId: z.string().cuid() });
+
+/** Deleting a trip for good. Same bargain as deleteTaskSchema — see that. */
+export const deleteFieldTripSchema = z.object({
+  fieldTripId: z.string().cuid(),
+  reason: z
+    .string()
+    .trim()
+    .min(1, "กรุณาระบุเหตุผลในการลบ / A reason is required to delete")
+    .max(1000),
+});
+
+/**
+ * Closing a trip out.
+ *
+ * Both fields are optional, unlike completeTaskSchema, where the note *is* the
+ * evidence and is therefore required. A trip's evidence is that the person was
+ * at the place on those days; a summary and a link are offered on top of that,
+ * never demanded, because a demand at the end of a day in the field is a
+ * demand people meet by typing "-".
+ */
+export const completeFieldTripSchema = z.object({
+  fieldTripId: z.string().cuid(),
+  completionNote: optionalText(5000),
+  proofUrl: optionalUrl,
 });
 
 /** One UI switch on the admin settings page. */
@@ -229,10 +325,7 @@ export const completeTaskSchema = z.object({
     .trim()
     .min(1, "กรุณาสรุปผลงานเพื่อเก็บเป็นหลักฐาน / A completion note is required as evidence")
     .max(5000),
-  proofUrl: z
-    .union([z.string().trim().url(), z.literal("")])
-    .nullish()
-    .transform((v) => (isBlank(v) ? null : v)),
+  proofUrl: optionalUrl,
 });
 
 export const reopenTaskSchema = z.object({
@@ -241,6 +334,23 @@ export const reopenTaskSchema = z.object({
     .string()
     .trim()
     .min(1, "กรุณาระบุเหตุผล / A reason is required")
+    .max(1000),
+});
+
+/**
+ * Deleting a task for good.
+ *
+ * The reason is required for the same purpose it is on a reopen or a trip
+ * cancellation, only more so: after this runs, the audit row is the only thing
+ * left that can answer "why is this gone", because the row it describes no
+ * longer exists to be asked.
+ */
+export const deleteTaskSchema = z.object({
+  taskId: z.string().cuid(),
+  reason: z
+    .string()
+    .trim()
+    .min(1, "กรุณาระบุเหตุผลในการลบ / A reason is required to delete")
     .max(1000),
 });
 

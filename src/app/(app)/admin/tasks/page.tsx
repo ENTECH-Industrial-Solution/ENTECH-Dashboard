@@ -63,7 +63,13 @@ export default async function AdminTasksPage() {
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
             {active.map((task) => (
-              <ActiveTaskCard key={task.id} task={serialiseTask(task)} canMutate />
+              <ActiveTaskCard
+                key={task.id}
+                task={serialiseTask(task)}
+                canMutate
+                isAdmin
+                assignees={assignees}
+              />
             ))}
           </div>
         )}
@@ -87,7 +93,12 @@ export default async function AdminTasksPage() {
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
             {completed.map((task) => (
-              <CompletedTaskCard key={task.id} task={serialiseTask(task)} isAdmin />
+              <CompletedTaskCard
+                key={task.id}
+                task={serialiseTask(task)}
+                isAdmin
+                assignees={assignees}
+              />
             ))}
           </div>
         )}

@@ -45,7 +45,16 @@ export function TripSections({
   const updateErrors =
     updateState.status === "error" ? (updateState.fieldErrors ?? {}) : {};
 
-  const render = (trips: FieldTripRow[], editable: boolean) => {
+  /*
+   * `cancellable` is the only thing that separates the two lists now.
+   *
+   * Editing reaches both: a trip in the past that has been closed out is
+   * exactly the one whose report someone wants to fix, and the action refuses
+   * a cancelled trip on its own. Cancelling does not — a trip whose days have
+   * already gone by is not something to call off, and withholding the action
+   * withholds the button, since TripActions reads it from the prop.
+   */
+  const render = (trips: FieldTripRow[], cancellable: boolean) => {
     if (trips.length === 0) {
       return (
         <div
@@ -80,9 +89,16 @@ export function TripSections({
             <TripCard
               key={trip.id}
               trip={trip}
-              isAdmin={editable}
+              /* This page is admin-only, so every trip on it is one the viewer
+                 may edit, run, and delete — including a past one that was never
+                 closed out, which is precisely the trip that still needs the
+                 button. Cancelled and completed trips accumulate in both lists,
+                 and they are the ones most worth clearing out. */
+              isAdmin
+              canRun
+              canDelete
               onEdit={() => setEditingId(trip.id)}
-              cancelAction={cancelAction}
+              cancelAction={cancellable ? cancelAction : undefined}
             />
           ),
         )}

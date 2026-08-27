@@ -24,6 +24,12 @@ import type { Locale } from "@/lib/i18n/dictionaries";
 
 export type CalendarTask = {
   id: string;
+  /**
+   * Which of the task's two dates put it on this day. One task can produce two
+   * entries in a month — the day it is planned to start and the day it falls
+   * due — and they are not the same claim, so the calendar draws them apart.
+   */
+  kind: "due" | "start";
   code: string;
   title: string;
   status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
@@ -56,17 +62,21 @@ const WEEKDAYS: Record<Locale, readonly string[]> = {
   en: ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"],
 };
 
-type Tone = "overdue" | "open" | "done";
+type Tone = "overdue" | "open" | "done" | "start";
 
 const TONE_COLOR: Record<Tone, string> = {
   overdue: "var(--danger)",
   open: "var(--brand)",
   done: "var(--success)",
+  // Muted on purpose: a start date that has passed is not a problem, it is a
+  // fact. Only a missed *deadline* earns the red dot.
+  start: "var(--text-muted)",
 };
 
 const TRIP_COLOR = "var(--warning)";
 
 function toneOf(task: CalendarTask, todayKey: string): Tone {
+  if (task.kind === "start") return "start";
   if (task.status === "COMPLETED") return "done";
   return task.dayKey < todayKey ? "overdue" : "open";
 }
@@ -124,6 +134,8 @@ export function TaskCalendar({
   while (cells.length % 7 !== 0) cells.push(null);
 
   const selectedTasks = selected ? (tasksByDay.get(selected) ?? []) : [];
+  const dueCount = selectedTasks.filter((task) => task.kind === "due").length;
+  const startCount = selectedTasks.length - dueCount;
   const selectedTrips = selected ? (tripsByDay.get(selected) ?? []) : [];
   const nothingThisMonth = tasks.length === 0 && trips.length === 0;
 
@@ -245,9 +257,14 @@ export function TaskCalendar({
               <span className="text-sm font-medium">
                 {formatDayKey(selected, locale)}
               </span>
-              {selectedTasks.length > 0 && (
+              {dueCount > 0 && (
                 <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  {selectedTasks.length} {t("calendar.dueCount")}
+                  {dueCount} {t("calendar.dueCount")}
+                </span>
+              )}
+              {startCount > 0 && (
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {startCount} {t("calendar.startCount")}
                 </span>
               )}
             </div>
@@ -310,6 +327,24 @@ export function TaskCalendar({
                         style={{ color: "var(--text-muted)" }}
                       >
                         {task.code}
+                      </span>
+                      <span
+                        className="badge shrink-0"
+                        style={
+                          task.kind === "start"
+                            ? {
+                                background: "var(--surface)",
+                                color: "var(--text-muted)",
+                              }
+                            : {
+                                background: "var(--brand-soft)",
+                                color: "var(--brand)",
+                              }
+                        }
+                      >
+                        {task.kind === "start"
+                          ? t("calendar.marksStart")
+                          : t("calendar.marksDue")}
                       </span>
                       <span className="min-w-0 flex-1 truncate text-sm">
                         {task.title}

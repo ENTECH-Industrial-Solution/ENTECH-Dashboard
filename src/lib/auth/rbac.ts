@@ -45,3 +45,19 @@ export async function assertAdmin(): Promise<SessionUser> {
 export function canMutateTask(user: SessionUser, task: { assigneeId: string }): boolean {
   return user.role === "ADMIN" || task.assigneeId === user.id;
 }
+
+/**
+ * Who may start or complete a field trip.
+ *
+ * Deliberately wider than the rest of FieldTrip: scheduling, editing, and
+ * cancelling stay admin-only, because the schedule is something an admin plans
+ * and other people arrange their week around. Starting and finishing a trip is
+ * the opposite — it is the traveller reporting from the field — so the person
+ * named on the trip may do it as well.
+ */
+export function canRunFieldTrip(
+  user: SessionUser,
+  trip: { employeeId: string },
+): boolean {
+  return user.role === "ADMIN" || trip.employeeId === user.id;
+}

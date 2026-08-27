@@ -182,6 +182,27 @@ body {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
+
+/*
+ * Scrolls, but draws no bar.
+ *
+ * Only for a container whose overflow is already obvious from its contents —
+ * the off-site panel, where the list is clipped mid-card against the panel's
+ * bottom edge. A bar removed from somewhere that gave no other cue would just
+ * be content nobody knows is there. Deliberately not applied to .table-scroll:
+ * a table scrolling sideways has no such cue, and that bar is the affordance.
+ *
+ * Wheel, touch, keyboard, and find-in-page scrolling are untouched — this hides
+ * the indicator, not the behaviour.
+ */
+.scroll-bare {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-bare::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
 .table-scroll table {
   width: 100%;
   min-width: 44rem;

@@ -33,6 +33,8 @@ export function serialiseTrip(
     ...trip,
     startDate: trip.startDate.toISOString(),
     endDate: trip.endDate.toISOString(),
+    startedAt: trip.startedAt?.toISOString() ?? null,
+    completedAt: trip.completedAt?.toISOString() ?? null,
     cancelledAt: trip.cancelledAt?.toISOString() ?? null,
     mapHref: mapsHref(trip),
     mapEmbedSrc: mapEmbedSrc(trip, locale),

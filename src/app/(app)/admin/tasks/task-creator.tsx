@@ -2,14 +2,15 @@
 
 import { useActionState, useEffect, useState } from "react";
 
-import { Alert, FieldError, SubmitButton } from "@/components/ui";
-import { TripForm, type TripPerson } from "@/components/trip-form";
+import { Alert } from "@/components/ui";
+import { TaskForm, type AssigneeOption } from "@/components/task-form";
+import { TripForm } from "@/components/trip-form";
 import { useTranslations } from "@/lib/i18n/client";
 import { createFieldTripAction } from "@/server/actions/field-trips";
 import { createTaskAction } from "@/server/actions/tasks";
 import { idleState } from "@/server/actions/types";
 
-export type AssigneeOption = TripPerson;
+export type { AssigneeOption };
 
 type Kind = "task" | "trip";
 
@@ -119,109 +120,18 @@ export function TaskCreator({
           onCancel={() => setOpen(false)}
         />
       ) : (
-        <form action={taskAction} className="space-y-4">
-          {taskState.status === "error" && !taskState.fieldErrors && (
-            <Alert tone="error">{taskState.message}</Alert>
-          )}
-
-          <div>
-            <label className="label" htmlFor="title">
-              {t("tasks.title")}
-            </label>
-            <input id="title" name="title" className="input" required maxLength={200} />
-            <FieldError message={taskErrors.title} />
-          </div>
-
-          <div>
-            <label className="label" htmlFor="description">
-              {t("tasks.description")}{" "}
-              <span style={{ opacity: 0.7 }}>({t("common.optional")})</span>
-            </label>
-            <textarea
-              id="description"
-              name="description"
-              className="input"
-              rows={3}
-              maxLength={5000}
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="label" htmlFor="assigneeId">
-                {t("tasks.assignee")}
-              </label>
-              <select
-                id="assigneeId"
-                name="assigneeId"
-                className="input"
-                required
-                defaultValue=""
-              >
-                <option value="" disabled>
-                  —
-                </option>
-                {assignees.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.employeeCode} — {a.fullName}
-                    {a.department ? ` (${a.department})` : ""}
-                  </option>
-                ))}
-              </select>
-              <FieldError message={taskErrors.assigneeId} />
-            </div>
-
-            <div>
-              <label className="label" htmlFor="priority">
-                {t("tasks.priority")}
-              </label>
-              <select
-                id="priority"
-                name="priority"
-                className="input"
-                defaultValue="MEDIUM"
-              >
-                <option value="LOW">{t("priority.LOW")}</option>
-                <option value="MEDIUM">{t("priority.MEDIUM")}</option>
-                <option value="HIGH">{t("priority.HIGH")}</option>
-                <option value="URGENT">{t("priority.URGENT")}</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="label" htmlFor="startDate">
-                {t("tasks.startDate")}{" "}
-                <span style={{ opacity: 0.7 }}>({t("common.optional")})</span>
-              </label>
-              <input id="startDate" name="startDate" type="date" className="input" />
-              <FieldError message={taskErrors.startDate} />
-            </div>
-
-            <div>
-              <label className="label" htmlFor="dueDate">
-                {t("tasks.dueDate")}{" "}
-                <span style={{ opacity: 0.7 }}>({t("common.optional")})</span>
-              </label>
-              <input id="dueDate" name="dueDate" type="date" className="input" />
-              <FieldError message={taskErrors.dueDate} />
-            </div>
-          </div>
-
-          <div className="flex gap-2">
-            <SubmitButton className="btn btn-primary">
-              {t("common.create")}
-            </SubmitButton>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => setOpen(false)}
-            >
-              {t("common.cancel")}
-            </button>
-          </div>
-        </form>
+        <TaskForm
+          action={taskAction}
+          errors={taskErrors}
+          formError={
+            taskState.status === "error" && !taskState.fieldErrors
+              ? taskState.message
+              : undefined
+          }
+          assignees={assignees}
+          submitLabel={t("common.create")}
+          onCancel={() => setOpen(false)}
+        />
       )}
     </div>
   );

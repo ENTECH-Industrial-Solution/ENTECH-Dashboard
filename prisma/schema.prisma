@@ -228,6 +228,12 @@ model Counter {
 /// embedded map. The CSP forbids third-party frames and the app has no Google
 /// API key, so the UI links out to Google Maps with the pin instead of
 /// embedding one — see src/lib/maps.ts for how the link is built.
+///
+/// A trip is scheduled by an admin but *run* by the person on it: starting and
+/// completing one is the traveller reporting from the field, so those two are
+/// the only writes an employee may make (see canRunFieldTrip in auth/rbac.ts).
+/// Nothing here is ever deleted — a trip ends up cancelled or completed, and
+/// either way the row stays as the record of what happened.
 model FieldTrip {
   id String @id @default(cuid())
 
@@ -248,6 +254,20 @@ model FieldTrip {
   endDate   DateTime
 
   note String?
+
+  /// What actually happened, written from the field by the traveller (or an
+  /// admin) rather than planned in advance. startDate/endDate are the days the
+  /// trip was scheduled for; these two are when it really began and ended —
+  /// the same split Task draws between dueDate and completedAt.
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  /// The report filed when the trip was closed out. Both are optional: the
+  /// evidence a trip leaves is that someone was there on those days, so a link
+  /// is offered rather than demanded. Once written they are permanent — a
+  /// completed trip refuses further edits and cannot be cancelled.
+  completionNote String?
+  proofUrl       String?
 
   /// Trips are cancelled, not deleted: people plan around them, so the record
   /// of a cancellation is more useful than a silent disappearance.

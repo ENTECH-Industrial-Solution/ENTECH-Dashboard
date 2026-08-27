@@ -17,7 +17,7 @@ import {
 import { getLocale, getTranslations } from "@/lib/i18n/server";
 import { mapsHref } from "@/lib/maps";
 import { getSettings } from "@/lib/settings/server";
-import { getFieldTripsInMonth, getTasksDueInMonth } from "@/server/queries";
+import { getFieldTripsInMonth, getTasksInMonth } from "@/server/queries";
 
 /**
  * The calendar as it appears on a page: resolves which month to show from
@@ -52,7 +52,7 @@ export async function CalendarSection({
   const { year, month } = parseMonthParam(cal, today);
 
   const [tasks, trips] = await Promise.all([
-    getTasksDueInMonth(user, { year, month, assigneeId }),
+    getTasksInMonth(user, { year, month, assigneeId }),
     settings["fieldTrip.enabled"]
       ? getFieldTripsInMonth({ year, month, employeeId: assigneeId })
       : Promise.resolve([]),
@@ -67,21 +67,65 @@ export async function CalendarSection({
   const monthHref = (delta: number) =>
     `${basePath}?cal=${monthParam(shiftMonth({ year, month }, delta))}`;
 
-  const taskEntries: CalendarTask[] = tasks.map((task) => ({
-    id: task.id,
+  /*
+   * A task owns up to two days: the day it is planned to start and the day it
+   * falls due. The query returns anything with either inside the month, so each
+   * date is checked against the month again here — a task starting on the 28th
+   * and due on the 3rd of the next month is in this result for one of them, not
+   * both.
+   *
+   * Two passes rather than one, so a day lists its deadlines before the work
+   * merely beginning on it: `groupByDay` keeps insertion order, and what is due
+   * today is the more pressing half of the answer.
+   */
+  const monthPrefix = monthParam({ year, month });
+
+  const taskHref = (task: (typeof tasks)[number]) =>
+    linkTasksTo === "anchor"
+      ? `#task-${task.id}`
+      : `/dashboard/employee/${task.assignee.id}#task-${task.id}`;
+
+  const taskEntry = (
+    task: (typeof tasks)[number],
+    kind: "due" | "start",
+    dayKey: string,
+  ): CalendarTask => ({
+    // A task can appear twice in the month, so the row id carries which entry
+    // this is. The href still points at the one card behind both.
+    id: `${task.id}-${kind}`,
+    kind,
     code: task.code,
     title: task.title,
     status: task.status,
     priority: task.priority,
-    // dueDate is non-null here: the query filters on a date range.
-    dayKey: bangkokDayKey(task.dueDate!),
+    dayKey,
     assigneeCode: task.assignee.employeeCode,
     assigneeName: task.assignee.fullName,
-    href:
-      linkTasksTo === "anchor"
-        ? `#task-${task.id}`
-        : `/dashboard/employee/${task.assignee.id}#task-${task.id}`,
-  }));
+    href: taskHref(task),
+  });
+
+  const dayKeyIfInMonth = (date: Date | null): string | null => {
+    if (date === null) return null;
+    const key = bangkokDayKey(date);
+    return key.startsWith(monthPrefix) ? key : null;
+  };
+
+  const taskEntries: CalendarTask[] = [];
+
+  for (const task of tasks) {
+    const dueKey = dayKeyIfInMonth(task.dueDate);
+    if (dueKey) taskEntries.push(taskEntry(task, "due", dueKey));
+  }
+
+  for (const task of tasks) {
+    const startKey = dayKeyIfInMonth(task.startDate);
+    // A one-day task would otherwise take two rows on the same cell saying the
+    // same thing. The deadline is the entry that matters, so the start yields.
+    const dueKey = task.dueDate ? bangkokDayKey(task.dueDate) : null;
+    if (startKey && startKey !== dueKey) {
+      taskEntries.push(taskEntry(task, "start", startKey));
+    }
+  }
 
   /*
    * A trip covers a range; the calendar works in single days. Expanding here
