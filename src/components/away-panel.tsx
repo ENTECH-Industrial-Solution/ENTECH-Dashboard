@@ -149,7 +149,10 @@ async function Group({
         return (
           <article
             key={trip.id}
-            className="card space-y-2 p-3"
+            // Same anchor TripCard uses, so a capsule line pointing at a trip
+            // lands on it here as well as in the history section below.
+            id={`trip-${trip.id}`}
+            className="card scroll-mt-24 space-y-2 p-3"
             style={
               highlight
                 ? { borderColor: "var(--warning)", background: "var(--warning-soft)" }

@@ -7,8 +7,9 @@ import { getWorkloadTasks } from "@/server/queries";
 import type { WorkloadTaskRow } from "@/components/workload-pills";
 
 /**
- * The one read that happens after the page has rendered: the tasks behind a
- * capsule in the summary strip, fetched when someone opens it.
+ * The one read that happens after the page has rendered: the work behind a
+ * capsule in the summary strip — tasks and field trips alike — fetched when
+ * someone opens it.
  *
  * A read, not a mutation, so it does not go through `runAction` — there is no
  * FormData, no field-level failure to report, and nothing to revalidate. What
@@ -46,6 +47,7 @@ export async function loadWorkloadTasksAction(
       status: "ok",
       tasks: tasks.map((task) => ({
         id: task.id,
+        kind: task.kind,
         code: task.code,
         title: task.title,
         status: task.status,
