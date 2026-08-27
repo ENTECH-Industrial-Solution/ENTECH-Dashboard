@@ -128,22 +128,30 @@ export async function getCompletedTasks(
 }
 
 /**
- * Everything due inside one Bangkok calendar month, for the dashboard calendar.
+ * Everything that lands inside one Bangkok calendar month, for the dashboard
+ * calendar: work that *starts* in it as well as work that *falls due* in it.
  *
- * Scoped per month rather than "all tasks with a due date" so the payload stays
+ * Either date qualifies, hence the OR — a task planned to start on the 3rd and
+ * finish on the 40th belongs to both months, and a task with only a start date
+ * belongs to the calendar as much as one with only a deadline. Which of the two
+ * dates put a task in the result is not decided here: `CalendarSection` expands
+ * each row into one entry per date it owns in the month.
+ *
+ * Scoped per month rather than "every task with a date" so the payload stays
  * the same size in year three as in week one; paging back and forward is a
- * fresh query, not a truncated cache that would quietly hide deadlines.
+ * fresh query, not a truncated cache that would quietly hide a deadline.
  */
-export async function getTasksDueInMonth(
+export async function getTasksInMonth(
   user: SessionUser,
   { year, month, assigneeId }: YearMonth & { assigneeId?: string },
 ) {
   const { from, to } = monthBounds(year, month);
+  const inMonth = { gte: from, lt: to };
 
   return db.task.findMany({
     where: {
       ...assigneeScope(user, assigneeId),
-      dueDate: { gte: from, lt: to },
+      OR: [{ dueDate: inMonth }, { startDate: inMonth }],
     },
     select: {
       id: true,
@@ -151,6 +159,7 @@ export async function getTasksDueInMonth(
       title: true,
       status: true,
       priority: true,
+      startDate: true,
       dueDate: true,
       assignee: { select: { id: true, employeeCode: true, fullName: true } },
     },
@@ -176,6 +185,10 @@ const fieldTripSelect = {
   startDate: true,
   endDate: true,
   note: true,
+  startedAt: true,
+  completedAt: true,
+  completionNote: true,
+  proofUrl: true,
   cancelledAt: true,
   cancelledReason: true,
   employee: { select: { id: true, employeeCode: true, fullName: true } },
@@ -194,6 +207,13 @@ export type FieldTripListItem = Awaited<ReturnType<typeof getFieldTrips>>[number
  *
  * "upcoming" keeps a trip visible through its final day rather than dropping it
  * the moment it starts — someone away today is exactly who you are looking for.
+ *
+ * The split is by date alone. Completing a trip does not move it out of the
+ * current window, exactly as cancelling one does not: both stay in the list
+ * they were in, wearing the badge that says what became of them, and roll into
+ * the past when their days are over. Nothing is ever deleted, so "past" is the
+ * permanent record — an employee's own copy of it is on their page, and the
+ * whole company's is on /admin/tasks.
  */
 export async function getFieldTrips({
   window,

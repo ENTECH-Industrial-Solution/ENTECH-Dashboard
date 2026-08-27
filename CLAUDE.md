@@ -253,12 +253,54 @@ actions, not the UI — `canMutateTask()` (admin or assignee) guards status and
 completion, and reopening is admin-only. A card rendered for someone else's task
 therefore shows no controls at all.
 
-Completed tasks are **immutable evidence**. `updateTaskStatusAction` refuses to
+A completed task's **lifecycle** is closed. `updateTaskStatusAction` refuses to
 touch a `COMPLETED` task; the only way back out is `reopenTaskAction`, which is
 admin-only, demands a written reason, preserves the original `completionNote`
-and `proofUrl`, and writes both a `TaskEvent` and an `AuditLog` row. Do not add
-a path that edits or deletes a completed task — that would defeat the point of
-the archive.
+and `proofUrl`, and writes both a `TaskEvent` and an `AuditLog` row.
+
+Its **content** is not closed, and that is a deliberate change from the original
+design. `updateTaskAction` lets an admin correct any task, archived or not:
+title, description, assignee, priority, the planned dates, and — where the task
+has one — the completion note and evidence link. What makes the archive
+defensible is not that nothing can touch it; a wrong record defended to the
+death is still a wrong record. It is that **every change to it is accounted
+for**. So the edit is granted and the accounting is the part that is not
+optional:
+
+- an `UPDATED` `TaskEvent` naming the fields that moved, and
+- an `AuditLog` row whose metadata carries a field-by-field `{from, to}` diff
+  plus an `archived` flag marking edits that landed on a completed task,
+- both written in the same `$transaction` as the edit.
+
+Two things stay out of reach and should stay that way: `status`, which has its
+own action and its own legal transitions, and the system's own timestamps
+(`createdAt`, `startedAt`, `completedAt`). Those are not data to correct — they
+are the record of when things happened, and editing them would be forging it.
+
+`deleteTaskAction` and `deleteFieldTripAction` are the **only two hard deletes
+in the application** — employees are deactivated, and everything else is kept.
+Both are admin-only and neither is offered to an assignee or a traveller:
+someone deleting their own assigned work is the one case this must not make
+easy. Both demand a written reason, because once they run there is nothing left
+to infer one from.
+
+`deleteFieldTripAction` accepts a trip in **any** state, cancelled and completed
+included, which is not a hole in the completed lock. That lock stops a finished
+trip being rewritten or made to look cancelled — both ways of changing what the
+record *says*. A delete does not change what it says; it removes the row and
+leaves an entry stating so, with a reason and a copy of everything the row held.
+
+`TaskEvent.taskId` is `onDelete: Cascade`, so the task's whole trail dies with
+it. That is why the action snapshots the entire task **and every one of its
+events** into the `AuditLog` metadata *before* the delete, in the same
+`$transaction`: either both happen or neither does, and the surviving row is a
+complete account of a task that no longer exists. Preserve that property if you
+touch this — a delete that leaves only "someone deleted TSK-000042" is the
+version of this feature the app should not have.
+
+If you add a field to `updateTaskSchema`, add it to `EDITABLE_FIELDS` in
+`src/server/actions/tasks.ts` too, or it will be written without appearing in
+the diff — an edit nobody can see is the one outcome this design cannot have.
 
 `TaskEvent` and `AuditLog` are append-only by convention: no application code
 updates or deletes them, and the admin audit page exposes no such affordance.
@@ -267,10 +309,50 @@ Write the audit row inside the same `$transaction` as the mutation it describes
 
 ### Field trips
 
-`FieldTrip` records who is off-site, where, and on which days. Admin-only to
-write (`src/server/actions/field-trips.ts`), readable by anyone signed in — the
-schedule exists so the team can see who is out, so `getFieldTrips()` takes no
-`SessionUser` and narrows by nothing but an optional `employeeId`.
+`FieldTrip` records who is off-site, where, and on which days. Readable by
+anyone signed in — the schedule exists so the team can see who is out, so
+`getFieldTrips()` takes no `SessionUser` and narrows by nothing but an optional
+`employeeId`.
+
+Writing splits in two (`src/server/actions/field-trips.ts`). **Scheduling** —
+create, update, cancel — is admin-only, because the schedule is something an
+admin plans and other people arrange their week around. **Running** a trip is
+not: `startFieldTripAction` and `completeFieldTripAction` are the traveller
+reporting from the field, so they go through `assertUser()` +
+`canRunFieldTrip()` (admin, or the person named on the trip) instead of
+`assertAdmin()`. That is the only widening, and it is the reason the buttons
+appear in `AwayPanel` on the dashboard — `/admin/tasks` is admin-only, so it is
+the only view of a trip an employee has.
+
+A trip's four states are read off three nullable timestamps by `tripState()`:
+scheduled → on-site (`startedAt`) → completed (`completedAt`), with cancelled
+(`cancelledAt`) as the other terminal end. `startDate`/`endDate` stay the
+*planned* days; `startedAt`/`completedAt` record what actually happened, the
+same split `Task` draws between `dueDate` and `completedAt`.
+
+Completing writes an optional summary and an optional `proofUrl`. Optional,
+unlike a task's completion note, is deliberate: a trip's evidence is that the
+person was at the place on those days, and a required field at the end of a day
+in the field is a field people fill with "-".
+
+Completing closes the trip's *lifecycle*: it cannot be started again, completed
+again, or cancelled — calling off a trip that was seen through to the end would
+be rewriting what happened. Its *content* stays correctable, on exactly the
+terms a completed task's is: `updateFieldTripAction` accepts a finished trip,
+including its report, and writes a `diffFields()` before/after plus an
+`archived` flag into the audit row. A **cancelled** trip stays closed to edits —
+it never happened, so there is nothing about it to correct. There is no reopen
+path for either; do not add one without the reason-and-audit shape
+`reopenTaskAction` uses.
+
+`TripActions` is the single row of controls a trip carries, shared by the card
+and the off-site panel. One row, not two: splitting "what the traveller does"
+from "what the admin does" made a card look like it had two unrelated toolbars.
+Which buttons appear is decided from the trip's state and from props the server
+sets — and `cancelAction` being *absent* is how `/admin/tasks` withholds the
+cancel button from trips already in the past. The row is a grid of
+`auto-fill` equal tracks so every button on a card is the same width whatever
+the mix, reflowing on the *card's* width rather than the viewport's.
 
 Trips have **no page of their own**: assigning one is assigning work, so they
 live inside `/admin/tasks`, and the "new task" button carries a type switch that
@@ -281,6 +363,16 @@ Trips are **cancelled, not deleted**: people plan around them, and a trip that
 silently vanishes is worse than one marked cancelled with a reason. Cancelled
 trips stay in the list and drop off the calendar.
 
+The upcoming/past split is **by date alone**. Completing a trip does not move it
+between the two, exactly as cancelling one does not: both stay in the list they
+were in, wearing the badge that says what became of them, and roll into the past
+when their days are over. `AwayPanel` is the exception that matters — a
+completed trip leaves "ออกอยู่ตอนนี้" the moment it is closed out and moves to
+its own group, because "who is out right now" is the one question a finished
+trip is no longer an answer to. Nothing is ever deleted, so `window: "past"` is
+the permanent record: `TripHistory` is one person's copy of it, on their
+dashboard and their page, and `/admin/tasks` carries everyone's.
+
 The day range is inclusive and expanded per-day in `CalendarSection` — a trip
 from the 3rd to the 5th becomes three calendar entries, clipped to the month on
 show, so one crossing a month boundary appears correctly in both.
@@ -288,6 +380,17 @@ show, so one crossing a month boundary appears correctly in both.
 `ScheduleRow` pairs the calendar with `AwayPanel`: the calendar answers "what
 happens on the 14th", the panel answers "where is everyone right now". Either
 can be switched off, and whichever remains takes the full width.
+
+Side by side, **the calendar decides how tall the row is.** Grid items stretch
+to the tallest, and the panel was the tallest, so a busy week dragged the row
+down and left the two ending at different lines. The panel is therefore lifted
+out of flow — `lg:absolute lg:inset-0` inside a `relative` grid item — so it
+contributes no height at all: the row is the calendar's, the panel stretches to
+exactly that, and the trips scroll inside it under a pinned heading
+(`min-h-0 flex-1 overflow-y-auto`; without `min-h-0` a flex item refuses to
+shrink below its content). Both the absolute positioning and the two-column
+grid start at `lg`, so they switch together — stacked below it, each takes its
+natural height and there is nothing to align to.
 
 ### Maps
 
@@ -356,8 +459,19 @@ add a switch that governs what someone may *read*, enforce it in
 
 Four, and they are not interchangeable. `startDate` and `dueDate` are the
 *planned* window an admin sets when assigning; `startedAt` and `completedAt`
-record what actually happened and are written by the lifecycle actions. The
-calendar buckets by `dueDate`.
+record what actually happened and are written by the lifecycle actions.
+
+The calendar plots the two *planned* dates, never the actual ones.
+`getTasksInMonth()` selects a task if either falls inside the month, and
+`CalendarSection` then expands it into up to two entries carrying
+`kind: "due" | "start"` — checking each date against the month again, because a
+task can qualify on one and not the other. A task whose start and due land on
+the same day yields one entry, the deadline: two rows on a cell saying the same
+thing is worse than one. `toneOf()` gives a start entry a muted dot rather than
+the red one, and only ever reds a missed `dueDate` — a start date in the past is
+a fact, not a problem, and colouring it as overdue would make the calendar cry
+wolf. A task with neither planned date appears nowhere on it, which is why an
+edit that empties `dueDate` silently drops the task off the calendar.
 
 ### Employees are never hard-deleted
 

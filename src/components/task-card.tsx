@@ -1,14 +1,17 @@
 "use client";
 
-import { useActionState, useState, type ReactNode } from "react";
+import { useActionState, useEffect, useState, type ReactNode } from "react";
 
+import { TaskForm, type AssigneeOption } from "@/components/task-form";
 import { Alert, PriorityBadge, StatusBadge, SubmitButton } from "@/components/ui";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
 import { useSettings } from "@/lib/settings/client";
 import { idleState } from "@/server/actions/types";
 import {
   completeTaskAction,
+  deleteTaskAction,
   reopenTaskAction,
+  updateTaskAction,
   updateTaskStatusAction,
 } from "@/server/actions/tasks";
 
@@ -59,18 +62,130 @@ function Meta({
   );
 }
 
+/**
+ * The inline editor a card swaps itself for.
+ *
+ * Both cards use it, and both look identical while editing: whether a task is
+ * active or archived changes what the form offers (the completion pair appears
+ * only where there is one), never how the edit works or what it records.
+ *
+ * Kept in its own component so its `useActionState` unmounts with it — a
+ * cancelled edit leaves no stale error behind for the next one.
+ */
+function TaskEditor({
+  task,
+  assignees,
+  setEditing,
+}: {
+  task: TaskCardData;
+  assignees: AssigneeOption[];
+  setEditing: (value: boolean) => void;
+}) {
+  const t = useTranslations();
+  const [state, formAction] = useActionState(updateTaskAction, idleState);
+
+  useEffect(() => {
+    if (state.status === "success") setEditing(false);
+  }, [state, setEditing]);
+
+  return (
+    <article id={`task-${task.id}`} className="card scroll-mt-24 space-y-3 p-4">
+      <div className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+        {task.code} · {t("tasks.editTitle")}
+      </div>
+
+      <TaskForm
+        action={formAction}
+        errors={state.status === "error" ? (state.fieldErrors ?? {}) : {}}
+        formError={
+          state.status === "error" && !state.fieldErrors ? state.message : undefined
+        }
+        assignees={assignees}
+        task={task}
+        submitLabel={t("common.save")}
+        onCancel={() => setEditing(false)}
+      />
+    </article>
+  );
+}
+
+/**
+ * The delete confirmation, inline on the card.
+ *
+ * A reason field rather than a browser `confirm()`, which is what deactivating
+ * an employee uses: an OK button is a reflex, and typing a sentence is not. It
+ * is also the only place the reason can come from — after the delete lands
+ * there is no task left to attach an explanation to, so the audit row has to
+ * collect it here or never.
+ *
+ * On success there is nothing to close: the row is gone, the list revalidates
+ * without it, and this component unmounts with the card around it.
+ */
+function TaskDeleter({
+  task,
+  setDeleting,
+}: {
+  task: TaskCardData;
+  setDeleting: (value: boolean) => void;
+}) {
+  const t = useTranslations();
+  const [state, formAction] = useActionState(deleteTaskAction, idleState);
+
+  return (
+    <form action={formAction} className="space-y-2 pt-1">
+      <Alert tone="warning">{t("tasks.deleteWarning")}</Alert>
+      {state.status === "error" && <Alert tone="error">{state.message}</Alert>}
+
+      <input type="hidden" name="taskId" value={task.id} />
+
+      <div>
+        <label className="label" htmlFor={`delete-${task.id}`}>
+          {t("tasks.deleteReason")}
+        </label>
+        <input
+          id={`delete-${task.id}`}
+          name="reason"
+          className="input"
+          required
+          maxLength={1000}
+        />
+      </div>
+
+      <div className="flex gap-2">
+        <SubmitButton className="btn btn-danger">
+          {t("tasks.deleteConfirm")}
+        </SubmitButton>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => setDeleting(false)}
+        >
+          {t("common.cancel")}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 /** A task still in progress — the assignee can move it or complete it. */
 export function ActiveTaskCard({
   task,
   canMutate,
+  isAdmin = false,
+  assignees = [],
 }: {
   task: TaskCardData;
   canMutate: boolean;
+  /** Editing the task's content is admin-only, separately from canMutate. */
+  isAdmin?: boolean;
+  assignees?: AssigneeOption[];
 }) {
   const t = useTranslations();
   const format = useFormatter();
   const settings = useSettings();
   const [completing, setCompleting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [statusState, statusAction] = useActionState(
     updateTaskStatusAction,
@@ -83,6 +198,10 @@ export function ActiveTaskCard({
 
   const overdue =
     task.dueDate !== null && new Date(task.dueDate) < new Date();
+
+  if (isAdmin && editing) {
+    return <TaskEditor task={task} assignees={assignees} setEditing={setEditing} />;
+  }
 
   return (
     <article id={`task-${task.id}`} className="card scroll-mt-24 p-4 space-y-3">
@@ -149,9 +268,9 @@ export function ActiveTaskCard({
         <Alert tone="error">{completeState.message}</Alert>
       )}
 
-      {canMutate && !completing && (
+      {(canMutate || isAdmin) && !completing && !deleting && (
         <div className="flex flex-wrap gap-2 pt-1">
-          {task.status === "TODO" && (
+          {canMutate && task.status === "TODO" && (
             <form action={statusAction}>
               <input type="hidden" name="taskId" value={task.id} />
               <input type="hidden" name="status" value="IN_PROGRESS" />
@@ -161,7 +280,7 @@ export function ActiveTaskCard({
             </form>
           )}
 
-          {task.status === "IN_PROGRESS" && (
+          {canMutate && task.status === "IN_PROGRESS" && (
             <form action={statusAction}>
               <input type="hidden" name="taskId" value={task.id} />
               <input type="hidden" name="status" value="BLOCKED" />
@@ -171,7 +290,7 @@ export function ActiveTaskCard({
             </form>
           )}
 
-          {task.status === "BLOCKED" && (
+          {canMutate && task.status === "BLOCKED" && (
             <form action={statusAction}>
               <input type="hidden" name="taskId" value={task.id} />
               <input type="hidden" name="status" value="IN_PROGRESS" />
@@ -181,14 +300,40 @@ export function ActiveTaskCard({
             </form>
           )}
 
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setCompleting(true)}
-          >
-            {t("tasks.complete")}
-          </button>
+          {canMutate && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setCompleting(true)}
+            >
+              {t("tasks.complete")}
+            </button>
+          )}
+
+          {isAdmin && (
+            <>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setEditing(true)}
+              >
+                {t("tasks.edit")}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ color: "var(--danger)" }}
+                onClick={() => setDeleting(true)}
+              >
+                {t("tasks.delete")}
+              </button>
+            </>
+          )}
         </div>
+      )}
+
+      {isAdmin && deleting && (
+        <TaskDeleter task={task} setDeleting={setDeleting} />
       )}
 
       {canMutate && completing && (
@@ -243,21 +388,31 @@ export function ActiveTaskCard({
 }
 
 /**
- * A completed task. Read-only by design — the only affordance is an admin
- * reopen, which demands a reason and is written to the audit log.
+ * A completed task. Read-only to everyone but an admin, who has two ways in:
+ * reopen, which moves it back out of the archive and demands a reason, and
+ * edit, which corrects the record in place. Both are written to the audit log
+ * — that accounting, not immutability, is what the archive rests on.
  */
 export function CompletedTaskCard({
   task,
   isAdmin,
+  assignees = [],
 }: {
   task: TaskCardData;
   isAdmin: boolean;
+  assignees?: AssigneeOption[];
 }) {
   const t = useTranslations();
   const format = useFormatter();
   const settings = useSettings();
   const [reopening, setReopening] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [state, formAction] = useActionState(reopenTaskAction, idleState);
+
+  if (isAdmin && editing) {
+    return <TaskEditor task={task} assignees={assignees} setEditing={setEditing} />;
+  }
 
   return (
     <article
@@ -337,7 +492,10 @@ export function CompletedTaskCard({
 
       {state.status === "error" && <Alert tone="error">{state.message}</Alert>}
 
-      {isAdmin &&
+      {isAdmin && deleting ? (
+        <TaskDeleter task={task} setDeleting={setDeleting} />
+      ) : (
+        isAdmin &&
         (reopening ? (
           <form action={formAction} className="space-y-2">
             <input type="hidden" name="taskId" value={task.id} />
@@ -367,14 +525,35 @@ export function CompletedTaskCard({
             </div>
           </form>
         ) : (
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() => setReopening(true)}
-          >
-            {t("tasks.reopen")}
-          </button>
-        ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setEditing(true)}
+            >
+              {t("tasks.edit")}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setReopening(true)}
+            >
+              {t("tasks.reopen")}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ color: "var(--danger)" }}
+              onClick={() => setDeleting(true)}
+            >
+              {t("tasks.delete")}
+            </button>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              {t("tasks.editAudited")}
+            </span>
+          </div>
+        ))
+      )}
     </article>
   );
 }

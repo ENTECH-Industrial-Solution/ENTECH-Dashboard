@@ -5,6 +5,7 @@ import { ScheduleRow } from "@/components/schedule-row";
 import { SummaryTiles } from "@/components/summary-tiles";
 import { ActiveTaskCard, CompletedTaskCard } from "@/components/task-card";
 import { TaskSection } from "@/components/task-section";
+import { TripHistory } from "@/components/trip-history";
 import { EmptyState } from "@/components/ui";
 import { requireUser } from "@/lib/auth/rbac";
 import type { SessionUser } from "@/lib/auth/session";
@@ -143,6 +144,8 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
           </div>
         )}
       </TaskSection>
+
+      <TripHistory employeeId={user.id} />
     </div>
   );
 }

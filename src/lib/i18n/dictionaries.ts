@@ -113,27 +113,47 @@ export const dictionary = {
   "tasks.createdAt": { th: "สร้างเมื่อ", en: "Created" },
   "tasks.overdue": { th: "เกินกำหนด", en: "Overdue" },
   "tasks.historyLocked": {
-    th: "งานที่เสร็จแล้วถูกล็อกไว้เป็นหลักฐาน เฉพาะผู้ดูแลระบบเท่านั้นที่เปิดใหม่ได้",
-    en: "Completed tasks are locked as evidence. Only an administrator can reopen them.",
+    th: "งานที่เสร็จแล้วแก้ไขและเปิดใหม่ได้เฉพาะผู้ดูแลระบบ ทุกครั้งจะถูกบันทึกว่าใครทำ เมื่อไหร่ และเปลี่ยนอะไร",
+    en: "Only an administrator can edit or reopen a completed task, and every change records who, when, and what it changed.",
   },
   "tasks.timeline": { th: "ประวัติการเปลี่ยนแปลง", en: "Activity trail" },
   "tasks.nextDue": { th: "ครบกำหนดถัดไป", en: "Next due" },
+  "tasks.edit": { th: "แก้ไขข้อมูล", en: "Edit" },
+  "tasks.editTitle": { th: "แก้ไขข้อมูลงาน", en: "Edit task" },
+  "tasks.editArchivedHint": {
+    th: "แก้ไขสรุปผลงานที่บันทึกไว้ตอนปิดงาน การแก้ไขทุกครั้งถูกบันทึกว่าใครแก้ แก้เมื่อไหร่ และแก้จากอะไรเป็นอะไร",
+    en: "Correcting the record filed when this was closed. Every edit is logged with who made it, when, and what it changed from.",
+  },
+  "tasks.editAudited": {
+    th: "การแก้ไขงานที่เสร็จแล้วจะถูกบันทึกไว้ในบันทึกการใช้งาน",
+    en: "Editing a completed task is written to the audit log",
+  },
+  "tasks.delete": { th: "ลบงาน", en: "Delete" },
+  "tasks.deleteConfirm": { th: "ยืนยันลบถาวร", en: "Delete permanently" },
+  "tasks.deleteReason": { th: "เหตุผลในการลบ", en: "Reason for deleting" },
+  "tasks.deleteWarning": {
+    th: "ลบแล้วกู้คืนไม่ได้ ประวัติการเปลี่ยนแปลงของงานนี้จะถูกลบไปพร้อมกัน เหลือเพียงสำเนาข้อมูลงานที่ระบบเก็บไว้ในบันทึกการใช้งาน",
+    en: "This cannot be undone. The task's activity trail goes with it — all that remains is the copy this writes to the audit log.",
+  },
 
-  "calendar.title": { th: "ปฏิทินกำหนดส่งงาน", en: "Deadline calendar" },
+  "calendar.title": { th: "ปฏิทินงาน", en: "Work calendar" },
   "calendar.hint": {
-    th: "กดที่วันเพื่อดูงานที่ครบกำหนดวันนั้น แล้วกดที่งานเพื่อไปยังการ์ดงานจริง",
-    en: "Pick a day to see what falls due, then open a task to jump to its card",
+    th: "กดที่วันเพื่อดูงานที่เริ่มและงานที่ครบกำหนดวันนั้น แล้วกดที่งานเพื่อไปยังการ์ดงานจริง",
+    en: "Pick a day to see what starts and what falls due, then open a task to jump to its card",
   },
   "calendar.today": { th: "วันนี้", en: "Today" },
   "calendar.prevMonth": { th: "เดือนก่อนหน้า", en: "Previous month" },
   "calendar.nextMonth": { th: "เดือนถัดไป", en: "Next month" },
-  "calendar.emptyDay": { th: "ไม่มีงานครบกำหนดในวันนี้", en: "Nothing due on this day" },
+  "calendar.emptyDay": { th: "ไม่มีงานในวันนี้", en: "Nothing on this day" },
   "calendar.emptyMonth": {
-    th: "เดือนนี้ไม่มีงานที่ครบกำหนด",
-    en: "Nothing falls due this month",
+    th: "เดือนนี้ไม่มีงานที่มีกำหนดวัน",
+    en: "Nothing dated this month",
   },
   "calendar.pickDay": { th: "เลือกวันจากปฏิทิน", en: "Select a day above" },
   "calendar.dueCount": { th: "งานครบกำหนด", en: "due" },
+  "calendar.startCount": { th: "งานเริ่มวันนี้", en: "starting" },
+  "calendar.marksDue": { th: "ครบกำหนด", en: "Due" },
+  "calendar.marksStart": { th: "เริ่มงาน", en: "Starts" },
 
   "dashboard.byPerson": { th: "งานรายบุคคล", en: "By employee" },
   "dashboard.byPersonHint": {
@@ -200,6 +220,42 @@ export const dictionary = {
   "trips.comingUp": { th: "กำลังจะไป", en: "Coming up" },
   "trips.allIn": { th: "ตอนนี้ทุกคนอยู่ในออฟฟิศ", en: "Everyone is in the office" },
   "trips.untilDate": { th: "ถึง", en: "until" },
+
+  "trips.start": { th: "เริ่มทำงานนอกสถานที่", en: "Start off-site work" },
+  "trips.complete": { th: "เสร็จภารกิจ", en: "Mission complete" },
+  "trips.onSite": { th: "กำลังทำงานนอกสถานที่", en: "On site" },
+  "trips.done": { th: "เสร็จภารกิจแล้ว", en: "Completed" },
+  "trips.startedAt": { th: "เริ่มเมื่อ", en: "Started" },
+  "trips.completedAt": { th: "เสร็จเมื่อ", en: "Completed" },
+  "trips.completionNote": {
+    th: "สรุปผลภารกิจ",
+    en: "Mission summary",
+  },
+  "trips.proofUrl": { th: "ลิงก์หลักฐาน", en: "Evidence link" },
+  "trips.history": { th: "ประวัติการออกนอกสถานที่", en: "Off-site history" },
+  "trips.historyHint": {
+    th: "ภารกิจที่ผ่านมาแล้ว เก็บไว้ถาวรเป็นหลักฐาน",
+    en: "Trips whose days have passed, kept permanently as a record",
+  },
+  "trips.historyEmpty": {
+    th: "ยังไม่มีประวัติการออกนอกสถานที่",
+    en: "No off-site work recorded yet",
+  },
+  "trips.delete": { th: "ลบงาน", en: "Delete" },
+  "trips.deleteConfirm": { th: "ยืนยันลบถาวร", en: "Delete permanently" },
+  "trips.deleteReason": { th: "เหตุผลในการลบ", en: "Reason for deleting" },
+  "trips.deleteWarning": {
+    th: "ลบแล้วกู้คืนไม่ได้ เหลือเพียงสำเนาข้อมูลการเดินทางที่ระบบเก็บไว้ในบันทึกการใช้งาน",
+    en: "This cannot be undone. All that remains is the copy this writes to the audit log.",
+  },
+  "trips.completedLocked": {
+    th: "ภารกิจที่เสร็จแล้วยกเลิกไม่ได้ แก้ไขได้เฉพาะผู้ดูแลระบบ และทุกการแก้ไขถูกบันทึกว่าใครแก้ เมื่อไหร่ และเปลี่ยนอะไร",
+    en: "A completed trip cannot be cancelled. An administrator may still correct it, and every edit records who, when, and what it changed.",
+  },
+  "trips.editArchivedHint": {
+    th: "แก้ไขสรุปผลภารกิจที่บันทึกไว้ตอนปิดงาน การแก้ไขทุกครั้งถูกบันทึกว่าใครแก้ แก้เมื่อไหร่ และแก้จากอะไรเป็นอะไร",
+    en: "Correcting the report filed when this trip was closed. Every edit is logged with who made it, when, and what it changed from.",
+  },
 
   "status.TODO": { th: "รอเริ่ม", en: "To do" },
   "status.IN_PROGRESS": { th: "กำลังทำ", en: "In progress" },

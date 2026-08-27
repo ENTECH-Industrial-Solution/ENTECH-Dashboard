@@ -22,6 +22,11 @@ export type FieldTripRow = {
   startDate: string;
   endDate: string;
   note: string | null;
+  /** What actually happened, against the planned startDate/endDate above. */
+  startedAt: string | null;
+  completedAt: string | null;
+  completionNote: string | null;
+  proofUrl: string | null;
   cancelledAt: string | null;
   cancelledReason: string | null;
   employee: { id: string; employeeCode: string; fullName: string };
@@ -63,6 +68,17 @@ export function TripForm({
 }) {
   const t = useTranslations();
   const id = trip?.id ?? "new";
+
+  /*
+   * The report is offered only on a trip that has filed one. Not rendering it
+   * is safe precisely because the schema reads an absent key as "unchanged"
+   * rather than "cleared" — see untouchedOrText in lib/validation.ts.
+   */
+  const hasReport =
+    trip !== undefined &&
+    (trip.completedAt !== null ||
+      trip.completionNote !== null ||
+      trip.proofUrl !== null);
 
   return (
     <form action={action} className="space-y-4">
@@ -237,6 +253,51 @@ export function TripForm({
           defaultValue={trip?.note ?? ""}
         />
       </div>
+
+      {hasReport && (
+        <div
+          className="space-y-4 rounded-lg border-s-2 px-3 py-3"
+          style={{
+            borderInlineStartColor: "var(--success)",
+            background: "var(--surface-muted)",
+          }}
+        >
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            {t("trips.editArchivedHint")}
+          </p>
+
+          <div>
+            <label className="label" htmlFor={`tripReport-${id}`}>
+              {t("trips.completionNote")}{" "}
+              <span style={{ opacity: 0.7 }}>({t("common.optional")})</span>
+            </label>
+            <textarea
+              id={`tripReport-${id}`}
+              name="completionNote"
+              className="input"
+              rows={3}
+              maxLength={5000}
+              defaultValue={trip?.completionNote ?? ""}
+            />
+          </div>
+
+          <div>
+            <label className="label" htmlFor={`tripReportProof-${id}`}>
+              {t("trips.proofUrl")}{" "}
+              <span style={{ opacity: 0.7 }}>({t("common.optional")})</span>
+            </label>
+            <input
+              id={`tripReportProof-${id}`}
+              name="proofUrl"
+              type="url"
+              className="input"
+              placeholder="https://"
+              defaultValue={trip?.proofUrl ?? ""}
+            />
+            <FieldError message={errors.proofUrl} />
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2">
         <SubmitButton className="btn btn-primary">{submitLabel}</SubmitButton>

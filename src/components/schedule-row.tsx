@@ -46,7 +46,29 @@ export async function ScheduleRow({
         </div>
       )}
 
-      {showAway && <AwayPanel employeeId={assigneeId} />}
+      {/*
+        * Side by side, the calendar decides how tall the row is.
+        *
+        * Grid items stretch to the tallest, and the off-site panel was the
+        * tallest — so a week with several trips dragged the row down and left
+        * the two panels ending at different lines. Lifting it out of flow
+        * (absolute inside a relative item) means it contributes no height at
+        * all: the row is the calendar's, the panel stretches to exactly that,
+        * and anything past it scrolls inside the panel.
+        *
+        * Only from `lg`, and only when both are shown — stacked, each takes its
+        * natural height and there is nothing to align to.
+        */}
+      {showAway &&
+        (both ? (
+          <div className="relative">
+            <div className="lg:absolute lg:inset-0">
+              <AwayPanel user={user} employeeId={assigneeId} />
+            </div>
+          </div>
+        ) : (
+          <AwayPanel user={user} employeeId={assigneeId} />
+        ))}
     </div>
   );
 }

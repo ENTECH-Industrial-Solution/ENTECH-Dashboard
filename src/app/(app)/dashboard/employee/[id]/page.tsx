@@ -7,12 +7,14 @@ import { ScheduleRow } from "@/components/schedule-row";
 import { SummaryTiles } from "@/components/summary-tiles";
 import { ActiveTaskCard, CompletedTaskCard } from "@/components/task-card";
 import { TaskSection } from "@/components/task-section";
+import { TripHistory } from "@/components/trip-history";
 import { EmptyState } from "@/components/ui";
 import { requireUser } from "@/lib/auth/rbac";
 import { formatDateTime, getLocale, getTranslations } from "@/lib/i18n/server";
 import { serialiseTask } from "@/lib/serialise";
 import {
   getActiveTasks,
+  getAssignableEmployees,
   getCompletedTasks,
   getEmployeeProfile,
   getTaskSummary,
@@ -41,11 +43,17 @@ export default async function EmployeeTasksPage({
   const profile = await getEmployeeProfile(user, id);
   if (!profile) notFound();
 
+  const isAdmin = user.role === "ADMIN";
+
   const [t, locale] = await Promise.all([getTranslations(), getLocale()]);
-  const [active, completed, summary] = await Promise.all([
+  // The assignee list is only ever read by the edit form, which is admin-only.
+  // Fetched inside the same Promise.all as the rest, so on the one path that
+  // needs it the extra query costs a connection, not a round trip.
+  const [active, completed, summary, assignees] = await Promise.all([
     getActiveTasks(user, id),
     getCompletedTasks(user, { limit: 200, assigneeId: id }),
     getTaskSummary(user, id),
+    isAdmin ? getAssignableEmployees() : Promise.resolve([]),
   ]);
 
   const subtitle = [profile.department, profile.position].filter(Boolean).join(" · ");
@@ -147,7 +155,9 @@ export default async function EmployeeTasksPage({
               <ActiveTaskCard
                 key={task.id}
                 task={serialiseTask(task)}
-                canMutate={user.role === "ADMIN" || task.assignee.id === user.id}
+                canMutate={isAdmin || task.assignee.id === user.id}
+                isAdmin={isAdmin}
+                assignees={assignees}
               />
             ))}
           </div>
@@ -167,12 +177,15 @@ export default async function EmployeeTasksPage({
               <CompletedTaskCard
                 key={task.id}
                 task={serialiseTask(task)}
-                isAdmin={user.role === "ADMIN"}
+                isAdmin={isAdmin}
+                assignees={assignees}
               />
             ))}
           </div>
         )}
       </TaskSection>
+
+      <TripHistory employeeId={profile.id} />
     </div>
   );
 }

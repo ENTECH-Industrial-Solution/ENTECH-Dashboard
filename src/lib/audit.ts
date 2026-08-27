@@ -27,9 +27,18 @@ export type AuditAction =
   | "task.status.changed"
   | "task.completed"
   | "task.reopened"
+  /// The only action in this list that destroys the row it describes. Its
+  /// metadata carries a full snapshot of the task and its event trail, because
+  /// after it runs this row is the only record that either ever existed.
+  | "task.deleted"
   | "fieldTrip.created"
   | "fieldTrip.updated"
+  | "fieldTrip.started"
+  | "fieldTrip.completed"
   | "fieldTrip.cancelled"
+  /// Destroys its row, exactly like task.deleted. Same rule: the metadata is a
+  /// full snapshot, because nothing else will be left to describe the trip.
+  | "fieldTrip.deleted"
   | "settings.changed";
 
 export async function writeAudit(
