@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 
+import { CardGrid } from "@/components/card-grid";
 import { Alert } from "@/components/ui";
 import { TripCard } from "@/components/trip-card";
 import { TripForm, type FieldTripRow, type TripPerson } from "@/components/trip-form";
@@ -67,7 +68,7 @@ export function TripSections({
     }
 
     return (
-      <div className="grid gap-3 lg:grid-cols-2">
+      <CardGrid>
         {trips.map((trip) =>
           editingId === trip.id ? (
             <div key={trip.id} className="card p-4 lg:col-span-2">
@@ -102,7 +103,7 @@ export function TripSections({
             />
           ),
         )}
-      </div>
+      </CardGrid>
     );
   };
 

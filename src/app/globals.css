@@ -82,6 +82,18 @@ body {
   box-shadow: 0 0 0 3px var(--ring);
 }
 
+/*
+ * The same jump, landing inside a box rather than on one.
+ *
+ * A box in the off-site panel is a person, so a link to a single trip points at
+ * a block within it. Without this the ring would go on nothing and the jump
+ * would look like it had failed.
+ */
+.trip-anchor:target {
+  border-radius: 0.625rem;
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
 .input {
   width: 100%;
   background: var(--surface);
@@ -188,9 +200,11 @@ body {
  *
  * Only for a container whose overflow is already obvious from its contents —
  * the off-site panel, where the list is clipped mid-card against the panel's
- * bottom edge. A bar removed from somewhere that gave no other cue would just
- * be content nobody knows is there. Deliberately not applied to .table-scroll:
- * a table scrolling sideways has no such cue, and that bar is the affordance.
+ * bottom edge, and the sliding rows inside it, where the next box shows past
+ * the edge and the heading carries arrows. A bar removed from somewhere that
+ * gave no other cue would just be content nobody knows is there. Deliberately
+ * not applied to .table-scroll: a table scrolling sideways has no such cue,
+ * and that bar is the affordance.
  *
  * Wheel, touch, keyboard, and find-in-page scrolling are untouched — this hides
  * the indicator, not the behaviour.
@@ -242,6 +256,30 @@ body {
 }
 .panel .card {
   background: var(--surface-muted);
+}
+
+/*
+ * One box in a row that slides sideways (see SlideRow).
+ *
+ * 85% of the row, so the next box shows past the edge — with the scrollbar
+ * hidden that peek is the cue that there is more, and it costs no chrome. The
+ * two limits either side of it are what keep the box readable:
+ *
+ * - never under 17.5rem, because below that the location block inside loses the
+ *   room to put its map beside the address and every box grows a full-width map
+ *   instead, half again as tall. The block asks for 14rem, and its padding and
+ *   the box's add 1.5rem on each side: 17rem is the boundary, so the floor sits
+ *   just clear of it rather than exactly on it;
+ * - never over the row itself, so a lone box in a narrow column fills it
+ *   exactly rather than sticking out past the edge it is meant to sit in.
+ *
+ * `flex-grow` with no shrink is what makes one box fill the row and four spread
+ * across a wide one — once they no longer fit there is no free space left to
+ * grow into, and the row scrolls instead.
+ */
+.slide-card {
+  flex: 1 0 min(100%, clamp(17.5rem, 85%, 20rem));
+  scroll-snap-align: start;
 }
 
 /* A whole card that is one link — the per-person frames on the dashboard. */

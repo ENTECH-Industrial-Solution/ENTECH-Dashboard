@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { CardGrid } from "@/components/card-grid";
 import { ActiveTaskCard, CompletedTaskCard } from "@/components/task-card";
 import { TaskSection } from "@/components/task-section";
 import { EmptyState } from "@/components/ui";
@@ -61,7 +62,7 @@ export default async function AdminTasksPage() {
         {active.length === 0 ? (
           <EmptyState label={t("tasks.empty")} />
         ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
+          <CardGrid>
             {active.map((task) => (
               <ActiveTaskCard
                 key={task.id}
@@ -71,7 +72,7 @@ export default async function AdminTasksPage() {
                 assignees={assignees}
               />
             ))}
-          </div>
+          </CardGrid>
         )}
       </TaskSection>
 
@@ -91,7 +92,7 @@ export default async function AdminTasksPage() {
         {completed.length === 0 ? (
           <EmptyState label={t("tasks.empty")} />
         ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
+          <CardGrid>
             {completed.map((task) => (
               <CompletedTaskCard
                 key={task.id}
@@ -100,7 +101,7 @@ export default async function AdminTasksPage() {
                 assignees={assignees}
               />
             ))}
-          </div>
+          </CardGrid>
         )}
       </TaskSection>
     </div>

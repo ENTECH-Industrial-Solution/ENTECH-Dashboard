@@ -6,7 +6,7 @@ import { useState } from "react";
 import { PriorityBadge, StatusBadge } from "@/components/ui";
 import { dayKeyOf, monthGrid } from "@/lib/calendar";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
-import type { Locale } from "@/lib/i18n/dictionaries";
+import type { Locale, TranslationKey } from "@/lib/i18n/dictionaries";
 
 /**
  * A month of deadlines and off-site days, wired to the lists on the same screen.
@@ -52,6 +52,15 @@ export type CalendarTrip = {
   personCode: string;
   personName: string;
   locationName: string;
+  /**
+   * Where the trip stands. Without it every entry read "ออกนอกสถานที่" in
+   * warning orange, so a trip closed out hours ago still announced that the
+   * person was off-site — on the very day they had just reported back.
+   * Cancelled trips never reach here; they are dropped from the calendar.
+   */
+  state: "SCHEDULED" | "ON_SITE" | "COMPLETED";
+  /** "HH:MM"–"HH:MM", already resolved against the office hours. */
+  hours: string;
   /** Opens Google Maps at the pin — see src/lib/maps.ts. */
   mapHref: string;
 };
@@ -73,7 +82,26 @@ const TONE_COLOR: Record<Tone, string> = {
   start: "var(--text-muted)",
 };
 
-const TRIP_COLOR = "var(--warning)";
+const TRIP_TONE: Record<
+  CalendarTrip["state"],
+  { color: string; background: string; label: TranslationKey }
+> = {
+  SCHEDULED: {
+    color: "var(--warning)",
+    background: "var(--warning-soft)",
+    label: "trips.away",
+  },
+  ON_SITE: {
+    color: "var(--brand)",
+    background: "var(--brand-soft)",
+    label: "trips.onSite",
+  },
+  COMPLETED: {
+    color: "var(--success)",
+    background: "var(--success-soft)",
+    label: "trips.done",
+  },
+};
 
 function toneOf(task: CalendarTask, todayKey: string): Tone {
   if (task.kind === "start") return "start";
@@ -190,7 +218,7 @@ export function TaskCalendar({
 
             // Trips first: where someone is affects everything else that day.
             const dots = [
-              ...dayTrips.map(() => TRIP_COLOR),
+              ...dayTrips.map((trip) => TRIP_TONE[trip.state].color),
               ...dayTasks.map((task) => TONE_COLOR[toneOf(task, todayKey)]),
             ];
 
@@ -275,22 +303,32 @@ export function TaskCalendar({
               </p>
             ) : (
               <ul className="space-y-1.5">
-                {selectedTrips.map((trip) => (
+                {selectedTrips.map((trip) => {
+                  const tone = TRIP_TONE[trip.state];
+
+                  return (
                   <li key={trip.id}>
                     <div
                       className="card flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2"
-                      style={{ background: "var(--warning-soft)" }}
+                      style={{ background: tone.background }}
                     >
                       <span
                         className="inline-flex items-center gap-1 text-xs"
-                        style={{ color: "var(--warning)" }}
+                        style={{ color: tone.color }}
                       >
                         <PinIcon />
-                        {t("trips.away")}
+                        {t(tone.label)}
                       </span>
 
                       <span className="min-w-0 flex-1 truncate text-sm">
                         {trip.purpose}
+                      </span>
+
+                      <span
+                        className="shrink-0 text-xs tabular-nums"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        {trip.hours}
                       </span>
 
                       {showAssignee && (
@@ -313,7 +351,8 @@ export function TaskCalendar({
                       </a>
                     </div>
                   </li>
-                ))}
+                  );
+                })}
 
                 {selectedTasks.map((task) => (
                   <li key={task.id}>

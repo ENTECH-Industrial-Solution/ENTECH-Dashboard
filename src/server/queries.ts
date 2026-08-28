@@ -221,6 +221,8 @@ const fieldTripSelect = {
   mapUrl: true,
   startDate: true,
   endDate: true,
+  startTime: true,
+  endTime: true,
   note: true,
   startedAt: true,
   completedAt: true,

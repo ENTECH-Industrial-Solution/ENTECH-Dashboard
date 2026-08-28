@@ -8,6 +8,7 @@ import { useLocale, useTranslations } from "@/lib/i18n/client";
 import {
   createEmployeeAction,
   deactivateEmployeeAction,
+  deleteEmployeeAction,
   reactivateEmployeeAction,
   resetPasswordAction,
   updateEmployeeAction,
@@ -38,6 +39,9 @@ export function EmployeeManager({
   const locale = useLocale();
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // The two expanders are exclusive: a row that is being renamed is not also
+  // being deleted, and two open forms in one row read as one confused form.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [createState, createAction] = useActionState(
     createEmployeeAction,
@@ -56,6 +60,7 @@ export function EmployeeManager({
     reactivateEmployeeAction,
     idleState,
   );
+  const [deleteState, deleteAction] = useActionState(deleteEmployeeAction, idleState);
 
   // Collapse the edit form once the save lands. The state object is a new
   // reference per result, so this fires once per submission, not on re-render.
@@ -63,10 +68,16 @@ export function EmployeeManager({
     if (updateState.status === "success") setEditingId(null);
   }, [updateState]);
 
+  useEffect(() => {
+    if (deleteState.status === "success") setDeletingId(null);
+  }, [deleteState]);
+
   const createErrors =
     createState.status === "error" ? (createState.fieldErrors ?? {}) : {};
   const updateErrors =
     updateState.status === "error" ? (updateState.fieldErrors ?? {}) : {};
+  const deleteErrors =
+    deleteState.status === "error" ? (deleteState.fieldErrors ?? {}) : {};
 
   // A temporary password is surfaced exactly once, right after it is generated.
   const credential =
@@ -126,6 +137,12 @@ export function EmployeeManager({
         <Alert tone="error">{reactivateState.message}</Alert>
       )}
       {resetState.status === "error" && <Alert tone="error">{resetState.message}</Alert>}
+      {deleteState.status === "success" && deleteState.message && (
+        <Alert tone="success">{deleteState.message}</Alert>
+      )}
+      {deleteState.status === "error" && !deleteState.fieldErrors && (
+        <Alert tone="error">{deleteState.message}</Alert>
+      )}
 
       {creating ? (
         <form action={createAction} className="card space-y-4 p-4">
@@ -300,11 +317,12 @@ export function EmployeeManager({
                         type="button"
                         className="btn btn-secondary"
                         aria-expanded={editingId === employee.id}
-                        onClick={() =>
+                        onClick={() => {
+                          setDeletingId(null);
                           setEditingId(
                             editingId === employee.id ? null : employee.id,
-                          )
-                        }
+                          );
+                        }}
                       >
                         {editingId === employee.id
                           ? t("common.cancel")
@@ -333,12 +351,40 @@ export function EmployeeManager({
                           </SubmitButton>
                         </form>
                       ) : (
-                        <form action={reactivateAction}>
-                          <input type="hidden" name="employeeId" value={employee.id} />
-                          <SubmitButton className="btn btn-secondary">
-                            {t("employees.reactivate")}
-                          </SubmitButton>
-                        </form>
+                        <>
+                          <form action={reactivateAction}>
+                            <input
+                              type="hidden"
+                              name="employeeId"
+                              value={employee.id}
+                            />
+                            <SubmitButton className="btn btn-secondary">
+                              {t("employees.reactivate")}
+                            </SubmitButton>
+                          </form>
+
+                          {/* Only on a deactivated account, and never on your
+                              own — the same two rules the action enforces on
+                              the server, mirrored here so the button is not
+                              offered where it would only fail. */}
+                          {employee.id !== currentUserId && (
+                            <button
+                              type="button"
+                              className="btn btn-danger"
+                              aria-expanded={deletingId === employee.id}
+                              onClick={() => {
+                                setEditingId(null);
+                                setDeletingId(
+                                  deletingId === employee.id ? null : employee.id,
+                                );
+                              }}
+                            >
+                              {deletingId === employee.id
+                                ? t("common.cancel")
+                                : t("employees.delete")}
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>
@@ -357,6 +403,19 @@ export function EmployeeManager({
                     </td>
                   </tr>
                 )}
+
+                {deletingId === employee.id && (
+                  <tr>
+                    <td colSpan={8} style={{ background: "var(--surface-muted)" }}>
+                      <EmployeeDeleteForm
+                        employee={employee}
+                        action={deleteAction}
+                        errors={deleteErrors}
+                        onCancel={() => setDeletingId(null)}
+                      />
+                    </td>
+                  </tr>
+                )}
               </Fragment>
             ))}
           </tbody>
@@ -367,10 +426,16 @@ export function EmployeeManager({
 }
 
 /**
- * Edits everything about an account except its employee code — that is the
- * login identifier, and letting it change would silently rename someone's way
- * in. Role changes revoke the person's sessions, which the warning says out
- * loud rather than surprising them.
+ * Edits everything about an account, the employee code included.
+ *
+ * The code is the login identifier, which is why it sat here as a read-only
+ * caption for a long time. It is a field now because the thing it was
+ * protecting against — a rename nobody was told about — is handled by saying
+ * so: the note under it states what changes, and the action's success message
+ * repeats the new code back to the admin who has to pass it on.
+ *
+ * Role changes revoke the person's sessions; a code change does not, and the
+ * two warnings say which is which rather than leaving it to be discovered.
  */
 function EmployeeEditForm({
   employee,
@@ -396,12 +461,29 @@ function EmployeeEditForm({
         <span className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
           {employee.employeeCode}
         </span>
-        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-          {t("employees.codeImmutable")}
-        </span>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="label" htmlFor={`edit-code-${employee.id}`}>
+            {t("employees.code")}
+          </label>
+          <input
+            id={`edit-code-${employee.id}`}
+            name="employeeCode"
+            className="input font-mono"
+            required
+            maxLength={32}
+            autoCapitalize="characters"
+            spellCheck={false}
+            defaultValue={employee.employeeCode}
+          />
+          <FieldError message={errors.employeeCode} />
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            {t("employees.codeChangeWarning")}
+          </p>
+        </div>
+
         <div>
           <label className="label" htmlFor={`edit-name-${employee.id}`}>
             {t("employees.name")}
@@ -481,6 +563,71 @@ function EmployeeEditForm({
 
       <div className="flex gap-2">
         <SubmitButton className="btn btn-primary">{t("common.save")}</SubmitButton>
+        <button type="button" className="btn btn-secondary" onClick={onCancel}>
+          {t("common.cancel")}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * The confirmation for a delete that cannot be undone.
+ *
+ * A typed reason instead of a reflexive OK, and for the same purpose the task
+ * and trip deletes ask for one: once the row is gone, the audit entry is the
+ * only place an answer to "why is this account missing" can live.
+ *
+ * Which accounts can actually go is decided on the server — deactivated, and
+ * nothing pointing at them. The warning here says so plainly, because being
+ * refused after typing a reason is a worse way to learn it.
+ */
+function EmployeeDeleteForm({
+  employee,
+  action,
+  errors,
+  onCancel,
+}: {
+  employee: EmployeeRow;
+  action: (formData: FormData) => void;
+  errors: Record<string, string>;
+  onCancel: () => void;
+}) {
+  const t = useTranslations();
+
+  return (
+    <form action={action} className="space-y-3 py-2">
+      <input type="hidden" name="employeeId" value={employee.id} />
+
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className="text-sm font-medium" style={{ color: "var(--danger)" }}>
+          {t("employees.deleteTitle")}
+        </span>
+        <span className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+          {employee.employeeCode} — {employee.fullName}
+        </span>
+      </div>
+
+      <Alert tone="warning">{t("employees.deleteWarning")}</Alert>
+
+      <div className="max-w-xl">
+        <label className="label" htmlFor={`delete-reason-${employee.id}`}>
+          {t("employees.deleteReason")}
+        </label>
+        <input
+          id={`delete-reason-${employee.id}`}
+          name="reason"
+          className="input"
+          required
+          maxLength={1000}
+        />
+        <FieldError message={errors.reason} />
+      </div>
+
+      <div className="flex gap-2">
+        <SubmitButton className="btn btn-danger">
+          {t("employees.deleteConfirm")}
+        </SubmitButton>
         <button type="button" className="btn btn-secondary" onClick={onCancel}>
           {t("common.cancel")}
         </button>

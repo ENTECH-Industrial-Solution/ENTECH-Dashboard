@@ -25,6 +25,7 @@ export const dictionary = {
   "nav.logout": { th: "ออกจากระบบ", en: "Sign out" },
   "nav.admin": { th: "ผู้ดูแลระบบ", en: "Administrator" },
   "nav.employee": { th: "พนักงาน", en: "Employee" },
+  "nav.menu": { th: "เมนู", en: "Menu" },
 
   "login.title": { th: "เข้าสู่ระบบ", en: "Sign in" },
   "login.subtitle": {
@@ -220,7 +221,15 @@ export const dictionary = {
   "trips.comingUp": { th: "กำลังจะไป", en: "Coming up" },
   "trips.allIn": { th: "ตอนนี้ทุกคนอยู่ในออฟฟิศ", en: "Everyone is in the office" },
   "trips.untilDate": { th: "ถึง", en: "until" },
+  "trips.tripCount": { th: "รายการ", en: "trips" },
 
+  "trips.startTime": { th: "เวลาออก", en: "Leaves at" },
+  "trips.endTime2": { th: "เวลากลับ", en: "Back at" },
+  "trips.hoursHint": {
+    th: "ไม่กรอกจะถือเป็นเวลาราชการ 08:30–16:30",
+    en: "Left blank, the standard office hours 08:30–16:30 apply",
+  },
+  "trips.officeHours": { th: "เวลาราชการ", en: "office hours" },
   "trips.start": { th: "เริ่มทำงานนอกสถานที่", en: "Start off-site work" },
   "trips.complete": { th: "เสร็จภารกิจ", en: "Mission complete" },
   "trips.onSite": { th: "กำลังทำงานนอกสถานที่", en: "On site" },
@@ -287,9 +296,9 @@ export const dictionary = {
   "employees.resetPassword": { th: "รีเซ็ตรหัสผ่าน", en: "Reset password" },
   "employees.edit": { th: "แก้ไขข้อมูล", en: "Edit" },
   "employees.editTitle": { th: "แก้ไขข้อมูลพนักงาน", en: "Edit employee" },
-  "employees.codeImmutable": {
-    th: "รหัสพนักงานใช้เป็นชื่อผู้ใช้ จึงเปลี่ยนไม่ได้",
-    en: "The employee code is the login identifier and cannot be changed",
+  "employees.codeChangeWarning": {
+    th: "รหัสพนักงานใช้เป็นชื่อผู้ใช้ ถ้าแก้ พนักงานต้องใช้รหัสใหม่ในการเข้าสู่ระบบ (ไม่หลุดจากระบบ)",
+    en: "The employee code is the login identifier. Change it and they sign in with the new one — their session is not cut off.",
   },
   "employees.roleChangeWarning": {
     th: "การเปลี่ยนสิทธิ์จะทำให้พนักงานคนนี้หลุดจากระบบทันทีและต้องเข้าสู่ระบบใหม่",
@@ -328,6 +337,18 @@ export const dictionary = {
   "employees.codeTaken": {
     th: "รหัสพนักงานนี้ถูกใช้แล้ว",
     en: "That employee code is already in use",
+  },
+  "employees.delete": { th: "ลบถาวร", en: "Delete permanently" },
+  "employees.deleteTitle": { th: "ลบบัญชีนี้ถาวร", en: "Delete this account" },
+  "employees.deleteWarning": {
+    th: "ลบแล้วกู้คืนไม่ได้ ทำได้เฉพาะบัญชีที่ระงับแล้วและไม่มีงานหรือการเดินทางอ้างถึง บันทึกการใช้งานจะเก็บสำเนาข้อมูลบัญชีและเหตุผลไว้",
+    en: "This cannot be undone. Only a deactivated account with no task or trip pointing at it can go. The audit log keeps a copy of the account and the reason.",
+  },
+  "employees.deleteReason": { th: "เหตุผลในการลบ", en: "Reason for deleting" },
+  "employees.deleteConfirm": { th: "ยืนยันลบถาวร", en: "Delete permanently" },
+  "employees.deleteOnlyInactive": {
+    th: "ต้องระงับบัญชีก่อนจึงจะลบถาวรได้",
+    en: "Deactivate the account before it can be deleted",
   },
 
   "audit.title": { th: "บันทึกการใช้งาน", en: "Audit log" },
@@ -399,6 +420,8 @@ export const dictionary = {
     en: "When off, an employee sees only their own history. Admins still see all. Edit rights are unchanged either way.",
   },
 
+  "video.play": { th: "กดเพื่อเล่นคลิป", en: "Play video" },
+
   "common.save": { th: "บันทึก", en: "Save" },
   "common.cancel": { th: "ยกเลิก", en: "Cancel" },
   "common.create": { th: "สร้าง", en: "Create" },
@@ -412,6 +435,10 @@ export const dictionary = {
   "common.none": { th: "-", en: "-" },
   "common.error": { th: "เกิดข้อผิดพลาด", en: "Something went wrong" },
   "common.you": { th: "คุณ", en: "You" },
+  "common.slidePrev": { th: "เลื่อนไปทางซ้าย", en: "Scroll left" },
+  "common.slideNext": { th: "เลื่อนไปทางขวา", en: "Scroll right" },
+  "common.showMore": { th: "ดูเพิ่มเติม", en: "Show more" },
+  "common.showLess": { th: "ย่อลง", en: "Show less" },
 } satisfies Record<string, Entry>;
 
 export type TranslationKey = keyof typeof dictionary;

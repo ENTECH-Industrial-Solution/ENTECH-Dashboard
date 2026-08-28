@@ -12,6 +12,32 @@
 
 const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
 
+/**
+ * เวลาราชการ — the hours a trip is taken to run when nobody says otherwise.
+ *
+ * Lives here beside the rest of the Bangkok-pinned time rules, and is applied
+ * at *display* rather than stored: a FieldTrip with null times means nobody
+ * specified them, which is a different fact from someone choosing 08:30, and
+ * keeping them null means changing this line changes every unspecified trip.
+ */
+export const OFFICE_HOURS = { start: "08:30", end: "16:30" } as const;
+
+/** "HH:MM" in Asia/Bangkok. Neither field is required, so both can fall back. */
+export type TripHours = { startTime: string | null; endTime: string | null };
+
+export function tripHours(trip: TripHours): {
+  start: string;
+  end: string;
+  /** True when neither end was given, so the row is showing the house rule. */
+  assumed: boolean;
+} {
+  return {
+    start: trip.startTime ?? OFFICE_HOURS.start,
+    end: trip.endTime ?? OFFICE_HOURS.end,
+    assumed: trip.startTime === null && trip.endTime === null,
+  };
+}
+
 /** "YYYY-MM-DD" for the Bangkok calendar day containing `date`. */
 export function bangkokDayKey(date: Date): string {
   return new Date(date.getTime() + BANGKOK_OFFSET_MS).toISOString().slice(0, 10);

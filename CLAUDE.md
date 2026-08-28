@@ -262,6 +262,16 @@ The dashboard's two sections map onto task status:
 - **Active** (`งานที่กำลังดำเนินการ`) — `status != COMPLETED`
 - **History** (`ประวัติงานที่เสร็จแล้ว`) — `status == COMPLETED`
 
+Both are drawn on `CardGrid`, which opens showing **one row** and keeps the
+rest behind a "ดูเพิ่มเติม (+n)" button. The hidden cards are not rendered at
+all until it is pressed — they are client components carrying form state, and a
+two-hundred-card archive is two hundred hydrations for cards nobody has looked
+at. What that costs is the anchor: a card that does not exist cannot be jumped
+to, and both the summary capsules and the calendar link at `#task-<id>` /
+`#trip-<id>`. So a grid that cannot find the hash opens itself to look for it,
+and the grids it does not belong to close again — if you add a section, use
+`CardGrid` rather than a bare grid, or its links will land nowhere.
+
 The completed archive is **readable by every signed-in employee**, not just the
 assignee: finished work is a shared record, which is the point of keeping it as
 evidence. Reading is all that grants. Mutation is unchanged and enforced in the
@@ -293,12 +303,13 @@ own action and its own legal transitions, and the system's own timestamps
 (`createdAt`, `startedAt`, `completedAt`). Those are not data to correct — they
 are the record of when things happened, and editing them would be forging it.
 
-`deleteTaskAction` and `deleteFieldTripAction` are the **only two hard deletes
-in the application** — employees are deactivated, and everything else is kept.
-Both are admin-only and neither is offered to an assignee or a traveller:
-someone deleting their own assigned work is the one case this must not make
-easy. Both demand a written reason, because once they run there is nothing left
-to infer one from.
+`deleteTaskAction`, `deleteFieldTripAction`, and `deleteEmployeeAction` are the
+**only three hard deletes in the application** — everything else is kept. All
+three are admin-only, and the first two are offered to neither an assignee nor a
+traveller: someone deleting their own assigned work is the one case this must
+not make easy. All three demand a written reason, because once they run there is
+nothing left to infer one from. The employee one is the narrowest of them and is
+described under "Employees are deactivated, and deleted only when empty".
 
 `deleteFieldTripAction` accepts a trip in **any** state, cancelled and completed
 included, which is not a hole in the completed lock. That lock stops a finished
@@ -393,6 +404,23 @@ The day range is inclusive and expanded per-day in `CalendarSection` — a trip
 from the 3rd to the 5th becomes three calendar entries, clipped to the month on
 show, so one crossing a month boundary appears correctly in both.
 
+**Every view of a trip must show its state.** `CalendarTrip` carries one for
+exactly this reason: without it the calendar labelled every entry
+"ออกนอกสถานที่" in warning orange, so a trip closed out an hour ago still
+announced that the person was off-site — on the day they had just reported
+back. Cancelled trips are dropped from the calendar; completed ones are not,
+because they happened, but they say so.
+
+`startTime` / `endTime` are `"HH:MM"` strings and **nullable on purpose**: null
+means nobody said, and `tripHours()` in `src/lib/calendar.ts` fills in the
+office hours (`OFFICE_HOURS`, 08:30–16:30) at display time. Storing the default
+instead would make "08:30 because that is the rule" indistinguishable from
+"08:30 because someone chose it", and would pin today's rule into every
+existing row. They are deliberately kept out of `startDate`/`endDate`, which
+stay pure Bangkok calendar days — `dayStart()`, `bangkokDayKey()` and the
+upcoming/past boundary all bucket on them, and a time of day would silently
+move a trip between days.
+
 `ScheduleRow` pairs the calendar with `AwayPanel`: the calendar answers "what
 happens on the 14th", the panel answers "where is everyone right now". Either
 can be switched off, and whichever remains takes the full width.
@@ -402,18 +430,61 @@ to the tallest, and the panel was the tallest, so a busy week dragged the row
 down and left the two ending at different lines. The panel is therefore lifted
 out of flow — `lg:absolute lg:inset-0` inside a `relative` grid item — so it
 contributes no height at all: the row is the calendar's, the panel stretches to
-exactly that, and the trips scroll inside it under a pinned heading
+exactly that, and the groups scroll inside it under a pinned heading
 (`min-h-0 flex-1 overflow-y-auto`; without `min-h-0` a flex item refuses to
 shrink below its content). Both the absolute positioning and the two-column
 grid start at `lg`, so they switch together — stacked below it, each takes its
 natural height and there is nothing to align to.
 
-### Maps
+`h-full` and not `max-h-full`, and this has been decided once already: sizing
+the panel to its trips does remove the empty space under a quiet week, but it
+also leaves the two columns ending on different lines, which reads as a broken
+row rather than an empty one. The two boxes matching is worth more than the
+space they sometimes waste — ask before trading it back.
 
-`frame-src 'self' https://www.google.com` in `next.config.ts` is the one opening
-in an otherwise self-only CSP. It is narrow on purpose — one host, frames only,
-no scripts and no connections — and it is what lets a trip show a real map
-rather than a link.
+Inside each group, **one box is one person, not one trip**, and the boxes run
+left to right. The panel is a third of the dashboard wide and no taller than
+the calendar beside it, so a column of full-width cards buried everyone past
+the second name; laid sideways, one box is exactly what the panel is sized for
+and the rest wait beside it. Someone with two trips on the same day gets one
+box holding both — the question this panel answers is about people. The count
+on the group heading still counts *trips*, because that is the number the
+calendar and the summary strip put on the same group.
+
+`SlideRow` is that row, and it draws no bar (`scroll-bare`, as the panel's own
+scroll already does). Two things replace it. `.slide-card` sizes a box at 85%
+of the row, so the next one shows past the edge — the cue that costs no chrome
+and works on a phone. And the arrows in the heading, which appear only when
+there is somewhere to go: a trackpad swipes sideways but a mouse wheel does
+not, so a desktop with neither bar nor arrows would be a row nobody could move.
+The 17.5rem floor on a box is not arbitrary — below it the location block
+inside gives up putting its map beside the address, and every box grows half
+again as tall.
+
+One consequence to keep in mind: `#trip-<id>` now lands on a block *inside* a
+box rather than on the box itself, so `.trip-anchor:target` is what rings it.
+
+### Framed third parties
+
+`frame-src` in `next.config.ts` is the one opening in an otherwise self-only
+CSP, and it names exactly three hosts: `www.google.com` for a trip's map,
+`www.youtube-nocookie.com` and `drive.google.com` for a video evidence link.
+
+**Every one of them earns its place the same way, and any fourth must too:**
+frames only — no scripts, no connections — and *the `src` is always composed by
+our own code from an id or a place name, never from a URL somebody pasted*. A
+frame loads silently, so its source has to be one we built; a link opens in a
+tab where the person can see where it goes. `src/lib/maps.ts` and
+`src/lib/video.ts` are the two places that composing happens, and both answer
+"not recognised" by falling back to a plain link — which is what keeps that
+host list from ever needing to grow.
+
+`img-src` also names `https://i.ytimg.com`, which is not cosmetic: the poster
+frame inside a YouTube embed is measured against *this* page's policy, not
+YouTube's. Removing it makes the frame report an `img-src` violation while
+Google Maps frames on the same page report nothing.
+
+### Maps
 
 `src/lib/maps.ts` produces both URLs, and the difference matters:
 
@@ -426,6 +497,26 @@ rather than a link.
 A pasted `mapUrl` is also validated against a Google host allowlist in
 `validation.ts` — it is rendered as a link people are invited to click, so an
 arbitrary URL there would turn the trip form into a way to plant one.
+
+### Video evidence
+
+A `proofUrl` that is a YouTube or Drive link plays in place; anything else stays
+a link, and there is no separate video field — people already paste links into
+the evidence box, so the feature is "the link you already gave us works".
+`videoEmbed()` returns null unless it positively recognises the host, the shape
+*and* the id, so a lookalike host or a Drive folder link falls through to a
+link.
+
+`VideoPlayer` is **click-to-load**, not the `IntersectionObserver` `MiniMap`
+uses, and the difference is weight: a map tile is an image, a YouTube player is
+an application. The completed archive can hold a hundred cards, and a hundred
+players initialising on scroll would cost more than the rest of the page put
+together. The click creates the frame, and `autoplay=1` in the composed src
+means that one click both loads it and starts it.
+
+Drive enforces its own sharing rules inside the frame: a viewer without access
+to the file gets a request-access box, not the video. For something the whole
+team should watch, an unlisted YouTube link is the lower-friction choice.
 
 `MiniMap` shows the map as a thumbnail beside the location and opens the same
 map full size, in a portalled dialog, when it is clicked. Two rules keep that
@@ -489,13 +580,44 @@ a fact, not a problem, and colouring it as overdue would make the calendar cry
 wolf. A task with neither planned date appears nowhere on it, which is why an
 edit that empties `dueDate` silently drops the task off the calendar.
 
-### Employees are never hard-deleted
+### Employees are deactivated, and deleted only when empty
 
-"Delete employee" is `deactivateEmployeeAction`: it sets `isActive = false`,
-revokes sessions, and keeps every task and audit row intact. It refuses when the
-employee still has open tasks, when the target is the caller, and when the target
-is the last active admin. `Task.assigneeId` uses `onDelete: Restrict` to make an
-accidental hard delete fail loudly at the database.
+`deactivateEmployeeAction` is the normal end of an account: it sets
+`isActive = false`, revokes sessions, and keeps every task and audit row intact.
+It refuses when the employee still has open tasks, when the target is the
+caller, and when the target is the last active admin.
+
+`deleteEmployeeAction` removes the row outright, and every one of its gates
+exists because "never hard-deleted" was right for the case it was written for
+and wrong for the one it also caught. An account with work behind it must stay:
+the completed archive is evidence, and evidence whose author has been deleted is
+worth less than an inactive row in a list. An account with *nothing* behind it —
+a code typed wrong, a duplicate, someone who never signed in — is not evidence
+of anything, and leaving it permanently deactivated makes every admin read past
+it forever. So:
+
+- the account must already be deactivated (an active one is refused outright),
+  which also means no live session is cut off mid-request;
+- nothing may still reference it — assigned or created tasks, trips travelled or
+  scheduled. Those keys are `onDelete: Restrict` and would refuse anyway;
+  counting first turns a database error into a sentence naming what to move;
+- the caller may not delete themselves;
+- a reason is required, and the audit row carries it with a field-by-field
+  snapshot of the account. **Never spread the employee row into that metadata**
+  — `passwordHash` is on it, the audit page renders metadata, and this
+  repository is public. The snapshot names its fields one at a time for exactly
+  that reason.
+
+What the person leaves behind survives them: `TaskEvent.actorId` and
+`AuditLog.actorId` are `onDelete: SetNull` and both carry a denormalised
+`actorLabel`, so the trail still reads "ENT-0002 — สมหญิง" with nothing left to
+point at.
+
+`employeeCode` **is editable** (`updateEmployeeSchema`), and the audit row for a
+rename is `employee.code.changed` carrying the before/after, so a row filed
+under the old code can still be found. A rename does not revoke sessions, unlike
+a role change: the session is keyed on the row id, the person keeps exactly the
+access they had, and only what they type at the login form has moved.
 
 ### Login hardening
 
@@ -549,5 +671,15 @@ half a type error. Dates are formatted with `timeZone: "Asia/Bangkok"` pinned.
 - Colours come from CSS custom properties in `globals.css` (`var(--brand)`,
   `var(--danger)`, …), applied via inline `style`. Light and dark are a token
   swap, so components carry no `dark:` colour variants.
+- The component primitives in `globals.css` (`.btn`, `.card`, `.panel`, `.input`,
+  `.badge`) are **unlayered CSS, and unlayered beats every Tailwind utility** —
+  utilities live in `@layer utilities`, and a layered rule loses to an unlayered
+  one no matter how specific or how late it is. So `className="btn lg:hidden"`
+  hides nothing and `className="btn px-2"` retightens nothing: any utility that
+  sets a property the primitive also sets is silently dead. Utilities that touch
+  *other* properties (`w-full`, `ms-auto`, `grid-cols-*`) work as expected.
+  Where a primitive has to be hidden or repositioned responsively, put the
+  utility on a plain wrapper around it — `AppNav`'s menu button is the worked
+  example.
 - Prisma `schema.prisma` carries the invariants as comments — read them before
   changing a model.

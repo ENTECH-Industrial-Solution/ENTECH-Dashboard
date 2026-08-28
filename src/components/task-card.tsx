@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState, type ReactNode } from "react";
 
 import { TaskForm, type AssigneeOption } from "@/components/task-form";
+import { VideoPlayer } from "@/components/video-embed";
 import { Alert, PriorityBadge, StatusBadge, SubmitButton } from "@/components/ui";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
 import { useSettings } from "@/lib/settings/client";
@@ -477,15 +478,20 @@ export function CompletedTaskCard({
           {/* Not gated: a link already recorded stays visible as evidence even
               if the field has since been switched off for new completions. */}
           {task.proofUrl && (
-            <a
-              href={task.proofUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-block text-xs underline"
-              style={{ color: "var(--brand)" }}
-            >
-              {task.proofUrl}
-            </a>
+            <>
+              <a
+                href={task.proofUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-block break-all text-xs underline"
+                style={{ color: "var(--brand)" }}
+              >
+                {task.proofUrl}
+              </a>
+              {/* Renders nothing unless the link is a video we recognise, so
+                  the link above stays the answer for everything else. */}
+              <VideoPlayer url={task.proofUrl} />
+            </>
           )}
         </div>
       )}

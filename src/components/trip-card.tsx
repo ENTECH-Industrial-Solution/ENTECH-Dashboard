@@ -3,6 +3,8 @@
 import { useActionState, useState } from "react";
 
 import { MiniMap } from "@/components/map-embed";
+import { VideoPlayer } from "@/components/video-embed";
+import { tripHours } from "@/lib/calendar";
 import { Alert, SubmitButton } from "@/components/ui";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
@@ -171,15 +173,18 @@ export function TripEvidence({ trip }: { trip: FieldTripRow }) {
       )}
 
       {trip.proofUrl && (
-        <a
-          href={trip.proofUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-2 inline-block break-all text-xs underline"
-          style={{ color: "var(--brand)" }}
-        >
-          {trip.proofUrl}
-        </a>
+        <>
+          <a
+            href={trip.proofUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-block break-all text-xs underline"
+            style={{ color: "var(--brand)" }}
+          >
+            {trip.proofUrl}
+          </a>
+          <VideoPlayer url={trip.proofUrl} />
+        </>
       )}
     </div>
   );
@@ -477,6 +482,7 @@ export function TripCard({
   const formatMoment = useMomentFormatter();
 
   const days = dayCount(trip.startDate, trip.endDate);
+  const hours = tripHours(trip);
   const state = tripState(trip);
   const cancelled = state === "CANCELLED";
 
@@ -512,6 +518,22 @@ export function TripCard({
             {formatDay(trip.startDate)}
             {trip.endDate !== trip.startDate && ` – ${formatDay(trip.endDate)}`}
             {` · ${days} ${t("trips.days")}`}
+          </dd>
+        </div>
+
+        {/* Always shown, defaulted or not — "what time" is the question, and
+            "nobody filled it in" is not an answer people can act on. The
+            marker below says when it is the house rule rather than a choice. */}
+        <div className="flex gap-1">
+          <dt>{t("trips.startTime")}:</dt>
+          <dd className="tabular-nums" style={{ color: "var(--text)" }}>
+            {hours.start}–{hours.end}
+            {hours.assumed && (
+              <span style={{ color: "var(--text-muted)" }}>
+                {" "}
+                ({t("trips.officeHours")})
+              </span>
+            )}
           </dd>
         </div>
 

@@ -21,6 +21,9 @@ export type FieldTripRow = {
   /** ISO strings — Dates cannot cross into a client component. */
   startDate: string;
   endDate: string;
+  /** "HH:MM", or null for the office hours — see tripHours in lib/calendar.ts. */
+  startTime: string | null;
+  endTime: string | null;
   note: string | null;
   /** What actually happened, against the planned startDate/endDate above. */
   startedAt: string | null;
@@ -153,6 +156,39 @@ export function TripForm({
             defaultValue={trip ? dateInputValue(trip.endDate) : ""}
           />
           <FieldError message={errors.endDate} />
+        </div>
+
+        <div>
+          <label className="label" htmlFor={`tripStartTime-${id}`}>
+            {t("trips.startTime")}{" "}
+            <span style={{ opacity: 0.7 }}>({t("common.optional")})</span>
+          </label>
+          <input
+            id={`tripStartTime-${id}`}
+            name="startTime"
+            type="time"
+            className="input"
+            defaultValue={trip?.startTime ?? ""}
+          />
+          <FieldError message={errors.startTime} />
+        </div>
+
+        <div>
+          <label className="label" htmlFor={`tripEndTime-${id}`}>
+            {t("trips.endTime2")}{" "}
+            <span style={{ opacity: 0.7 }}>({t("common.optional")})</span>
+          </label>
+          <input
+            id={`tripEndTime-${id}`}
+            name="endTime"
+            type="time"
+            className="input"
+            defaultValue={trip?.endTime ?? ""}
+          />
+          <FieldError message={errors.endTime} />
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            {t("trips.hoursHint")}
+          </p>
         </div>
 
         <div>

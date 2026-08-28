@@ -1,8 +1,12 @@
 // ENTECH Dashboard — data model
 //
 // Design rules that the rest of the codebase depends on:
-//  1. Employees are never hard-deleted. Deactivating preserves the task history
-//     that the completed-task archive exists to prove.
+//  1. Employees are deactivated, not deleted, wherever they have history.
+//     Deactivating preserves the task history the completed-task archive exists
+//     to prove. deleteEmployeeAction can remove an account outright, but only
+//     one that is already deactivated and that no task, trip, or event still
+//     references — the Restrict foreign keys below are what make that
+//     enforceable rather than a convention.
 //  2. TaskEvent and AuditLog are append-only. No update/delete paths are exposed
 //     anywhere in the application layer.
 //  3. Every mutation that matters is written together with its audit row in the
@@ -59,7 +63,9 @@ model Employee {
   id String @id @default(cuid())
 
   /// Human-facing staff code issued by an admin (e.g. "ENT-0042").
-  /// This is the login identifier — never the database id.
+  /// This is the login identifier — never the database id. An admin may change
+  /// it (updateEmployeeAction); sessions are keyed on the row id, so a rename
+  /// changes what the person types at the login form and nothing else.
   employeeCode String @unique
   fullName     String
   email        String? @unique
@@ -72,7 +78,9 @@ model Employee {
   mustChangePassword Boolean  @default(true)
   passwordChangedAt  DateTime @default(now())
 
-  /// Soft-delete. Deactivated accounts keep their history but cannot log in.
+  /// Soft-delete, and the normal end of an account: a deactivated row keeps its
+  /// history but cannot log in. It is also the precondition for the hard
+  /// delete — an active account cannot be removed at all.
   isActive      Boolean   @default(true)
   deactivatedAt DateTime?
 
@@ -252,6 +260,18 @@ model FieldTrip {
 
   startDate DateTime
   endDate   DateTime
+
+  /// Departure and return, as "HH:MM" in Asia/Bangkok, or null for the office
+  /// hours in src/lib/calendar.ts.
+  ///
+  /// Deliberately not folded into startDate/endDate, which stay pure Bangkok
+  /// calendar days: the whole calendar buckets on them through dayStart() and
+  /// bangkokDayKey(), and the upcoming/past split compares them against a day
+  /// boundary. Giving those a time of day would quietly move a trip between
+  /// days. Null rather than a stored default, so a fresh row means "nobody
+  /// said" and the default can change without a migration.
+  startTime String?
+  endTime   String?
 
   note String?
 

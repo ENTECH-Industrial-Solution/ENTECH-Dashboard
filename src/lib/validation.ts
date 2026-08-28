@@ -105,11 +105,38 @@ export const createEmployeeSchema = z.object({
   role: z.enum(["ADMIN", "EMPLOYEE"]).default("EMPLOYEE"),
 });
 
-export const updateEmployeeSchema = createEmployeeSchema
-  .omit({ employeeCode: true })
-  .extend({ employeeId: z.string().cuid() });
+/**
+ * Editing an account, employee code included.
+ *
+ * The code was held back from this schema for a while, on the grounds that it
+ * is the login identifier and renaming it renames someone's way in. It is
+ * editable now because the alternative was worse: a code typed wrong at
+ * creation could only be fixed by deactivating the account and making another,
+ * which scatters one person's history across two rows. The session survives a
+ * rename — it is bound to the row's id, not its code — so what changes is what
+ * the person types at the login form, and the action says so in its result.
+ */
+export const updateEmployeeSchema = createEmployeeSchema.extend({
+  employeeId: z.string().cuid(),
+});
 
 export const employeeIdSchema = z.object({ employeeId: z.string().cuid() });
+
+/**
+ * Deleting an account for good.
+ *
+ * The reason is required on the same terms as deleteTaskSchema: once the row is
+ * gone the audit entry is the only thing that can say why, and "an admin
+ * deleted ENT-0002" on its own answers nothing.
+ */
+export const deleteEmployeeSchema = z.object({
+  employeeId: z.string().cuid(),
+  reason: z
+    .string()
+    .trim()
+    .min(1, "กรุณาระบุเหตุผลในการลบ / A reason is required to delete")
+    .max(1000),
+});
 
 /** An optional <input type="date"> value: "" means "not set". */
 const optionalDate = z
@@ -170,6 +197,18 @@ const requiredDate = z
     message: "วันที่ไม่ถูกต้อง / Invalid date",
   });
 
+/**
+ * An optional <input type="time"> value: 24-hour "HH:MM", blank meaning "not
+ * said" rather than midnight — the office hours in lib/calendar.ts fill in.
+ */
+const optionalTime = z
+  .union([z.string().trim(), z.literal("")])
+  .nullish()
+  .transform((v) => (isBlank(v) ? null : v))
+  .refine((v) => v === null || /^([01]\d|2[0-3]):[0-5]\d$/.test(v), {
+    message: "เวลาไม่ถูกต้อง / Invalid time",
+  });
+
 const optionalCoordinate = (limit: number) =>
   z
     .union([z.string().trim(), z.literal("")])
@@ -226,12 +265,30 @@ const fieldTripFields = z.object({
   mapUrl: googleMapsUrl,
   startDate: requiredDate,
   endDate: requiredDate,
+  startTime: optionalTime,
+  endTime: optionalTime,
   note: optionalText(2000),
 });
 
 type FieldTripInput = z.infer<typeof fieldTripFields>;
 
 const endsAfterItStarts = (d: FieldTripInput) => d.startDate <= d.endDate;
+
+/**
+ * Times only have to be ordered on a one-day trip. Leaving at 08:00 on Monday
+ * and getting back at 17:00 on Wednesday is not out of order, and comparing
+ * the clock alone would say it was.
+ */
+const hoursAreOrdered = (d: FieldTripInput) =>
+  d.startTime === null ||
+  d.endTime === null ||
+  d.startDate.getTime() !== d.endDate.getTime() ||
+  d.startTime < d.endTime;
+
+const HOURS_ORDER = {
+  message: "เวลากลับต้องหลังเวลาออก / The return time must be after the departure",
+  path: ["endTime"],
+};
 /** Half a coordinate pin is not a location — require both or neither. */
 const coordinatesArePaired = (d: FieldTripInput) =>
   (d.latitude === null) === (d.longitude === null);
@@ -241,6 +298,7 @@ export const createFieldTripSchema = fieldTripFields
     message: "วันสิ้นสุดต้องไม่ก่อนวันเริ่ม / The end date cannot precede the start",
     path: ["endDate"],
   })
+  .refine(hoursAreOrdered, HOURS_ORDER)
   .refine(coordinatesArePaired, {
     message: "ต้องกรอกทั้งละติจูดและลองจิจูด / Enter both latitude and longitude",
     path: ["longitude"],
@@ -264,6 +322,7 @@ export const updateFieldTripSchema = fieldTripFields
     message: "วันสิ้นสุดต้องไม่ก่อนวันเริ่ม / The end date cannot precede the start",
     path: ["endDate"],
   })
+  .refine(hoursAreOrdered, HOURS_ORDER)
   .refine(coordinatesArePaired, {
     message: "ต้องกรอกทั้งละติจูดและลองจิจูด / Enter both latitude and longitude",
     path: ["longitude"],

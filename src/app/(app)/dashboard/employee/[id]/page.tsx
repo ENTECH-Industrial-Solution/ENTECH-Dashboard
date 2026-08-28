@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { CardGrid } from "@/components/card-grid";
 import { Avatar } from "@/components/employee-frame";
 import { ScheduleRow } from "@/components/schedule-row";
 import { SummaryTiles } from "@/components/summary-tiles";
@@ -150,7 +151,7 @@ export default async function EmployeeTasksPage({
         {active.length === 0 ? (
           <EmptyState label={t("tasks.empty")} />
         ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
+          <CardGrid>
             {active.map((task) => (
               <ActiveTaskCard
                 key={task.id}
@@ -160,7 +161,7 @@ export default async function EmployeeTasksPage({
                 assignees={assignees}
               />
             ))}
-          </div>
+          </CardGrid>
         )}
       </TaskSection>
 
@@ -172,7 +173,7 @@ export default async function EmployeeTasksPage({
         {completed.length === 0 ? (
           <EmptyState label={t("tasks.empty")} />
         ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
+          <CardGrid>
             {completed.map((task) => (
               <CompletedTaskCard
                 key={task.id}
@@ -181,7 +182,7 @@ export default async function EmployeeTasksPage({
                 assignees={assignees}
               />
             ))}
-          </div>
+          </CardGrid>
         )}
       </TaskSection>
 

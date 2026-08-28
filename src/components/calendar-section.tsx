@@ -13,6 +13,7 @@ import {
   parseMonthParam,
   shiftMonth,
   todayKey as currentDayKey,
+  tripHours,
 } from "@/lib/calendar";
 import { getLocale, getTranslations } from "@/lib/i18n/server";
 import { mapsHref } from "@/lib/maps";
@@ -134,6 +135,11 @@ export async function CalendarSection({
    * month boundary appears correctly in both. Cancelled trips are dropped: the
    * calendar answers "what is happening", and the schedule page is where a
    * cancellation and its reason are recorded.
+   *
+   * A *completed* trip is not dropped — it happened, and the calendar is the
+   * record of what happened — but it carries its state through so the entry
+   * says so. Without that it read "ออกนอกสถานที่" like any other, and someone
+   * who had reported back an hour ago still looked off-site.
    */
   const { daysInMonth } = monthGrid({ year, month });
   const tripEntries: CalendarTrip[] = [];
@@ -148,6 +154,8 @@ export async function CalendarSection({
       const key = dayKeyOf({ year, month }, day);
       if (key < from || key > to) continue;
 
+      const hours = tripHours(trip);
+
       tripEntries.push({
         id: `${trip.id}-${key}`,
         purpose: trip.purpose,
@@ -155,6 +163,12 @@ export async function CalendarSection({
         personCode: trip.employee.employeeCode,
         personName: trip.employee.fullName,
         locationName: trip.locationName,
+        state: trip.completedAt
+          ? "COMPLETED"
+          : trip.startedAt
+            ? "ON_SITE"
+            : "SCHEDULED",
+        hours: `${hours.start}–${hours.end}`,
         mapHref: mapsHref(trip),
       });
     }

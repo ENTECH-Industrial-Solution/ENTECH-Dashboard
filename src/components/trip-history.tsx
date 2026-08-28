@@ -1,3 +1,4 @@
+import { CardGrid } from "@/components/card-grid";
 import { TaskSection } from "@/components/task-section";
 import { TripCard } from "@/components/trip-card";
 import { EmptyState } from "@/components/ui";
@@ -36,11 +37,11 @@ export async function TripHistory({ employeeId }: { employeeId: string }) {
       {trips.length === 0 ? (
         <EmptyState label={t("trips.historyEmpty")} />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <CardGrid>
           {trips.map((trip) => (
             <TripCard key={trip.id} trip={serialiseTrip(trip, locale)} />
           ))}
-        </div>
+        </CardGrid>
       )}
     </TaskSection>
   );

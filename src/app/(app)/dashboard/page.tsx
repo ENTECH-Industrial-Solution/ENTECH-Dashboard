@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { CardGrid } from "@/components/card-grid";
 import { EmployeeFrame } from "@/components/employee-frame";
 import { ScheduleRow } from "@/components/schedule-row";
 import { SummaryTiles } from "@/components/summary-tiles";
@@ -109,7 +110,7 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
         {active.length === 0 ? (
           <EmptyState label={t("tasks.empty")} />
         ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
+          <CardGrid>
             {active.map((task) => (
               <ActiveTaskCard
                 key={task.id}
@@ -117,7 +118,7 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
                 canMutate={user.role === "ADMIN" || task.assignee.id === user.id}
               />
             ))}
-          </div>
+          </CardGrid>
         )}
       </TaskSection>
 
@@ -133,7 +134,7 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
         {completed.length === 0 ? (
           <EmptyState label={t("tasks.empty")} />
         ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
+          <CardGrid>
             {completed.map((task) => (
               <CompletedTaskCard
                 key={task.id}
@@ -141,7 +142,7 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
                 isAdmin={false}
               />
             ))}
-          </div>
+          </CardGrid>
         )}
       </TaskSection>
 

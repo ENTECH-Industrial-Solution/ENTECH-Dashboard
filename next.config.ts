@@ -25,16 +25,30 @@ const securityHeaders = [
         ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
         : "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
+      // i.ytimg.com serves the poster frame inside the YouTube embed, and that
+      // request is measured against *this* policy rather than YouTube's —
+      // verified by removing the host and watching the frame report
+      // "violates ... img-src 'self' data: blob:" while seven Google Maps
+      // frames on the same page reported nothing. Images only, one host.
+      "img-src 'self' data: blob: https://i.ytimg.com",
       "font-src 'self' data:",
       // The dev server pushes HMR updates over a websocket.
       isDev ? "connect-src 'self' ws: wss:" : "connect-src 'self'",
-      // Field trips embed a Google Map. This is the narrowest opening that
-      // allows it: one host, frames only — no scripts, no connections. The
-      // embed URL is always built by src/lib/maps.ts from coordinates or a
-      // name, never from a URL someone pasted, so this cannot be pointed at
-      // arbitrary content even within google.com.
-      "frame-src 'self' https://www.google.com",
+      // Three framed hosts, and every one of them earns its place the same way:
+      // frames only — no scripts, no connections — and the src is always built
+      // by our own code from an id or a place name, never from a URL somebody
+      // pasted. So none of these can be pointed at arbitrary content even
+      // within their own origin.
+      //
+      //   www.google.com          — the trip map        (src/lib/maps.ts)
+      //   www.youtube-nocookie.com — a video evidence link, cookie-free until
+      //                              playback starts    (src/lib/video.ts)
+      //   drive.google.com        — the same, for a Drive file. Drive enforces
+      //                              its own sharing rules inside the frame.
+      //
+      // Anything this app cannot positively recognise stays a plain link, which
+      // is the fallback that keeps this list from ever needing to grow.
+      "frame-src 'self' https://www.google.com https://www.youtube-nocookie.com https://drive.google.com",
       "frame-ancestors 'none'",
       "form-action 'self'",
       "base-uri 'self'",
