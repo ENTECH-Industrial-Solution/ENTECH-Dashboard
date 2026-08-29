@@ -7,6 +7,7 @@ import { VideoPlayer } from "@/components/video-embed";
 import { tripHours } from "@/lib/calendar";
 import { Alert, SubmitButton } from "@/components/ui";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
+import { useSettings } from "@/lib/settings/client";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
 import type { FieldTripRow } from "@/components/trip-form";
 import {
@@ -89,6 +90,7 @@ export function dayCount(startIso: string, endIso: string): number {
  */
 export function TripLocation({ trip }: { trip: FieldTripRow }) {
   const t = useTranslations();
+  const settings = useSettings();
 
   return (
     <div
@@ -129,13 +131,18 @@ export function TripLocation({ trip }: { trip: FieldTripRow }) {
           </div>
         </div>
 
-        <MiniMap
-          src={trip.mapEmbedSrc}
-          href={trip.mapHref}
-          title={trip.locationName}
-          subtitle={trip.address}
-          className="aspect-[4/3] w-full @min-[14rem]:w-28 @2xs:w-32 @sm:w-40 @lg:w-52"
-        />
+        {/* The link above is the part that always stays; the thumbnail is the
+            part an admin can switch off, and switching it off is what stops a
+            page of twelve trips creating twelve Google frames. */}
+        {settings["fieldTrip.showMap"] && (
+          <MiniMap
+            src={trip.mapEmbedSrc}
+            href={trip.mapHref}
+            title={trip.locationName}
+            subtitle={trip.address}
+            className="aspect-[4/3] w-full @min-[14rem]:w-28 @2xs:w-32 @sm:w-40 @lg:w-52"
+          />
+        )}
       </div>
     </div>
   );
@@ -150,6 +157,7 @@ export function TripLocation({ trip }: { trip: FieldTripRow }) {
  */
 export function TripEvidence({ trip }: { trip: FieldTripRow }) {
   const t = useTranslations();
+  const settings = useSettings();
   const formatMoment = useMomentFormatter();
 
   if (!trip.completedAt) return null;
@@ -183,7 +191,7 @@ export function TripEvidence({ trip }: { trip: FieldTripRow }) {
           >
             {trip.proofUrl}
           </a>
-          <VideoPlayer url={trip.proofUrl} />
+          {settings["task.showVideo"] && <VideoPlayer url={trip.proofUrl} />}
         </>
       )}
     </div>

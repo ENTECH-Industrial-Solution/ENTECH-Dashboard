@@ -367,10 +367,39 @@ export const dictionary = {
   "theme.light": { th: "สว่าง", en: "Light" },
   "theme.dark": { th: "มืด", en: "Dark" },
 
-  "settings.title": { th: "ตั้งค่าการแสดงผลของงาน", en: "Task display settings" },
+  "settings.title": { th: "ตั้งค่าการแสดงผล", en: "Display settings" },
   "settings.subtitle": {
-    th: "เปิดหรือปิดแต่ละส่วนของหน้าจองาน มีผลกับผู้ใช้ทุกคนทันที",
-    en: "Turn each part of the task UI on or off. Applies to everyone immediately.",
+    th: "เปิดหรือปิดแต่ละส่วนของหน้าจอ มีผลกับผู้ใช้ทุกคนทันที และทุกครั้งที่แก้จะถูกบันทึกไว้ในบันทึกการใช้งาน",
+    en: "Turn each part of the UI on or off. Applies to everyone immediately, and every change is written to the audit log.",
+  },
+  "settings.defaultsNote": {
+    th: "ทุกสวิตช์ค่าเริ่มต้นคือเปิด ฐานข้อมูลเก็บแถวเฉพาะอันที่แอดมินแก้ การคืนค่าเริ่มต้นคือลบแถวนั้นทิ้ง",
+    en: "Every switch defaults to on. The database holds a row only for the ones an admin changed, and resetting deletes that row.",
+  },
+  "settings.default": { th: "ค่าเริ่มต้น", en: "Default" },
+  "settings.changed": { th: "แก้จากค่าเริ่มต้น", en: "Changed from default" },
+  "settings.reset": { th: "คืนค่าเริ่มต้น", en: "Reset to default" },
+  "settings.lastChanged": { th: "แก้ล่าสุด", en: "Last changed" },
+  "settings.neverChanged": { th: "ยังไม่เคยแก้", en: "Never changed" },
+  "settings.enabledCount": { th: "เปิดอยู่", en: "On" },
+  "settings.impactDisplay": { th: "แค่การแสดงผล", en: "Display only" },
+  "settings.impactReads": { th: "ปิดแล้วประหยัดการดึงข้อมูล", en: "Skips a query when off" },
+  "settings.impactAccess": { th: "มีผลกับสิทธิ์การอ่าน", en: "Changes who can read" },
+
+  "settings.groupTask": { th: "การ์ดงาน", en: "Task cards" },
+  "settings.groupTaskHint": {
+    th: "อะไรบ้างที่แสดงบนการ์ดงานแต่ละใบ ทั้งหมดเป็นเรื่องการแสดงผล ไม่กระทบสิทธิ์ของใคร",
+    en: "What each task card shows. All display-only — none of these change who may see what.",
+  },
+  "settings.groupDashboard": { th: "หน้าหลัก", en: "Dashboard" },
+  "settings.groupDashboardHint": {
+    th: "ส่วนประกอบของหน้าหลัก บางอันปิดแล้วระบบจะไม่ดึงข้อมูลส่วนนั้นเลย",
+    en: "The pieces of the dashboard. Some are not merely hidden when off — they are not fetched.",
+  },
+  "settings.groupFieldTrip": { th: "ออกนอกสถานที่", en: "Field trips" },
+  "settings.groupFieldTripHint": {
+    th: "เปิด-ปิดทั้งระบบทริป และรายละเอียดที่แต่ละทริปแสดง",
+    en: "The field trip feature as a whole, and what a single trip shows.",
   },
   "settings.on": { th: "เปิดใช้อยู่", en: "On" },
   "settings.off": { th: "ปิดอยู่", en: "Off" },
@@ -418,6 +447,42 @@ export const dictionary = {
   "settings.sharedHistoryHint": {
     th: "ปิดแล้วพนักงานจะเห็นเฉพาะประวัติงานของตัวเอง ผู้ดูแลระบบยังเห็นทั้งหมด การแก้ไขไม่เปลี่ยนไม่ว่าเปิดหรือปิด",
     en: "When off, an employee sees only their own history. Admins still see all. Edit rights are unchanged either way.",
+  },
+  "settings.showPriority": { th: "แสดงป้ายความสำคัญ", en: "Show the priority badge" },
+  "settings.showPriorityHint": {
+    th: "ป้าย ด่วน/สูง/กลาง/ต่ำ บนการ์ดงาน ปิดแล้วยังตั้งความสำคัญได้เหมือนเดิม แค่ไม่แสดงบนการ์ด",
+    en: "The urgent/high/medium/low chip on a card. Priority is still set and stored when off, just not drawn.",
+  },
+  "settings.showVideo": { th: "เล่นวิดีโอหลักฐานในการ์ด", en: "Play video evidence in place" },
+  "settings.showVideoHint": {
+    th: "ลิงก์ YouTube หรือ Drive จะเล่นได้ในการ์ดเลย ปิดแล้วยังเป็นลิงก์ที่กดเปิดแท็บใหม่ได้ตามปกติ",
+    en: "A YouTube or Drive link plays inside the card. Off, it stays a link that opens in a new tab.",
+  },
+  "settings.showSummary": { th: "แสดงแถบสรุปสามตัวเลข", en: "Show the summary strip" },
+  "settings.showSummaryHint": {
+    th: "ตัวเลขกำลังดำเนินการ เกินกำหนด และเสร็จแล้ว ที่หัวหน้าหลัก ปิดแล้วระบบจะไม่นับตัวเลขนี้เลย",
+    en: "The active, overdue, and completed counts at the top of the dashboard. Off, they are not counted at all.",
+  },
+  "settings.showPeople": {
+    th: "แสดงข้อมูลรายบุคคลในหน้าหลัก",
+    en: "Show per-person breakdowns",
+  },
+  "settings.showPeopleHint": {
+    th: "กรอบพนักงานแต่ละคน และแคปซูลรายคนในแถบสรุป ทั้งสองใช้ข้อมูลชุดเดียวกัน ปิดแล้วจะไม่ดึงภาระงานของทุกคนเลย หน้าจัดการพนักงานยังเข้าได้",
+    en: "The employee frames and the per-person capsules in the summary strip — one read feeds both. Off, nobody's workload is fetched; the employee page still works.",
+  },
+  "settings.showMap": { th: "แสดงแผนที่ย่อในทริป", en: "Show the mini map on a trip" },
+  "settings.showMapHint": {
+    th: "แผนที่เล็กข้างที่อยู่ ปิดแล้วเหลือแค่ลิงก์เปิดแผนที่ ซึ่งเบากว่ามากเมื่อหน้าหนึ่งมีหลายทริป",
+    en: "The small map beside a trip's address. Off, only the link to Maps remains — much lighter on a page of many trips.",
+  },
+  "settings.showTripHistory": {
+    th: "แสดงประวัติออกนอกสถานที่รายบุคคล",
+    en: "Show per-person trip history",
+  },
+  "settings.showTripHistoryHint": {
+    th: "ส่วนทริปที่ผ่านมาแล้วในหน้าหลักและหน้ารายบุคคล ปิดแล้วจะไม่ดึงข้อมูลส่วนนี้ ทริปทั้งหมดยังดูได้ที่หน้างานทั้งหมด",
+    en: "The past-trips section on the dashboard and a person's page. Off, it is not fetched; every trip is still on the all-tasks page.",
   },
 
   "video.play": { th: "กดเพื่อเล่นคลิป", en: "Play video" },

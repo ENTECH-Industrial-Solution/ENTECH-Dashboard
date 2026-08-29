@@ -544,8 +544,8 @@ overridden one — so a fresh database behaves exactly like an untouched install
 and adding a toggle is a code change, not a migration.
 
 `getSettings()` is cached twice over: `unstable_cache` across requests, and
-React `cache()` within one. Seven booleans that change a few times a year do not
-deserve a round trip per request. The app layout publishes the result through
+React `cache()` within one. Thirteen booleans that change a few times a year do
+not deserve a round trip per request. The app layout publishes the result through
 `SettingsProvider`, so the task cards (client components) read it with
 `useSettings()` instead of it being drilled through every page.
 
@@ -556,11 +556,30 @@ mechanism: `dashboard.sharedHistory` decides what the query layer selects, so if
 a tag revalidation is ever missed, switching the shared archive off has to take
 effect on its own.
 
-Two of the switches are not cosmetic and are enforced on the server, not by
-hiding elements: `dashboard.sharedHistory` narrows `getCompletedTasks()` in the
-query layer, and `dashboard.showCalendar` skips the month query entirely. If you
-add a switch that governs what someone may *read*, enforce it in
-`src/server/queries.ts` the same way — never only in the component.
+**`SETTING_IMPACT` is the classification that keeps the switches honest**, and
+every new one has to declare which of the three it is:
+
+- `display` — draws less, and nothing else changes.
+- `reads` — *also skips a query*. `dashboard.showCalendar`, `showSummary`,
+  `showPeople`, `fieldTrip.enabled` and `fieldTrip.showHistory` return before
+  fetching rather than hiding what they fetched. A switch that claims this on
+  the page and then fetches anyway is a lie the admin cannot see through.
+- `access` — decides what someone may *read*. `dashboard.sharedHistory` narrows
+  `getCompletedTasks()` in the query layer. Enforce these in
+  `src/server/queries.ts` or the action, never only in the component.
+
+`dashboard.showPeople` governs the per-person frames *and* the capsules in the
+summary strip, because `getEmployeeWorkloads()` is the one read behind both;
+splitting them into two switches would have left one of them unable to save the
+query it advertises.
+
+The settings page reads one thing beyond the values: `getSettingProvenance()`
+answers where each value came from — whether a row exists at all, and who last
+changed it, from the audit trail. It is deliberately not part of `getSettings()`,
+which every request makes. "คืนค่าเริ่มต้น" (`resetSettingAction`) **deletes**
+the row rather than writing the default into it, so "never touched" and "put
+back" remain the same state, which is what the whole defaults-live-in-code rule
+depends on.
 
 ### Task dates
 

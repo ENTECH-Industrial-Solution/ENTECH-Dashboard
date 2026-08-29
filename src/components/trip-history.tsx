@@ -18,13 +18,16 @@ import { getFieldTrips } from "@/server/queries";
  * Read-only by construction — TripCard is handed neither an edit handler nor a
  * cancel action, and the server refuses both on a completed trip regardless.
  *
- * Gates itself on `fieldTrip.enabled` rather than making every caller check,
- * the way ScheduleRow does. getSettings() is cached across the request, so the
- * check costs nothing.
+ * Gates itself on two switches rather than making every caller check, the way
+ * ScheduleRow does: `fieldTrip.enabled` for the feature as a whole, and
+ * `fieldTrip.showHistory` for this section alone — a team that wants the
+ * schedule but not a permanent per-person record on every dashboard. Returning
+ * before the query is the point; nothing here is merely hidden. getSettings()
+ * is cached across the request, so both checks cost nothing.
  */
 export async function TripHistory({ employeeId }: { employeeId: string }) {
   const settings = await getSettings();
-  if (!settings["fieldTrip.enabled"]) return null;
+  if (!settings["fieldTrip.enabled"] || !settings["fieldTrip.showHistory"]) return null;
 
   const [t, locale, trips] = await Promise.all([
     getTranslations(),

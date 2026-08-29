@@ -50,18 +50,29 @@ export default async function DashboardPage({
 
 /** Admin view: the workforce, one frame per person. */
 async function PeopleOverview({ user, cal }: { user: SessionUser; cal?: string }) {
-  const t = await getTranslations();
+  const [t, settings] = await Promise.all([getTranslations(), getSettings()]);
+
+  // Both switches are skipped reads, not hidden elements: an admin who turns
+  // the strip off should stop paying for the aggregate that fills it. The
+  // per-person read covers the frames *and* the capsules inside the strip,
+  // which is why one switch governs both — they are the same data.
+  const showSummary = settings["dashboard.showSummary"];
+  const showPeople = settings["dashboard.showPeople"];
+
   const [summary, workloads] = await Promise.all([
-    getTaskSummary(user),
-    getEmployeeWorkloads(user),
+    showSummary ? getTaskSummary(user) : Promise.resolve(null),
+    showPeople ? getEmployeeWorkloads(user) : Promise.resolve([]),
   ]);
 
   return (
     <div className="space-y-8">
-      <SummaryTiles summary={summary} people={workloads} />
+      {summary && (
+        <SummaryTiles summary={summary} people={showPeople ? workloads : undefined} />
+      )}
 
       <ScheduleRow user={user} cal={cal} basePath="/dashboard" linkTasksTo="person" />
 
+      {showPeople && (
       <section className="space-y-3">
         <header>
           <h2 className="text-lg font-semibold tracking-tight">
@@ -86,6 +97,7 @@ async function PeopleOverview({ user, cal }: { user: SessionUser; cal?: string }
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }
@@ -97,12 +109,13 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
   const [active, completed, summary] = await Promise.all([
     getActiveTasks(user),
     getCompletedTasks(user, { limit: 200 }),
-    getTaskSummary(user),
+    // Not fetched at all when the strip is off — see PeopleOverview.
+    settings["dashboard.showSummary"] ? getTaskSummary(user) : Promise.resolve(null),
   ]);
 
   return (
     <div className="space-y-8">
-      <SummaryTiles summary={summary} />
+      {summary && <SummaryTiles summary={summary} />}
 
       <ScheduleRow user={user} cal={cal} basePath="/dashboard" linkTasksTo="anchor" />
 

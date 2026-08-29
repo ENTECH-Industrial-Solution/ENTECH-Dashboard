@@ -219,7 +219,7 @@ export function ActiveTaskCard({
           </h3>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-          <PriorityBadge priority={task.priority} />
+          {settings["task.showPriority"] && <PriorityBadge priority={task.priority} />}
           <StatusBadge status={task.status} />
         </div>
       </div>
@@ -489,8 +489,10 @@ export function CompletedTaskCard({
                 {task.proofUrl}
               </a>
               {/* Renders nothing unless the link is a video we recognise, so
-                  the link above stays the answer for everything else. */}
-              <VideoPlayer url={task.proofUrl} />
+                  the link above stays the answer for everything else — and
+                  nothing at all when the switch is off, which leaves exactly
+                  that link behind. */}
+              {settings["task.showVideo"] && <VideoPlayer url={task.proofUrl} />}
             </>
           )}
         </div>

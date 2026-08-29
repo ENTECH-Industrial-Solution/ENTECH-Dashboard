@@ -93,6 +93,7 @@ function travellerScopeSql(user: SessionUser, assigneeId?: string): Prisma.Sql {
  */
 const TASK_TABLE = Prisma.sql`app."Task"`;
 const TRIP_TABLE = Prisma.sql`app."FieldTrip"`;
+const AUDIT_TABLE = Prisma.sql`app."AuditLog"`;
 
 /**
  * A trip's three states, as SQL, matching what the cards and the actions mean
@@ -296,6 +297,55 @@ export async function getFieldTripsInMonth({
     },
     select: fieldTripSelect,
     orderBy: { startDate: "asc" },
+  });
+}
+
+/**
+ * The settings page's extra column: which switches an admin has actually
+ * written a row for, and who last moved each one.
+ *
+ * `getSettings()` answers what the switches *are* — cached, and read by every
+ * page. This answers where each value came from, which only this page asks.
+ * Kept apart for that reason: the audit join has no business in the read every
+ * request makes.
+ *
+ * Two queries, sent together, so the page pays one round trip for both. The
+ * second is raw because DISTINCT ON is how Postgres returns "the newest row per
+ * key" in a single pass — Prisma would need one query per switch, and there are
+ * thirteen. Schema-qualified rather than trusting search_path, like the other
+ * raw SQL in this file.
+ */
+export type SettingProvenance = {
+  key: string;
+  overridden: boolean;
+  changedBy: string | null;
+  changedAt: Date | null;
+};
+
+export async function getSettingProvenance(): Promise<SettingProvenance[]> {
+  const [rows, changes] = await Promise.all([
+    db.appSetting.findMany({ select: { key: true } }),
+    db.$queryRaw<{ key: string; actorLabel: string; createdAt: Date }[]>`
+      SELECT DISTINCT ON ("entityId")
+        "entityId" AS key, "actorLabel", "createdAt"
+      FROM ${AUDIT_TABLE}
+      WHERE "entityType" = 'AppSetting' AND "entityId" IS NOT NULL
+      ORDER BY "entityId", "createdAt" DESC
+    `,
+  ]);
+
+  const overridden = new Set(rows.map((row) => row.key));
+  const byKey = new Map(changes.map((change) => [change.key, change]));
+  const keys = new Set([...overridden, ...byKey.keys()]);
+
+  return [...keys].map((key) => {
+    const change = byKey.get(key);
+    return {
+      key,
+      overridden: overridden.has(key),
+      changedBy: change?.actorLabel ?? null,
+      changedAt: change?.createdAt ?? null,
+    };
   });
 }
 

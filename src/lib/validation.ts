@@ -371,6 +371,14 @@ export const settingSchema = z.object({
   enabled: z.enum(["true", "false"]).transform((v) => v === "true"),
 });
 
+/**
+ * Putting a switch back to its default, which carries no value: the default is
+ * the one in code, and the row is deleted rather than rewritten.
+ */
+export const settingKeySchema = z.object({
+  key: z.string().refine(isSettingKey, "ไม่รู้จักการตั้งค่านี้ / Unknown setting"),
+});
+
 export const updateTaskStatusSchema = z.object({
   taskId: z.string().cuid(),
   status: z.enum(["TODO", "IN_PROGRESS", "BLOCKED"]),

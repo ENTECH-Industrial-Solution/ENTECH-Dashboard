@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/ui";
 import { requireUser } from "@/lib/auth/rbac";
 import { formatDateTime, getLocale, getTranslations } from "@/lib/i18n/server";
 import { serialiseTask } from "@/lib/serialise";
+import { getSettings } from "@/lib/settings/server";
 import {
   getActiveTasks,
   getAssignableEmployees,
@@ -50,10 +51,14 @@ export default async function EmployeeTasksPage({
   // The assignee list is only ever read by the edit form, which is admin-only.
   // Fetched inside the same Promise.all as the rest, so on the one path that
   // needs it the extra query costs a connection, not a round trip.
+  const settings = await getSettings();
+
   const [active, completed, summary, assignees] = await Promise.all([
     getActiveTasks(user, id),
     getCompletedTasks(user, { limit: 200, assigneeId: id }),
-    getTaskSummary(user, id),
+    settings["dashboard.showSummary"]
+      ? getTaskSummary(user, id)
+      : Promise.resolve(null),
     isAdmin ? getAssignableEmployees() : Promise.resolve([]),
   ]);
 
@@ -137,7 +142,7 @@ export default async function EmployeeTasksPage({
         </div>
       </header>
 
-      <SummaryTiles summary={summary} />
+      {summary && <SummaryTiles summary={summary} />}
 
       <ScheduleRow
         user={user}
