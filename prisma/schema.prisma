@@ -66,7 +66,7 @@ model Employee {
   /// This is the login identifier — never the database id. An admin may change
   /// it (updateEmployeeAction); sessions are keyed on the row id, so a rename
   /// changes what the person types at the login form and nothing else.
-  employeeCode String @unique
+  employeeCode String  @unique
   fullName     String
   email        String? @unique
   department   String?
@@ -104,6 +104,13 @@ model Employee {
   taskEvents        TaskEvent[]
   auditLogs         AuditLog[]
 
+  /// The two Restrict sides are counted by deleteEmployeeAction, so a pin or a
+  /// lead somebody filed keeps their account alive exactly as a task does.
+  /// ownedCustomers is not: it is SetNull, so a lead can be left behind.
+  createdCustomerPins CustomerPin[] @relation("CustomerPinCreator")
+  createdCustomers    Customer[]    @relation("CustomerCreator")
+  ownedCustomers      Customer[]    @relation("CustomerOwner")
+
   @@index([isActive, role])
   @@index([department])
 }
@@ -122,13 +129,13 @@ model Session {
   userAgent String?
 
   /// Hard ceiling regardless of activity.
-  expiresAt DateTime
+  expiresAt     DateTime
   /// Rolling window; refreshed on use, enforced on every request.
   idleExpiresAt DateTime
   revokedAt     DateTime?
 
-  createdAt      DateTime @default(now())
-  lastActiveAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  lastActiveAt DateTime @default(now())
 
   @@index([employeeId, revokedAt])
   @@index([expiresAt])
@@ -181,8 +188,8 @@ model TaskEvent {
   taskId String
   task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
-  actorId String?
-  actor   Employee? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorId    String?
+  actor      Employee? @relation(fields: [actorId], references: [id], onDelete: SetNull)
   /// Denormalised so the trail stays readable even if the actor is removed.
   actorLabel String
 
@@ -201,8 +208,8 @@ model TaskEvent {
 model AuditLog {
   id String @id @default(cuid())
 
-  actorId String?
-  actor   Employee? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorId    String?
+  actor      Employee? @relation(fields: [actorId], references: [id], onDelete: SetNull)
   /// Denormalised actor description, survives actor removal.
   actorLabel String
 
@@ -316,4 +323,114 @@ model AppSetting {
   key       String   @id
   enabled   Boolean
   updatedAt DateTime @updatedAt
+}
+
+/// How warm a lead is, at the moment somebody last looked.
+///
+/// Five values rather than a free-text field: the whole point of the map is
+/// that a colour tells you where the week's calls should go, and a colour can
+/// only be derived from a closed set. Order is deliberate — it runs from
+/// warmest to coldest, and CUSTOMER_STATUS_ORDER in src/lib/customers.ts
+/// depends on it to decide which status a stacked pin wears.
+enum CustomerStatus {
+  /// สนใจ — wants to hear more.
+  INTERESTED
+  /// ลังเล — interested but not committing.
+  CONSIDERING
+  /// ยังไม่เอา — said no for now. Not deleted: a no this quarter is a lead
+  /// next quarter, and the note explaining it is the reason to come back.
+  NOT_INTERESTED
+  /// ปิดการขายแล้ว — bought. The terminal good end.
+  WON
+  /// ติดต่อไม่ได้ — nobody picks up. Distinct from NOT_INTERESTED, which is an
+  /// answer; this is the absence of one.
+  UNREACHABLE
+}
+
+/// A point on the map, and the customers standing at it.
+///
+/// Split from Customer on purpose: one address routinely holds several
+/// businesses — a floor of an office block, a row of shophouses — and drawing
+/// one marker per company puts three pins on the same pixel where none of them
+/// can be clicked. So the pin owns the place and the customers stack inside it,
+/// which is also the shape the person doing the visit thinks in: they go to a
+/// building, not to a record.
+///
+/// Coordinates are required and are the identity of the row. A pin with no
+/// point is not a pin; the name and address are labels on it.
+///
+/// Unlike FieldTrip, both are non-null: this row exists *because* somebody
+/// clicked a spot on the map, so there is no "location known only by name"
+/// case to model.
+model CustomerPin {
+  id String @id @default(cuid())
+
+  /// What the place is called — a building, an estate, an industrial park.
+  /// Optional: a pin dropped for one shop is adequately named by the customer
+  /// inside it, and demanding a second name would just get the first one typed
+  /// twice.
+  label   String?
+  address String?
+
+  latitude  Float
+  longitude Float
+
+  createdById String
+  createdBy   Employee @relation("CustomerPinCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Cascade, and it is the one place in this schema that deletes children.
+  /// A pin is the place; deleting it is saying the place is not a place any
+  /// more, and leaving the customers behind would strand rows with no point on
+  /// the map to draw them at. deleteCustomerPinAction snapshots every one of
+  /// them into the audit row first, in the same transaction — the same bargain
+  /// deleteTaskAction strikes with TaskEvent.
+  customers Customer[]
+
+  @@index([latitude, longitude])
+}
+
+/// One prospect at a pin.
+///
+/// Everything here is somebody's note about a conversation, so nothing is
+/// required beyond the name and the status. A sales pin filled in from the car
+/// park gets a name and a colour; the rest arrives later or not at all.
+model Customer {
+  id String @id @default(cuid())
+
+  pinId String
+  pin   CustomerPin @relation(fields: [pinId], references: [id], onDelete: Cascade)
+
+  name   String
+  status CustomerStatus @default(CONSIDERING)
+
+  contactName String?
+  phone       String?
+  email       String?
+  lineId      String?
+  note        String?
+
+  /// The employee following this lead. Nullable and SetNull rather than
+  /// Restrict: an unclaimed lead is a real state, and an account that leaves
+  /// should not be undeletable because a lead still names it. What the person
+  /// did survives them in the audit trail, which is where it belongs.
+  ownerId String?
+  owner   Employee? @relation("CustomerOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  /// When somebody last spoke to them. Written by whoever files the update,
+  /// not by the system — "we called on Tuesday" is a fact about the world, and
+  /// updatedAt is a fact about this row.
+  lastContactedAt DateTime?
+
+  createdById String
+  createdBy   Employee @relation("CustomerCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pinId])
+  @@index([status])
+  @@index([ownerId])
 }

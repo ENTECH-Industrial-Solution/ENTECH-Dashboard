@@ -432,6 +432,129 @@ export const workloadTasksSchema = z.object({
   metric: z.enum(["active", "overdue", "completed"]),
 });
 
+/**
+ * Customer pins.
+ *
+ * Coordinates are *required* here, unlike a field trip's, and that is the whole
+ * difference between the two features: a trip may be known only by the name of
+ * the place, while a pin exists because somebody clicked a point on a map. A
+ * pin with no point is not a pin.
+ */
+const requiredCoordinate = (limit: number) =>
+  z
+    .string()
+    .trim()
+    .min(1, "กรุณาเลือกจุดบนแผนที่ / Pick a point on the map")
+    .transform((v) => Number(v))
+    .refine((n) => Number.isFinite(n) && Math.abs(n) <= limit, {
+      message: `พิกัดไม่ถูกต้อง / Coordinate must be between -${limit} and ${limit}`,
+    });
+
+const pinFields = z.object({
+  label: optionalText(200),
+  address: optionalText(300),
+  latitude: requiredCoordinate(90),
+  longitude: requiredCoordinate(180),
+});
+
+/**
+ * One lead. Everything but the name and the status is optional, because all of
+ * it is somebody's note about a conversation — a pin filled in from the car
+ * park gets a name and a colour, and the rest arrives later or never.
+ *
+ * `ownerId` is an id typed by nobody: the form offers a select of employees.
+ * Blank is a real answer (an unclaimed lead), so it parses to null rather than
+ * being rejected.
+ */
+const customerFields = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "กรุณากรอกชื่อลูกค้า / A customer name is required")
+    .max(200),
+  status: z
+    .enum(["INTERESTED", "CONSIDERING", "NOT_INTERESTED", "WON", "UNREACHABLE"])
+    .default("CONSIDERING"),
+  contactName: optionalText(120),
+  phone: optionalText(40),
+  email: z
+    .union([z.string().trim().email(), z.literal("")])
+    .nullish()
+    .transform((v) => (isBlank(v) ? null : v)),
+  lineId: optionalText(80),
+  note: optionalText(2000),
+  ownerId: z
+    .union([z.string().trim().cuid(), z.literal("")])
+    .nullish()
+    .transform((v) => (isBlank(v) ? null : v)),
+  /// When somebody last spoke to them — a fact about the world, typed in, not
+  /// the row's updatedAt.
+  lastContactedAt: optionalDate,
+});
+
+/**
+ * Dropping a pin creates its first customer in the same breath. A pin with
+ * nobody at it would be a coloured dot that means nothing, and the form that
+ * makes one is the same form either way.
+ */
+export const createCustomerPinSchema = pinFields.merge(customerFields);
+
+/** Correcting the place itself: its name, its address, or where it sits. */
+export const updateCustomerPinSchema = pinFields.extend({
+  pinId: z.string().cuid(),
+});
+
+/** Just the point, for the drag-to-move path — no form, two numbers. */
+export const moveCustomerPinSchema = z.object({
+  pinId: z.string().cuid(),
+  latitude: requiredCoordinate(90),
+  longitude: requiredCoordinate(180),
+});
+
+export const createCustomerSchema = customerFields.extend({
+  pinId: z.string().cuid(),
+});
+
+export const updateCustomerSchema = customerFields.extend({
+  customerId: z.string().cuid(),
+});
+
+/**
+ * The one-click path off a status chip. Separate from the edit form because it
+ * is the thing this feature exists for: a status changed from a phone, in a
+ * car park, without opening a form.
+ */
+export const setCustomerStatusSchema = z.object({
+  customerId: z.string().cuid(),
+  status: z.enum([
+    "INTERESTED",
+    "CONSIDERING",
+    "NOT_INTERESTED",
+    "WON",
+    "UNREACHABLE",
+  ]),
+});
+
+/** Both deletes demand a reason, on the same terms as deleteTaskSchema: after
+ *  they run the audit row is the only thing left that can answer "why". */
+export const deleteCustomerPinSchema = z.object({
+  pinId: z.string().cuid(),
+  reason: z
+    .string()
+    .trim()
+    .min(1, "กรุณาระบุเหตุผลในการลบ / A reason is required to delete")
+    .max(1000),
+});
+
+export const deleteCustomerSchema = z.object({
+  customerId: z.string().cuid(),
+  reason: z
+    .string()
+    .trim()
+    .min(1, "กรุณาระบุเหตุผลในการลบ / A reason is required to delete")
+    .max(1000),
+});
+
 /** Narrow FormData to a plain object before Zod sees it. */
 export function formDataToObject(formData: FormData): Record<string, unknown> {
   const obj: Record<string, unknown> = {};

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { PageShell } from "@/components/page-shell";
 import { requireAdmin } from "@/lib/auth/rbac";
 import { getTranslations } from "@/lib/i18n/server";
 import { getSettings } from "@/lib/settings/server";
@@ -42,7 +43,7 @@ export default async function AdminSettingsPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <PageShell className="space-y-5">
       <header>
         <h1 className="text-lg font-semibold tracking-tight">{t("settings.title")}</h1>
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>
@@ -51,6 +52,6 @@ export default async function AdminSettingsPage() {
       </header>
 
       <SettingsManager settings={settings} detail={detail} />
-    </div>
+    </PageShell>
   );
 }

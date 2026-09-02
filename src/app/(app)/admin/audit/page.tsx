@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { PageShell } from "@/components/page-shell";
 import { EmptyState } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth/rbac";
 import { formatDateTime, getLocale, getTranslations } from "@/lib/i18n/server";
@@ -18,7 +19,7 @@ export default async function AuditPage() {
   const entries = await getAuditLog();
 
   return (
-    <div className="space-y-5">
+    <PageShell className="space-y-5">
       <header>
         <h1 className="text-lg font-semibold tracking-tight">{t("audit.title")}</h1>
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>
@@ -85,6 +86,6 @@ export default async function AuditPage() {
           </table>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

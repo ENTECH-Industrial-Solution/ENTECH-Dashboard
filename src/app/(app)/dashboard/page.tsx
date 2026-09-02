@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { CardGrid } from "@/components/card-grid";
 import { EmployeeFrame } from "@/components/employee-frame";
+import { PageShell } from "@/components/page-shell";
 import { ScheduleRow } from "@/components/schedule-row";
 import { SummaryTiles } from "@/components/summary-tiles";
 import { ActiveTaskCard, CompletedTaskCard } from "@/components/task-card";
@@ -65,7 +66,7 @@ async function PeopleOverview({ user, cal }: { user: SessionUser; cal?: string }
   ]);
 
   return (
-    <div className="space-y-8">
+    <PageShell className="space-y-8">
       {summary && (
         <SummaryTiles summary={summary} people={showPeople ? workloads : undefined} />
       )}
@@ -98,7 +99,7 @@ async function PeopleOverview({ user, cal }: { user: SessionUser; cal?: string }
         )}
       </section>
       )}
-    </div>
+    </PageShell>
   );
 }
 
@@ -114,7 +115,7 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
   ]);
 
   return (
-    <div className="space-y-8">
+    <PageShell className="space-y-8">
       {summary && <SummaryTiles summary={summary} />}
 
       <ScheduleRow user={user} cal={cal} basePath="/dashboard" linkTasksTo="anchor" />
@@ -160,6 +161,6 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
       </TaskSection>
 
       <TripHistory employeeId={user.id} />
-    </div>
+    </PageShell>
   );
 }

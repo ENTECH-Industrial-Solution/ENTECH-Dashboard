@@ -365,6 +365,9 @@ export async function deleteEmployeeAction(
             createdTasks: true,
             fieldTrips: true,
             createdFieldTrips: true,
+            createdCustomerPins: true,
+            createdCustomers: true,
+            ownedCustomers: true,
             taskEvents: true,
             auditLogs: true,
           },
@@ -391,12 +394,19 @@ export async function deleteEmployeeAction(
       employee._count.assignedTasks +
       employee._count.createdTasks +
       employee._count.fieldTrips +
-      employee._count.createdFieldTrips;
+      employee._count.createdFieldTrips +
+      // Pins and leads this person filed. Counted here for the same reason
+      // tasks are: both foreign keys are Restrict, so the delete would be
+      // refused by the database anyway — counting first turns that into a
+      // sentence naming what has to move. Customer.ownerId is deliberately
+      // absent: it is SetNull, so an unclaimed lead cannot pin an account.
+      employee._count.createdCustomerPins +
+      employee._count.createdCustomers;
 
     if (held > 0) {
       return {
         status: "error",
-        message: `ยังมีงานหรือการเดินทาง ${held} รายการที่อ้างถึงบัญชีนี้ ต้องย้ายหรือลบก่อน / ${held} task(s) or trip(s) still reference this account`,
+        message: `ยังมีงาน การเดินทาง หรือหมุดลูกค้า ${held} รายการที่อ้างถึงบัญชีนี้ ต้องย้ายหรือลบก่อน / ${held} task(s), trip(s), or customer record(s) still reference this account`,
       };
     }
 
@@ -424,6 +434,7 @@ export async function deleteEmployeeAction(
             // trail says how much of it just became authorless.
             orphanedTaskEvents: employee._count.taskEvents,
             orphanedAuditLogs: employee._count.auditLogs,
+            orphanedCustomers: employee._count.ownedCustomers,
           },
         },
         tx,

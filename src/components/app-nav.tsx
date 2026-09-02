@@ -7,11 +7,18 @@ import { useEffect, useState } from "react";
 import { LocaleSwitch } from "@/components/locale-switch";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { useTranslations } from "@/lib/i18n/client";
+import { useSettings } from "@/lib/settings/client";
 import type { SessionUser } from "@/lib/auth/session";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
 import { logoutAction } from "@/server/actions/auth";
 
 type NavLink = { href: string; key: TranslationKey };
+
+// The customer map is the one entry both roles carry, and it sits between them
+// on purpose: the board is shared, so the link cannot be an admin's. It is
+// spliced in below rather than written into both lists, so the two cannot
+// drift apart on where it goes.
+const CUSTOMERS_LINK: NavLink = { href: "/customers", key: "nav.customers" };
 
 const EMPLOYEE_LINKS: NavLink[] = [{ href: "/dashboard", key: "nav.dashboard" }];
 
@@ -30,11 +37,15 @@ const ADMIN_LINKS: NavLink[] = [
  *
  * Wide, everything is on one line. Narrow, everything but the name and a
  * three-line button moves behind it. The line between the two is `lg`, and it
- * is a measurement rather than a preference: an admin's five Thai labels are
- * 445px, the switches and the sign-out another 297, and the name 136 — about
- * 960px inside the container's padding, which fits `lg` and nothing smaller.
- * (The person's name and code are the first thing dropped, at `xl`, because
- * they are the one item in the bar nobody navigates with.)
+ * is a measurement rather than a preference: an admin's six Thai labels are
+ * ~535px, the switches and the sign-out another 297, and the name 136 — just
+ * inside the ~976px `lg` leaves after the container's padding, and nothing
+ * smaller. (The person's name and code are the first thing dropped, at `xl`,
+ * because they are the one item in the bar nobody navigates with.)
+ *
+ * That is now tight enough to be worth saying out loud: a *seventh* admin link
+ * does not fit, and the row will start scrolling rather than growing. When one
+ * is needed, move the break to `xl` — do not shorten a label to buy room.
  *
  * Below that it used to wrap instead, and wrapping is what makes a header stop
  * looking like one: five links on two lines with the switches stranded
@@ -47,8 +58,15 @@ const ADMIN_LINKS: NavLink[] = [
 export function AppNav({ user }: { user: SessionUser }) {
   const t = useTranslations();
   const pathname = usePathname();
-  const links = user.role === "ADMIN" ? ADMIN_LINKS : EMPLOYEE_LINKS;
+  const settings = useSettings();
   const [open, setOpen] = useState(false);
+
+  // The link disappears with the switch, but hiding it is not what protects the
+  // page — /customers calls the same guard itself. See SETTING_IMPACT.
+  const base = user.role === "ADMIN" ? ADMIN_LINKS : EMPLOYEE_LINKS;
+  const links = settings["customer.enabled"]
+    ? [...base.slice(0, 1), CUSTOMERS_LINK, ...base.slice(1)]
+    : base;
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);

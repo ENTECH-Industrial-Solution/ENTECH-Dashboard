@@ -36,6 +36,7 @@ export const SETTING_KEYS = [
   "fieldTrip.enabled",
   "fieldTrip.showMap",
   "fieldTrip.showHistory",
+  "customer.enabled",
 ] as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[number];
@@ -60,6 +61,7 @@ export const DEFAULT_SETTINGS: Settings = {
   "fieldTrip.enabled": true,
   "fieldTrip.showMap": true,
   "fieldTrip.showHistory": true,
+  "customer.enabled": true,
 };
 
 /** Label and explanation shown on the settings page, in both languages. */
@@ -119,6 +121,10 @@ export const SETTING_LABELS: Record<
     label: "settings.showTripHistory",
     hint: "settings.showTripHistoryHint",
   },
+  "customer.enabled": {
+    label: "settings.customerMap",
+    hint: "settings.customerMapHint",
+  },
 };
 
 /**
@@ -142,6 +148,10 @@ export const SETTING_IMPACT: Record<SettingKey, SettingImpact> = {
   "fieldTrip.enabled": "reads",
   "fieldTrip.showMap": "display",
   "fieldTrip.showHistory": "reads",
+  // "reads" and not "access": the page returns before fetching a single pin,
+  // and the nav link goes with it. What it does *not* do is narrow anyone's
+  // view — while the map is on, everybody sees every pin.
+  "customer.enabled": "reads",
 };
 
 /**
@@ -189,6 +199,12 @@ export const SETTING_GROUPS: readonly {
     title: "settings.groupFieldTrip",
     hint: "settings.groupFieldTripHint",
     keys: ["fieldTrip.enabled", "fieldTrip.showMap", "fieldTrip.showHistory"],
+  },
+  {
+    id: "customer",
+    title: "settings.groupCustomer",
+    hint: "settings.groupCustomerHint",
+    keys: ["customer.enabled"],
   },
 ];
 

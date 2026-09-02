@@ -19,13 +19,15 @@ export default async function AppLayout({
   // are client components and each one consults these switches.
   const settings = await getSettings();
 
+  // The `<main>` lives in each page now, not here — see PageShell. The layout
+  // contributes only the header and a full-height flex column, so a page that
+  // wants the whole viewport (the customer map) can take `flex-1` and have it,
+  // while every other page renders a PageShell and looks exactly as before.
   return (
     <SettingsProvider settings={settings}>
-      <div className="min-h-dvh">
+      <div className="flex min-h-dvh flex-col">
         <AppNav user={user} />
-        <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-          {children}
-        </main>
+        {children}
       </div>
     </SettingsProvider>
   );

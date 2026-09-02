@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { CardGrid } from "@/components/card-grid";
 import { Avatar } from "@/components/employee-frame";
+import { PageShell } from "@/components/page-shell";
 import { ScheduleRow } from "@/components/schedule-row";
 import { SummaryTiles } from "@/components/summary-tiles";
 import { ActiveTaskCard, CompletedTaskCard } from "@/components/task-card";
@@ -65,7 +66,7 @@ export default async function EmployeeTasksPage({
   const subtitle = [profile.department, profile.position].filter(Boolean).join(" · ");
 
   return (
-    <div className="space-y-8">
+    <PageShell className="space-y-8">
       <div>
         <Link
           href="/dashboard"
@@ -192,6 +193,6 @@ export default async function EmployeeTasksPage({
       </TaskSection>
 
       <TripHistory employeeId={profile.id} />
-    </div>
+    </PageShell>
   );
 }

@@ -48,6 +48,20 @@ export type AuditAction =
   /// Destroys its row, exactly like task.deleted. Same rule: the metadata is a
   /// full snapshot, because nothing else will be left to describe the trip.
   | "fieldTrip.deleted"
+  | "customerPin.created"
+  | "customerPin.updated"
+  | "customerPin.moved"
+  /// Destroys its row *and* every customer standing at it — the only cascade in
+  /// the schema. Its metadata carries the pin and a full copy of each customer,
+  /// because after it runs nothing else describes any of them.
+  | "customerPin.deleted"
+  | "customer.created"
+  | "customer.updated"
+  /// Kept apart from customer.updated on purpose: "who was moved from ลังเล to
+  /// สนใจ, and when" is the question this whole feature is asked, and it should
+  /// be answerable without unpacking a diff.
+  | "customer.status.changed"
+  | "customer.deleted"
   | "settings.changed";
 
 export async function writeAudit(

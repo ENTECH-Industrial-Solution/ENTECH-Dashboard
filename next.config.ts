@@ -30,7 +30,20 @@ const securityHeaders = [
       // verified by removing the host and watching the frame report
       // "violates ... img-src 'self' data: blob:" while seven Google Maps
       // frames on the same page reported nothing. Images only, one host.
-      "img-src 'self' data: blob: https://i.ytimg.com",
+      //
+      // tile.openstreetmap.org is the customer map's basemap, and it earns its
+      // place on exactly the terms i.ytimg.com does: **images only**. Leaflet
+      // itself is bundled from node_modules, so no script host is opened; the
+      // tiles are <img> requests and nothing else, and the URLs are composed by
+      // Leaflet from the z/x/y of the current view — there is no pasted value
+      // anywhere in the path. The alternative was Google's JS Maps API, which
+      // would need script-src, connect-src, an API key, and a bill.
+      //
+      // It is the *only* basemap host, and the map's three looks are CSS
+      // filters over these same tiles rather than three providers — see
+      // src/lib/basemaps.ts, which records what happened when a second host was
+      // tried. A fourth style that wants one has to argue for it there first.
+      "img-src 'self' data: blob: https://i.ytimg.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org",
       "font-src 'self' data:",
       // The dev server pushes HMR updates over a websocket.
       isDev ? "connect-src 'self' ws: wss:" : "connect-src 'self'",

@@ -303,11 +303,12 @@ own action and its own legal transitions, and the system's own timestamps
 (`createdAt`, `startedAt`, `completedAt`). Those are not data to correct — they
 are the record of when things happened, and editing them would be forging it.
 
-`deleteTaskAction`, `deleteFieldTripAction`, and `deleteEmployeeAction` are the
-**only three hard deletes in the application** — everything else is kept. All
-three are admin-only, and the first two are offered to neither an assignee nor a
-traveller: someone deleting their own assigned work is the one case this must
-not make easy. All three demand a written reason, because once they run there is
+`deleteTaskAction`, `deleteFieldTripAction`, `deleteEmployeeAction`,
+`deleteCustomerPinAction` and `deleteCustomerAction` are the **only hard deletes
+in the application** — everything else is kept. All of them are admin-only and
+all of them demand a written reason. The first two are offered to neither an
+assignee nor a traveller: someone deleting their own assigned work is the one
+case this must not make easy. All three demand a written reason, because once they run there is
 nothing left to infer one from. The employee one is the narrowest of them and is
 described under "Employees are deactivated, and deleted only when empty".
 
@@ -464,6 +465,236 @@ again as tall.
 One consequence to keep in mind: `#trip-<id>` now lands on a block *inside* a
 box rather than on the box itself, so `.trip-anchor:target` is what rings it.
 
+### The customer map
+
+`/customers` is a full-screen map of prospects: where they are, and where each
+one stands. Two models back it, and the split is the whole feature.
+
+`CustomerPin` is a **place** — coordinates, an optional name, an optional
+address. `Customer` is **one prospect at that place**, and several may share a
+pin. That is not a normalisation exercise: one address routinely holds several
+businesses (a floor of an office block, a row of shophouses), and drawing one
+marker per company puts three pins on the same pixel where none of them can be
+clicked. The pin owns the place and the leads stack inside it, which is also
+how the person doing the visit thinks — they go to a building, not to a record.
+
+Coordinates are `NOT NULL` here, unlike `FieldTrip`'s. A trip may be known only
+by the name of a place; a pin exists *because* somebody clicked a point, so
+there is no name-only case to model.
+
+A lead's status is one of five (`CustomerStatus`), and the set is closed
+because a colour can only be derived from a closed set. `src/lib/customers.ts`
+is the one place their colour and their ranking live. A pin holding several
+leads wears the status of the most *actionable* one, which is why `INTERESTED`
+outranks `WON`: an office block with one signed customer and one still asking
+questions is somewhere to go back to, and colouring it "done" would hide the
+only reason to drive there. The count badge and the panel's list say the rest.
+
+**Authorization here is deliberately wider than anywhere else in the app**, and
+it is the one thing to keep straight when adding to
+`src/server/actions/customers.ts`:
+
+- reading and writing a lead — every signed-in employee (`assertUser`)
+- deleting a lead or a pin — an admin, with a written reason (`assertAdmin`)
+
+The board is shared because a lead one person found is a lead the next person
+standing in that street needs to see; two people knocking on the same door is
+the failure this prevents. So `getCustomerPins()` takes no `SessionUser` and
+narrows by nobody, exactly like `getFieldTrips()`. Every write records its
+actor, so a shared board is not an anonymous one.
+
+Deleting stays admin-only for the reason it does everywhere else here: it is
+the action that leaves nothing behind to argue with. `Customer.pinId` is
+`onDelete: Cascade` — **the only parent-deletes-children edge in the schema** —
+so deleting a pin takes every lead at it. That is why `deleteCustomerPinAction`
+writes the audit row *first*, in the same transaction, carrying the pin **and a
+full copy of every customer on it**. Preserve that: a delete leaving only
+"somebody removed a pin" is the version of this feature the app should not
+have. Deleting the last lead at a pin deliberately leaves the pin standing —
+removing the place because the last lead went would be a second, unasked-for
+delete, and the pin still says somebody has been here.
+
+`setCustomerStatusAction` is separate from `updateCustomerAction` and writes
+its own `customer.status.changed` entry, because "who moved this lead from
+ลังเล to สนใจ, and when" is the question the map is asked, and it should be
+answerable by reading the trail rather than by unpacking a diff out of it.
+
+**Everything loads at once and filters in the browser.** `getCustomerPins()`
+fetches the whole board in one query with no viewport-bounds filter, because
+filtering by bounds means a round trip per pan and a round trip through the
+pooler costs ~250ms (see "Round trips are the performance budget"). Nothing
+here needs server enforcement — everyone may read every pin — so the search box
+and the status chips are pure client-side work. `limit` is the backstop; when a
+pin count approaches it, bounded fetching is the change to make, not a bigger
+number.
+
+**One click on the map is a pin.** No mode, no modifier, no gesture to know
+about, and the same single tap on a phone. Clicking an existing pin opens it
+instead; Leaflet stops a marker's click before the map sees it, and
+`startedOnMarker()` is belt and braces on top.
+
+This took three tries and the first two are worth recording, because both were
+the kind of wrong that looks clever:
+
+1. **A mode.** Press "ปักหมุดใหม่", then click the spot — two steps for
+   something people do standing in front of the place, and a miss starts over.
+2. **Gestures.** Right-click, double-click and long-press stacked on top of the
+   mode. Nobody would guess at any of them, and a long press on a phone is a
+   *wait*: you hold still for half a second wondering whether it worked.
+
+All of it is gone. Nothing is written until the form is submitted, so a stray
+click costs one Escape — which is what makes the cheapest gesture the safe one.
+
+The crosshair mode survives for exactly one job: aiming when the point has to
+be exact. It fixes a **sight at the centre of the map** and you move the map
+under it, which on a phone is the difference between "tap exactly there" and
+"drag until it lines up".
+
+Dragging a marker **records** a position, it does not save one: the popup's
+"บันทึกตำแหน่ง" button is what writes it, through `moveCustomerPinAction` and
+its own audit entry. A drag that committed on release would make an accidental
+nudge permanent before anyone could see where it landed, and only one marker is
+draggable at a time, only after somebody asked for it.
+
+### The popup, which is also the sheet
+
+A pin's customers appear in a card **anchored to that pin**, with a tail
+pointing at it. It was a column docked to the right edge first, which worked
+and read badly: you clicked a pin here and then looked over there to find out
+what you had just clicked on.
+
+Below `lg` the same element is a sheet across the bottom instead — a 352px card
+pinned to a point on a 375px screen covers the map it is describing, and there
+is nowhere to put it that does not. One component either way; two would drift
+apart on the day one of them gained a field.
+
+**Every pin also carries a small window that is always open** — the place, up
+to three customers with a status dot each, and a "+n". It is a Leaflet
+*permanent tooltip* rather than React, and that is the reason it can be always
+on: a tooltip lives in the map's own pane and moves and zooms with the map for
+nothing, where tracking N React cards would mean N anchors recomputed on every
+frame of a pan. `labelHtml()` builds it, and escapes as it goes — customer names
+are typed by people, and this is the one place in the app that assembles HTML
+from them by hand.
+
+Two rules keep it from becoming the map. It stays **smaller than the pin it
+labels** — three rows, names truncated, no wrapping — because a card taller than
+its pin stops reading as attached to it. And the **selected pin's label hides**,
+since the popup directly above it is already saying the same thing.
+
+Clicking a label opens its pin, and getting that right took two goes. Marking
+the tooltip `interactive` gives it pointer events and the right cursor but does
+*not* stop its clicks reaching the map, so the label was a button that dropped a
+new pin on top of the pin it described. The id therefore rides in a `data-pin`
+attribute and the map's click handler looks for it — with a second lookup for a
+click on the padding *around* the id's element, where walking up the tree never
+reaches it.
+
+The positioning is split deliberately. `MapCanvas` owns Leaflet and answers
+only "where is that spot on screen", tracking it through `move`/`zoom` so the
+card stays stuck to its pin through a pan. `CustomerMap` decides what to draw
+there, and makes three adjustments:
+
+- **clamped horizontally** to the map's width, so a pin near an edge does not
+  push half the card off screen — `--tail-x` then carries the difference so the
+  tail still points at the pin;
+- **flipped below** when there is no sky above the pin. The map pans to make
+  room first (`panInside`), so this is the short-window fallback;
+- **hidden once the pin is panned off the map entirely.** The clamp is for a
+  pin *near* an edge; a pin a thousand pixels past it would leave the card stuck
+  to the border with a tail pointing at nothing. Hidden, not unmounted, so a
+  half-typed form survives panning back.
+
+`POPUP_HALF_WIDTH` and `POPUP_ROOM_ABOVE` in `map-canvas.tsx` duplicate what
+`--popup-width` says in `globals.css`, and have to: the pan happens *before* the
+card is drawn, so there is nothing to measure yet. Keep them in step.
+
+Both windows carry a **× in the top right**, the new-pin one included. Its
+cancel button is at the foot of a form that scrolls, so backing out of a pin
+dropped by mistake used to mean scrolling down to leave. Escape works too, but
+nobody should have to know that.
+
+One thing the popup cannot do is size itself with `h-full`. A percentage height
+cannot resolve against a parent whose height comes from `max-block-size`, so it
+silently becomes `auto` and the form runs off the bottom of the map. The child
+fills the box with `flex-1 min-h-0`, and `.map-popup` sets `overflow: hidden`.
+
+### Leaflet, and why the basemap is not Google
+
+The trip map is a Google `output=embed` iframe, and it cannot be this map: a
+cross-origin frame cannot report where inside it somebody clicked, so an
+iframe basemap can never drop a pin. Google's JS Maps API could, at the cost of
+an API key, `script-src`, `connect-src`, and a bill.
+
+So this page uses **Leaflet, bundled from `node_modules`**, drawing
+OpenStreetMap raster tiles. The only CSP change that needs is
+`tile.openstreetmap.org` in **`img-src`**, and it earns its place on exactly
+the terms `i.ytimg.com` does — images only, no script, no connection, and the
+URLs are composed by Leaflet from the z/x/y of the current view rather than
+from anything anybody pasted.
+
+`src/components/map-canvas.tsx` is the only file that touches Leaflet, and four
+things decide how it is written:
+
+- **Leaflet is imported at run time, not at module scope.** Its module body
+  reads `document` while evaluating, and a `"use client"` component is still
+  rendered on the server first — a top-level `import L from "leaflet"` throws
+  during SSR. The CSS import is safe and stays at the top.
+- **Markers are updated in place, never rebuilt.** Rebuilding on every render
+  would drop a marker mid-drag and lose keyboard focus on every status change.
+- **Callbacks and props read by listeners live in refs.** The map is created
+  once; re-creating it to refresh a handler would reset the view on every
+  keystroke in the search box.
+- **Zoom is handed back out** through `onControls` rather than drawn by
+  Leaflet, so the buttons are the app's `.btn`, in the app's tab order.
+
+### Three map looks, one tile source
+
+The map offers three styles — เรียบ / มาตรฐาน / คมชัด — and **they are CSS
+filters over the same OpenStreetMap tiles**, not three providers. That came out
+of trying the obvious thing first and finding it gone.
+
+The obvious thing was CARTO's Positron and Dark Matter, which are exactly the
+calm grey basemaps this wanted, and were free without a key for years. They are
+not any more: every tile came back stamped "API KEY REQUIRED". Every other
+keyless raster basemap worth having is licensed for one project's own site
+(Wikimedia), grey under its terms for a commercial tool (Esri), or an OSM
+community server on donated hardware that a business tool has no business
+hammering. This app holds no API key for anything, deliberately.
+
+Treating the styles as filters buys three things beyond the licence: **no new
+CSP host**, no third-party that can start demanding a key next year, and
+light/dark stays a **token swap** exactly as it is everywhere else — `--map-clean`,
+`--map-standard` and `--map-contrast` in `globals.css`, selected by a
+`data-map-style` attribute `MapCanvas` writes on the container. Nothing in the
+TypeScript knows which theme is on, and switching style reloads no tile and
+moves no marker.
+
+Those tokens are three blocks rather than one `light-dark()` — unlike every
+other token in the file — because `light-dark()` takes colours and these are
+filter lists. OSM's tiles exist only in daylight, so every dark value starts by
+inverting and rotating the hue back: that turns the paper white to near-black
+while roads, water and labels keep reading correctly.
+
+`clean` is desaturated rather than fully grey, on purpose. Water still reads as
+water, and the five status colours stay the only saturated things on the screen —
+which is the whole reason the style exists.
+
+The choice lives in `localStorage`, not a cookie like the theme and the locale.
+Those two are read on the server so the first HTML response is already correct;
+this one is never read on the server at all.
+
+### Full-bleed pages
+
+`(app)/layout.tsx` contributes **no `<main>`**. It used to, and it moved into
+`src/components/page-shell.tsx` for this one page: a map must not have a
+max-width and padding around it, and the alternative was having the map fight
+its way back out with negative margins and `100vw`, which overshoots by the
+width of the scrollbar. Every ordinary page now renders exactly one
+`PageShell`; the customer map renders its own `<main className="flex-1">`. A
+page that renders neither has no landmark element and no padding, which is a
+bug rather than a style.
+
 ### Framed third parties
 
 `frame-src` in `next.config.ts` is the one opening in an otherwise self-only
@@ -479,10 +710,16 @@ tab where the person can see where it goes. `src/lib/maps.ts` and
 "not recognised" by falling back to a plain link — which is what keeps that
 host list from ever needing to grow.
 
-`img-src` also names `https://i.ytimg.com`, which is not cosmetic: the poster
-frame inside a YouTube embed is measured against *this* page's policy, not
-YouTube's. Removing it makes the frame report an `img-src` violation while
-Google Maps frames on the same page report nothing.
+`img-src` names two outside hosts, and neither is cosmetic.
+`https://i.ytimg.com` serves the poster frame inside a YouTube embed, and that
+request is measured against *this* page's policy rather than YouTube's —
+removing it makes the frame report an `img-src` violation while Google Maps
+frames on the same page report nothing. `tile.openstreetmap.org` is the
+customer map's basemap (see "Leaflet, and why the basemap is not Google").
+
+Both earn their place the same way the framed hosts do: **images only**, no
+script and no connection, with the URL composed by our own code — from a video
+id in one case, from the z/x/y of the current map view in the other.
 
 ### Maps
 
@@ -561,9 +798,12 @@ every new one has to declare which of the three it is:
 
 - `display` — draws less, and nothing else changes.
 - `reads` — *also skips a query*. `dashboard.showCalendar`, `showSummary`,
-  `showPeople`, `fieldTrip.enabled` and `fieldTrip.showHistory` return before
-  fetching rather than hiding what they fetched. A switch that claims this on
-  the page and then fetches anyway is a lie the admin cannot see through.
+  `showPeople`, `fieldTrip.enabled`, `fieldTrip.showHistory` and
+  `customer.enabled` return before fetching rather than hiding what they
+  fetched. A switch that claims this on the page and then fetches anyway is a
+  lie the admin cannot see through. `customer.enabled` also takes the nav link
+  with it, but the link is not what protects the page — `/customers` calls
+  `notFound()` on its own.
 - `access` — decides what someone may *read*. `dashboard.sharedHistory` narrows
   `getCompletedTasks()` in the query layer. Enforce these in
   `src/server/queries.ts` or the action, never only in the component.
@@ -618,8 +858,11 @@ it forever. So:
 - the account must already be deactivated (an active one is refused outright),
   which also means no live session is cut off mid-request;
 - nothing may still reference it — assigned or created tasks, trips travelled or
-  scheduled. Those keys are `onDelete: Restrict` and would refuse anyway;
-  counting first turns a database error into a sentence naming what to move;
+  scheduled, customer pins or leads they filed. Those keys are
+  `onDelete: Restrict` and would refuse anyway; counting first turns a database
+  error into a sentence naming what to move. `Customer.ownerId` is deliberately
+  *not* counted: it is `SetNull`, so an unclaimed lead cannot pin an account
+  in place;
 - the caller may not delete themselves;
 - a reason is required, and the audit row carries it with a field-by-field
   snapshot of the account. **Never spread the employee row into that metadata**

@@ -762,3 +762,60 @@ export async function getEmployeeProfile(user: SessionUser, employeeId: string) 
     },
   });
 }
+
+const customerSelect = {
+  id: true,
+  name: true,
+  status: true,
+  contactName: true,
+  phone: true,
+  email: true,
+  lineId: true,
+  note: true,
+  lastContactedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  owner: { select: { id: true, employeeCode: true, fullName: true } },
+  createdBy: { select: { employeeCode: true, fullName: true } },
+} as const;
+
+export type CustomerPinListItem = Awaited<
+  ReturnType<typeof getCustomerPins>
+>[number];
+export type CustomerListItem = CustomerPinListItem["customers"][number];
+
+/**
+ * Every customer pin, with the customers stacked at each one.
+ *
+ * Takes no SessionUser and narrows by nobody, like `getFieldTrips()` and for
+ * the same reason: this is a shared board. A lead one person found is a lead
+ * the next person standing in that street should be able to see, and a map that
+ * showed each employee only their own pins would send two people to the same
+ * door. The page guard is what keeps it behind a login; `customer.enabled` is
+ * what can switch it off entirely.
+ *
+ * One query, not two. The map draws every pin at once — there is no viewport
+ * bounds filter, because filtering by bounds means a round trip per pan, and a
+ * round trip through the pooler costs ~250ms (see CLAUDE.md, "Round trips are
+ * the performance budget"). The whole board arrives once and the search and
+ * status filters run in the browser. `limit` is the backstop for the day that
+ * stops being true; when a pin count approaches it, bounded fetching is the
+ * change to make, not a bigger number.
+ */
+export async function getCustomerPins(limit = 500) {
+  return db.customerPin.findMany({
+    select: {
+      id: true,
+      label: true,
+      address: true,
+      latitude: true,
+      longitude: true,
+      createdAt: true,
+      updatedAt: true,
+      createdBy: { select: { employeeCode: true, fullName: true } },
+      customers: { select: customerSelect, orderBy: { createdAt: "asc" } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+}

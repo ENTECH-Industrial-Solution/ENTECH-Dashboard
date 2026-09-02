@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { CardGrid } from "@/components/card-grid";
+import { PageShell } from "@/components/page-shell";
 import { ActiveTaskCard, CompletedTaskCard } from "@/components/task-card";
 import { TaskSection } from "@/components/task-section";
 import { EmptyState } from "@/components/ui";
@@ -47,7 +48,7 @@ export default async function AdminTasksPage() {
     ]);
 
   return (
-    <div className="space-y-8">
+    <PageShell className="space-y-8">
       <header className="space-y-4">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">{t("nav.allTasks")}</h1>
@@ -104,7 +105,7 @@ export default async function AdminTasksPage() {
           </CardGrid>
         )}
       </TaskSection>
-    </div>
+    </PageShell>
   );
 }
 
