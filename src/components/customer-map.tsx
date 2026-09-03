@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useTransition,
   type CSSProperties,
 } from "react";
 
@@ -43,6 +44,7 @@ import {
 } from "@/lib/customers";
 import { useTranslations } from "@/lib/i18n/client";
 import { createCustomerPinAction } from "@/server/actions/customers";
+import { searchPlacesAction, type PlaceResult } from "@/server/actions/places";
 import { idleState } from "@/server/actions/types";
 
 /**
@@ -68,6 +70,15 @@ const OFFSCREEN_MARGIN = 40;
 /** Customers named in a pin's always-on label before it says "+n" instead. */
 const LABEL_ROWS = 3;
 
+/**
+ * The gaps in `.map-popup`'s two transforms, in pixels, plus the margin the
+ * card keeps off the edge of the map. Duplicated from the CSS because the
+ * measurement has to happen before the card is laid out — keep them in step.
+ */
+const POPUP_GAP_ABOVE = 44;
+const POPUP_GAP_BELOW = 8;
+const POPUP_EDGE = 12;
+
 export function CustomerMap({
   pins,
   people,
@@ -92,6 +103,12 @@ export function CustomerMap({
     null,
   );
   const mapBox = useRef<HTMLDivElement>(null);
+
+  // Place search: what came back, and whether anything is in flight. Null means
+  // nobody has searched yet, which is different from "searched and found none".
+  const [places, setPlaces] = useState<PlaceResult[] | null>(null);
+  const [placeError, setPlaceError] = useState<string | null>(null);
+  const [searching, startSearch] = useTransition();
 
   const [createState, createAction] = useActionState(
     createCustomerPinAction,
@@ -205,6 +222,48 @@ export function CustomerMap({
     [movingId],
   );
 
+  /*
+   * The search box does two jobs, and this is the second one.
+   *
+   * Typing filters the pins already on the board, live and locally — that
+   * happens on every keystroke and costs nothing. Pressing Enter asks the
+   * basemap where a *place* is, which is a round trip to a third party and so
+   * is deliberately not on every keystroke.
+   */
+  const runPlaceSearch = useCallback(() => {
+    const q = query.trim();
+    if (q.length < 2) return;
+
+    setPlaceError(null);
+    startSearch(async () => {
+      const result = await searchPlacesAction({ query: q });
+      if (result.status === "error") {
+        setPlaces(null);
+        setPlaceError(result.message);
+        return;
+      }
+      setPlaces(result.results);
+    });
+  }, [query]);
+
+  /*
+   * Going to a place that was found.
+   *
+   * The query is cleared on the way, and that matters: the same box filters the
+   * pins, so leaving "จุฬา" in it would land the map on Chulalongkorn with every
+   * pin hidden because none of them is named that. Clearing it means arriving
+   * at the place with the board intact, which is the whole point of going there.
+   */
+  const goToPlace = useCallback(
+    (place: PlaceResult) => {
+      controls?.focus(place);
+      setPlaces(null);
+      setPlaceError(null);
+      setQuery("");
+    },
+    [controls],
+  );
+
   /** What the crosshair is aimed at. The precise half of placing a pin. */
   const placeAtCentre = useCallback(() => {
     const at = controls?.centre();
@@ -278,6 +337,11 @@ export function CustomerMap({
    *  - **Flipped below** when there is not enough sky above the pin. The map
    *    pans to make room first (see MapCanvas), so this is the fallback for a
    *    short window rather than the usual case.
+   *  - **Capped to the room it actually has**, on whichever side it ends up.
+   *    The pan reserves a comfortable amount rather than the card's full
+   *    height, so without this cap a pin near the top of the map opened a card
+   *    that ran off the top — its own header, and its close button, above the
+   *    edge of the map and behind the page header.
    *
    * And one refusal: once the pin itself is panned off the map, the popup is
    * hidden rather than clamped. The clamp exists for a pin *near* an edge; a
@@ -301,19 +365,34 @@ export function CustomerMap({
     const box = mapBox.current;
     const width = box?.clientWidth ?? 0;
     const height = box?.clientHeight ?? 0;
+
     const limit = POPUP_HALF_WIDTH + 8;
     const x =
       width > limit * 2
         ? Math.min(Math.max(anchorPoint.x, limit), width - limit)
         : anchorPoint.x;
 
+    // What is left on each side once the tail's gap and a margin off the map's
+    // edge are taken out. These two match the transforms in `.map-popup`.
+    const roomAbove = anchorPoint.y - POPUP_GAP_ABOVE - POPUP_EDGE;
+    const roomBelow = height - anchorPoint.y - POPUP_GAP_BELOW - POPUP_EDGE;
+
+    // Above by default, because that is where the pin is looking. Flipped only
+    // when above is genuinely cramped *and* below is roomier — a rule that
+    // simply took the larger side would flip on every pan through the middle.
+    const flip = roomAbove < POPUP_MIN_ROOM_ABOVE && roomBelow > roomAbove;
+    const room = Math.max(0, flip ? roomBelow : roomAbove);
+
     return {
       popupStyle: {
         "--anchor-x": `${x}px`,
         "--anchor-y": `${anchorPoint.y}px`,
         "--tail-x": `${anchorPoint.x - x}px`,
+        // Only meaningful once the map has been measured; before that the CSS
+        // fallback (the full 32rem) is the right answer.
+        ...(height > 0 ? { "--popup-room": `${room}px` } : {}),
       } as CSSProperties,
-      flipBelow: anchorPoint.y < POPUP_MIN_ROOM_ABOVE,
+      flipBelow: flip,
       offscreen:
         width > 0 &&
         height > 0 &&
@@ -372,15 +451,47 @@ export function CustomerMap({
             panelOpen ? "hidden lg:block" : ""
           }`}
         >
-          <div className="flex items-center gap-2">
+          {/* Submitting searches the basemap; typing filters the pins. Both
+              live on one box because they are the same question asked of two
+              places — "where is this" — and two boxes would make people pick. */}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              runPlaceSearch();
+            }}
+            className="flex items-center gap-2"
+          >
             <input
               type="search"
               className="input"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
+              // Belt and braces on top of the form's own submit. Enter in a
+              // text field normally submits the form around it, but that is the
+              // browser's *implicit* submission and it is easily lost — a
+              // disabled submit button suppresses it, and `type="search"` has
+              // its own history of swallowing the key. Enter is how most people
+              // will run this, so it does not get to depend on that.
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+                runPlaceSearch();
+              }}
               placeholder={t("customers.searchPlaceholder")}
               aria-label={t("common.search")}
             />
+            {/* Disabled only while a search is in flight, and deliberately not
+                on a too-short query: a disabled submit button also stops the
+                browser submitting the form on Enter, which is how most people
+                will actually run this. The length check lives in the handler. */}
+            <button
+              type="submit"
+              className="btn btn-secondary"
+              aria-label={t("customers.searchPlace")}
+              disabled={searching}
+            >
+              <SearchIcon />
+            </button>
             <button
               type="button"
               className={placing ? "btn btn-danger" : "btn btn-primary"}
@@ -391,7 +502,63 @@ export function CustomerMap({
             >
               {placing ? t("customers.cancelPlacing") : t("customers.addPin")}
             </button>
-          </div>
+          </form>
+
+          {searching && (
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              {t("customers.searchingPlace")}
+            </p>
+          )}
+
+          {placeError && <Alert tone="error">{placeError}</Alert>}
+
+          {places !== null && !searching && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h2
+                  className="flex-1 text-xs font-semibold"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  {t("customers.placeResults")}
+                </h2>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  aria-label={t("customers.clearPlaces")}
+                  onClick={() => setPlaces(null)}
+                >
+                  <CloseIcon />
+                </button>
+              </div>
+
+              {places.length === 0 ? (
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {t("customers.noPlaces")}
+                </p>
+              ) : (
+                <ul className="map-places">
+                  {places.map((place) => (
+                    <li key={place.id}>
+                      <button
+                        type="button"
+                        className="map-place"
+                        onClick={() => goToPlace(place)}
+                      >
+                        <span className="map-place-name">{place.name}</span>
+                        {place.detail && (
+                          <span className="map-place-detail">{place.detail}</span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                {t("customers.placeAttribution")}
+              </p>
+            </div>
+          )}
 
           {placing ? (
             <div className="space-y-2">
@@ -479,8 +646,13 @@ export function CustomerMap({
             {t("customers.customerCount")} · {t("customers.mapAttribution")}
           </p>
 
-          {pins.length === 0 && <Alert tone="warning">{t("customers.empty")}</Alert>}
-          {pins.length > 0 && visible.length === 0 && (
+          {/* Both are about the *pins*, so neither has anything useful to say
+              while a list of *places* is on screen — the box is being used to
+              find somewhere, not to filter the board. */}
+          {places === null && pins.length === 0 && (
+            <Alert tone="warning">{t("customers.empty")}</Alert>
+          )}
+          {places === null && pins.length > 0 && visible.length === 0 && (
             <Alert tone="warning">{t("customers.noMatches")}</Alert>
           )}
         </div>
@@ -631,7 +803,16 @@ function NewPinPanel({
 
         <hr />
 
-        <CustomerFields errors={errors} people={people} idPrefix="draft" />
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          {t("customers.customerOptional")}
+        </p>
+
+        <CustomerFields
+          errors={errors}
+          people={people}
+          idPrefix="draft"
+          required={false}
+        />
 
         <FormActions submitLabel={t("common.create")} onCancel={onCancel} />
       </form>
@@ -673,6 +854,25 @@ function filterPins(
       );
     });
   });
+}
+
+function SearchIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.6-3.6" />
+    </svg>
+  );
 }
 
 function CloseIcon({ size = 14 }: { size?: number }) {

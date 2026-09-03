@@ -87,6 +87,16 @@ export type MapControls = {
   panTo: (latitude: number, longitude: number) => void;
   /** Where the crosshair is pointing — what "ปักตรงนี้" pins. */
   centre: () => { latitude: number; longitude: number };
+  /**
+   * Go to a place the search found. Frames its bounding box where it has one,
+   * so a province zooms out and a shophouse zooms in; falls back to a fixed
+   * street-level zoom for a point with no extent.
+   */
+  focus: (place: {
+    latitude: number;
+    longitude: number;
+    bounds: [number, number, number, number] | null;
+  }) => void;
 };
 
 const FIT_OPTIONS: Leaflet.FitBoundsOptions = { padding: [64, 64], maxZoom: 16 };
@@ -370,6 +380,18 @@ export function MapCanvas({
         centre: () => {
           const at = instance.getCenter();
           return { latitude: at.lat, longitude: at.lng };
+        },
+        focus: (place) => {
+          if (place.bounds) {
+            const [south, north, west, east] = place.bounds;
+            instance.fitBounds(
+              L.latLngBounds([south, west], [north, east]),
+              { padding: [72, 72], maxZoom: 17 },
+            );
+            return;
+          }
+
+          instance.setView([place.latitude, place.longitude], 16);
         },
       });
     });

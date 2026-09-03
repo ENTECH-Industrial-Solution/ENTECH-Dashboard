@@ -182,14 +182,20 @@ export function CustomerPanel({
             {t("customers.stackCount")} ({customers.length})
           </h3>
 
-          {customers.map((customer) => (
-            <CustomerEntry
-              key={customer.id}
-              customer={customer}
-              people={people}
-              isAdmin={isAdmin}
-            />
-          ))}
+          {customers.length === 0 ? (
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              {t("customers.noCustomersYet")}
+            </p>
+          ) : (
+            customers.map((customer) => (
+              <CustomerEntry
+                key={customer.id}
+                customer={customer}
+                people={people}
+                isAdmin={isAdmin}
+              />
+            ))
+          )}
         </section>
 
         {/* --- adding another --------------------------------------------- */}

@@ -674,7 +674,12 @@ button.pill:hover {
     inset-inline-start: var(--anchor-x, 50%);
     inset-block-start: var(--anchor-y, 50%);
     transform: translate(-50%, calc(-100% - 2.75rem));
-    max-block-size: min(60vh, 32rem);
+    /* `--popup-room` is the space actually left on the side the card is on,
+       measured by CustomerMap. It is what stops the card running up past the
+       top of the map and under the header: 32rem is what it *wants*, and the
+       room is what it may have. Without the second term a pin near the top
+       opened a card whose own header was off screen. */
+    max-block-size: min(32rem, var(--popup-room, 32rem));
     border-radius: 0.9rem;
     border: 1px solid var(--border);
     box-shadow: 0 18px 40px oklch(0 0 0 / 0.28);
@@ -720,4 +725,50 @@ button.pill:hover {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/*
+ * The list of places the basemap search found.
+ *
+ * Capped and scrollable rather than allowed to grow: this sits in the toolbar
+ * over the map, and six results at two lines each would cover the thing you are
+ * searching in.
+ */
+.map-places {
+  max-block-size: 13rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.map-place {
+  display: block;
+  inline-size: 100%;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.5rem;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.map-place:hover,
+.map-place:focus-visible {
+  background: var(--surface-muted);
+}
+
+.map-place-name {
+  display: block;
+  font-size: 0.8125rem;
+}
+
+/* The rest of the address, and the first thing to go: a Nominatim
+   `display_name` runs to a dozen commas, and two lines of it is plenty to tell
+   two identically-named places apart. */
+.map-place-detail {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: var(--text-muted);
 }

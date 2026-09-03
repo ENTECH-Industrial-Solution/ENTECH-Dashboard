@@ -65,17 +65,26 @@ function dateInputValue(iso: string | null): string {
   return iso ? iso.slice(0, 10) : "";
 }
 
-/** One lead's fields, with no <form> of its own. */
+/**
+ * One lead's fields, with no <form> of its own.
+ *
+ * `required` is a prop rather than a constant because of the one case where the
+ * whole group is optional: dropping a pin without knowing yet who is in the
+ * building. Everywhere else a customer is definitely being written, and a
+ * nameless one would be a row nobody could find again.
+ */
 export function CustomerFields({
   errors,
   people,
   customer,
   idPrefix,
+  required = true,
 }: {
   errors: Record<string, string>;
   people: CustomerPerson[];
   customer?: CustomerRow;
   idPrefix: string;
+  required?: boolean;
 }) {
   const t = useTranslations();
 
@@ -84,12 +93,20 @@ export function CustomerFields({
       <div>
         <label className="label" htmlFor={`name-${idPrefix}`}>
           {t("customers.customerName")}
+          {!required && (
+            <>
+              {" "}
+              <span style={{ color: "var(--text-muted)" }}>
+                ({t("common.optional")})
+              </span>
+            </>
+          )}
         </label>
         <input
           id={`name-${idPrefix}`}
           name="name"
           className="input"
-          required
+          required={required}
           maxLength={200}
           defaultValue={customer?.name ?? ""}
         />

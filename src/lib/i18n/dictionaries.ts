@@ -531,6 +531,14 @@ export const dictionary = {
     en: "Deleting the pin deletes every customer standing at it, permanently. A full copy is kept in the audit log.",
   },
 
+  "customers.customerOptional": {
+    th: "ยังไม่รู้ว่าใครอยู่ตรงนี้ก็ได้ — ปักหมุดไว้ก่อนแล้วค่อยเพิ่มลูกค้าทีหลัง",
+    en: "You need not know who is here yet — pin the place now and add customers later",
+  },
+  "customers.noCustomersYet": {
+    th: "ยังไม่มีลูกค้าที่จุดนี้",
+    en: "No customers at this pin yet",
+  },
   "customers.addCustomer": { th: "เพิ่มลูกค้าที่จุดนี้", en: "Add a customer here" },
   "customers.customerName": { th: "ชื่อลูกค้า / บริษัท", en: "Customer or company" },
   "customers.contactName": { th: "ชื่อผู้ติดต่อ", en: "Contact person" },
@@ -561,8 +569,20 @@ export const dictionary = {
     en: "No pins match the current filter",
   },
   "customers.searchPlaceholder": {
-    th: "ค้นหาชื่อลูกค้า สถานที่ หรือเบอร์โทร",
-    en: "Search a customer, place, or phone number",
+    th: "ค้นหาลูกค้าที่ปักไว้ หรือพิมพ์ชื่อสถานที่แล้วกด Enter",
+    en: "Filter your pins, or type a place name and press Enter",
+  },
+  "customers.searchPlace": { th: "ค้นหาสถานที่บนแผนที่", en: "Find a place on the map" },
+  "customers.placeResults": { th: "สถานที่ที่พบ", en: "Places found" },
+  "customers.noPlaces": {
+    th: "ไม่พบสถานที่ชื่อนี้ ลองพิมพ์ให้ละเอียดขึ้น เช่น ใส่ชื่อเขตหรือจังหวัดด้วย",
+    en: "No place by that name. Try adding a district or province.",
+  },
+  "customers.searchingPlace": { th: "กำลังค้นหาสถานที่...", en: "Searching for the place..." },
+  "customers.clearPlaces": { th: "ปิดผลการค้นหา", en: "Dismiss results" },
+  "customers.placeAttribution": {
+    th: "ค้นหาสถานที่โดย OpenStreetMap",
+    en: "Place search by OpenStreetMap",
   },
   "customers.filterStatus": { th: "กรองตามสถานะ", en: "Filter by status" },
   "customers.legend": { th: "สีของหมุด", en: "Pin colours" },

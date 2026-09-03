@@ -493,11 +493,26 @@ const customerFields = z.object({
 });
 
 /**
- * Dropping a pin creates its first customer in the same breath. A pin with
- * nobody at it would be a coloured dot that means nothing, and the form that
- * makes one is the same form either way.
+ * Dropping a pin, with or without somebody standing at it.
+ *
+ * The customer half is optional, and that is a deliberate reversal: the first
+ * version demanded a customer on the grounds that a pin with nobody at it is a
+ * coloured dot that means nothing. In the field it is not — it is "this place,
+ * I will find out who is in it later", which is exactly what somebody standing
+ * on a street wants to record before they walk in.
+ *
+ * What is still refused is a pin with *no name at all*. One of the two has to
+ * say what the dot is, or the map grows anonymous markers nobody can act on.
+ * An empty pin is a state the app already had anyway — deleting the last
+ * customer at a pin leaves it standing.
  */
-export const createCustomerPinSchema = pinFields.merge(customerFields);
+export const createCustomerPinSchema = pinFields
+  .merge(customerFields.extend({ name: optionalText(200) }))
+  .refine((d) => d.label !== null || d.name !== null, {
+    message:
+      "ต้องมีชื่อจุด หรือชื่อลูกค้าอย่างน้อยหนึ่งอย่าง / Name the place, or add a customer",
+    path: ["label"],
+  });
 
 /** Correcting the place itself: its name, its address, or where it sits. */
 export const updateCustomerPinSchema = pinFields.extend({
@@ -553,6 +568,21 @@ export const deleteCustomerSchema = z.object({
     .trim()
     .min(1, "กรุณาระบุเหตุผลในการลบ / A reason is required to delete")
     .max(1000),
+});
+
+/**
+ * Searching the basemap for a place by name.
+ *
+ * A read action's payload rather than a form's, but parsed here like everything
+ * else — the string leaves this process in a URL to a third party, so its shape
+ * and its length are settled in the one place that settles them.
+ */
+export const placeSearchSchema = z.object({
+  query: z
+    .string()
+    .trim()
+    .min(2, "พิมพ์อย่างน้อย 2 ตัวอักษร / Type at least 2 characters")
+    .max(200),
 });
 
 /** Narrow FormData to a plain object before Zod sees it. */

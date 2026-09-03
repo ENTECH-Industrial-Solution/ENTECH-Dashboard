@@ -482,6 +482,16 @@ Coordinates are `NOT NULL` here, unlike `FieldTrip`'s. A trip may be known only
 by the name of a place; a pin exists *because* somebody clicked a point, so
 there is no name-only case to model.
 
+**A pin may stand on its own, with nobody at it.** The first version demanded a
+customer, on the grounds that an empty pin is a coloured dot that means
+nothing. In the field it is not — it is "this place, I will find out who is in
+it later", which is what somebody standing on a street wants to record before
+they walk in. It was also already a state the app had: deleting the last
+customer at a pin leaves the pin standing. What `createCustomerPinSchema` still
+refuses is a pin with *no name at all*; one of the place name or the customer
+name has to say what the dot is. An empty pin draws grey, which is what
+`dominantStatus([])` returns.
+
 A lead's status is one of five (`CustomerStatus`), and the set is closed
 because a colour can only be derived from a closed set. `src/lib/customers.ts`
 is the one place their colour and their ranking live. A pin holding several
@@ -544,11 +554,39 @@ the kind of wrong that looks clever:
 
 All of it is gone. Nothing is written until the form is submitted, so a stray
 click costs one Escape — which is what makes the cheapest gesture the safe one.
+The form's Enter key is handled on the input as well as by the form, because a
+disabled submit button silently suppresses the browser's implicit submission and
+Enter is how most people will run a search.
 
 The crosshair mode survives for exactly one job: aiming when the point has to
 be exact. It fixes a **sight at the centre of the map** and you move the map
 under it, which on a phone is the difference between "tap exactly there" and
 "drag until it lines up".
+
+### Finding a place, as opposed to a pin
+
+The search box does two jobs on one line. Typing **filters the pins already on
+the board** — instant and local, because the whole board is already here.
+Pressing Enter **asks the basemap where a place is**, which is a round trip to
+somebody else's service and so is deliberately not on every keystroke.
+
+`searchPlacesAction` is a read action in the shape `loadWorkloadTasksAction`
+set, and the lookup happens **on the server** for four reasons, any one of which
+would be enough:
+
+- `connect-src` stays `'self'`. Calling OpenStreetMap's geocoder from the
+  browser would open the one directive this app has never opened.
+- Nominatim's usage policy requires a **User-Agent that identifies the caller**,
+  and a browser will not let JavaScript set one.
+- That policy also asks for at most a request a second, so the call is **rate
+  limited per person** through `lib/rate-limit.ts`.
+- A **day-long cache** on the fetch means the same query typed twice costs one
+  request. Place names do not move.
+
+Picking a result frames its bounding box where Nominatim gave one — a province
+zooms out, a shophouse zooms in — and **clears the query on the way**. That last
+part is not tidiness: the same box filters the pins, so arriving at a place with
+"จุฬา" still in it would show the right street with every pin hidden.
 
 Dragging a marker **records** a position, it does not save one: the popup's
 "บันทึกตำแหน่ง" button is what writes it, through `moveCustomerPinAction` and
@@ -600,6 +638,11 @@ there, and makes three adjustments:
   tail still points at the pin;
 - **flipped below** when there is no sky above the pin. The map pans to make
   room first (`panInside`), so this is the short-window fallback;
+- **capped to the room it actually has** on whichever side it lands, through
+  `--popup-room`. The pan reserves a comfortable amount rather than the card's
+  full height, so without the cap a pin near the top opened a card whose own
+  header — and its close button — sat above the edge of the map, behind the
+  page header;
 - **hidden once the pin is panned off the map entirely.** The clamp is for a
   pin *near* an edge; a pin a thousand pixels past it would leave the card stuck
   to the border with a tail pointing at nothing. Hidden, not unmounted, so a

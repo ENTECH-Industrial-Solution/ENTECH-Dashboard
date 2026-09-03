@@ -102,11 +102,15 @@ function isActionState(value: object): value is ActionState {
 }
 
 /**
- * Drop a pin, and put its first customer at it.
+ * Drop a pin, and put its first customer at it — if there is one yet.
  *
- * One transaction and one form: a pin with nobody standing at it is a coloured
- * dot that means nothing, so the two are never created apart. Everything after
- * this goes through createCustomerAction, which adds to a pin that exists.
+ * One transaction and one form, and the customer half is optional: "this place,
+ * I will find out who is in it later" is what somebody standing on a street
+ * wants to record before they walk in. The schema still refuses a pin with no
+ * name at all; one of the two has to say what the dot is.
+ *
+ * Everything after this goes through createCustomerAction, which adds to a pin
+ * that already exists.
  */
 export async function createCustomerPinAction(
   _prev: ActionState,
@@ -125,8 +129,10 @@ export async function createCustomerPinAction(
     }
 
     const { label, address, latitude, longitude, ...customer } = parsed.data;
+    const { name, ...rest } = customer;
 
-    const owner = await resolveOwner(customer.ownerId);
+    // Only worth checking when there is a customer for it to belong to.
+    const owner = name === null ? { code: null } : await resolveOwner(rest.ownerId);
     if (isActionState(owner)) return owner;
 
     await db.$transaction(async (tx) => {
@@ -137,7 +143,9 @@ export async function createCustomerPinAction(
           latitude,
           longitude,
           createdById: user.id,
-          customers: { create: { ...customer, createdById: user.id } },
+          ...(name === null
+            ? {}
+            : { customers: { create: { ...rest, name, createdById: user.id } } }),
         },
       });
 
@@ -152,8 +160,10 @@ export async function createCustomerPinAction(
             address,
             latitude,
             longitude,
-            firstCustomer: customer.name,
-            status: customer.status,
+            // Null where the pin was dropped on its own; the customer arrives
+            // later through customer.created, with its own entry.
+            firstCustomer: name,
+            status: name === null ? null : rest.status,
             owner: owner.code,
           },
         },

@@ -76,9 +76,14 @@ const STATUS_RANK: Record<CustomerStatus, number> = {
   UNREACHABLE: 4,
 };
 
-/** The status a stack of customers is drawn as. Empty stacks cannot occur —
- *  createCustomerPinAction writes a pin and its first customer together — but
- *  the fallback keeps this total rather than partial. */
+/**
+ * The status a stack of customers is drawn as.
+ *
+ * An empty stack is a real case, not a defensive fallback: a pin can be dropped
+ * before anyone knows who is in the building, and deleting the last customer at
+ * a pin leaves it standing. Grey is the right answer for both — nothing here
+ * has been assessed yet.
+ */
 export function dominantStatus(
   customers: readonly { status: CustomerStatus }[],
 ): CustomerStatus {
