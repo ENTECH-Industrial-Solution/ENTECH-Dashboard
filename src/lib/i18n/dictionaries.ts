@@ -14,7 +14,9 @@ export const LOCALE_COOKIE = "entech_locale";
 type Entry = { th: string; en: string };
 
 export const dictionary = {
-  "app.name": { th: "ENTECH Dashboard", en: "ENTECH Dashboard" },
+  // The "ENTECH" half is the logo artwork beside this word, not a string —
+  // see src/components/brand.tsx. This is only the part that is not the brand.
+  "app.product": { th: "Dashboard", en: "Dashboard" },
   "app.tagline": { th: "ระบบติดตามงานพนักงาน", en: "Employee Task Tracking" },
 
   "nav.dashboard": { th: "หน้าหลัก", en: "Dashboard" },

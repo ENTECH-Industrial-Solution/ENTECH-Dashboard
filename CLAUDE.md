@@ -738,6 +738,28 @@ width of the scrollbar. Every ordinary page now renders exactly one
 page that renders neither has no landmark element and no padding, which is a
 bug rather than a style.
 
+### Brand assets
+
+`public/brand/` holds the artwork as supplied — `entech-logo.png` (the full
+ENTECH lockup) and `entech-icon.png` (the E mark). Neither is what the UI
+draws. What it draws is *derived* from them and committed beside them:
+`entech-wordmark.png` for the header, `src/app/icon.png` for the browser tab.
+`scripts/derive-brand.mjs` regenerates both, so **re-derive rather than edit a
+derived file**; to change the branding, replace an original and re-run it.
+
+Both derivations answer a problem that will outlast the current artwork. The
+logo is blue ink on an *opaque white plate* — invisible on the light theme and
+a white slab on the dark one — so the white is keyed back out to transparency
+and one asset then reads on both, which is what every colour here gets from
+being a token. Its "Where Solutions Begin" line is about 5px tall at the height
+a header can give a logo, so the header crop stops at the lettering. And the
+icon is trimmed to its ink because the original leaves a fifth of the canvas
+empty on each side, while a favicon is 16px to start with.
+
+The word beside the mark stays *text* — `app.product`, translated and
+selectable — because it is the one word there that is not the brand. The mark's
+`alt` supplies "ENTECH", so a screen reader still reads the two as one name.
+
 ### Framed third parties
 
 `frame-src` in `next.config.ts` is the one opening in an otherwise self-only

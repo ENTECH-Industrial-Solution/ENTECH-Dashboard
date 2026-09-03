@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { BrandLockup } from "@/components/brand";
 import { LocaleSwitch } from "@/components/locale-switch";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { requireUser } from "@/lib/auth/rbac";
@@ -16,14 +17,16 @@ export default async function ChangePasswordPage() {
   return (
     <main className="flex min-h-dvh items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-6">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">{t("app.name")}</h1>
+            <h1 className="text-xl">
+              <BrandLockup product={t("app.product")} />
+            </h1>
             <p className="text-sm" style={{ color: "var(--text-muted)" }}>
               {user.employeeCode} — {user.fullName}
             </p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="ms-auto flex items-center justify-end gap-2">
             <ThemeSwitch />
             <LocaleSwitch />
           </div>

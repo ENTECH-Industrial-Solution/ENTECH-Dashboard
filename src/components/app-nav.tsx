@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { BrandWordmark } from "@/components/brand";
 import { LocaleSwitch } from "@/components/locale-switch";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { useTranslations } from "@/lib/i18n/client";
@@ -36,24 +37,43 @@ const ADMIN_LINKS: NavLink[] = [
  * The header, in two shapes.
  *
  * Wide, everything is on one line. Narrow, everything but the name and a
- * three-line button moves behind it. The line between the two is `lg`, and it
+ * three-line button moves behind it. The line between the two is `xl`, and it
  * is a measurement rather than a preference: an admin's six Thai labels are
- * ~535px, the switches and the sign-out another 297, and the name 136 — just
- * inside the ~976px `lg` leaves after the container's padding, and nothing
- * smaller. (The person's name and code are the first thing dropped, at `xl`,
- * because they are the one item in the bar nobody navigates with.)
+ * ~536px, the switches and the sign-out another 297, and the wordmark 136 —
+ * 1017 with the gaps, which is more than `lg` leaves after the container's
+ * padding (976) and comfortably inside `xl`. The break was `lg` until the
+ * customer map added a sixth link: the row did not grow, it started scrolling,
+ * which is the one thing a header must not do. Do not shorten a label to buy
+ * the break back.
  *
- * That is now tight enough to be worth saying out loud: a *seventh* admin link
- * does not fit, and the row will start scrolling rather than growing. When one
- * is needed, move the break to `xl` — do not shorten a label to buy room.
+ * The bar is also wider than the page under it — `88rem` against `PageShell`'s
+ * `72rem` — and that is the same measurement. At `72rem` the links, the
+ * identity block and the switches were 61px over the line, so the row scrolled
+ * *and* the name broke across three lines. A navigation bar is the width of the
+ * window rather than of the column, so widening it is the honest fix; the
+ * wordmark sitting outside the content column is what makes it read as a bar.
  *
- * Below that it used to wrap instead, and wrapping is what makes a header stop
- * looking like one: five links on two lines with the switches stranded
- * underneath, taking a third of a phone screen before any content.
+ * The row is a three-column grid — `1fr auto 1fr` — rather than a flex row that
+ * pushes the controls out with `ms-auto`, so the links sit in the middle of the
+ * bar instead of tucked against the wordmark. Each item names its column, and
+ * that is load-bearing: a hidden `<nav>` is not a grid item at all, so under
+ * auto-placement the controls would slide into the middle column the moment the
+ * links moved into the menu button. The side columns stay equal until one
+ * outgrows its share, which is what the identity block does at `2xl` — the
+ * links drift 18px off centre there rather than colliding with it, and that
+ * graceful give is why this is a grid and not an absolutely centred row.
  *
- * The links do not disappear into the button — they move into a panel under
- * the bar, together with the switches, the sign-out, and the identity block the
- * bar drops first. Everything reachable at any width, in one place.
+ * The identity block is dropped first, now at `2xl`, because it is the one item
+ * nobody navigates with — and the one whose width is typed by a person rather
+ * than fixed here, so it is also the one that must not decide whether the links
+ * fit.
+ *
+ * Below the break the links do not disappear into the button — they move into a
+ * panel under the bar, together with the switches, the sign-out, and the
+ * identity block. Everything reachable at any width, in one place. It used to
+ * wrap instead, and wrapping is what makes a header stop looking like one: five
+ * links on two lines with the switches stranded underneath, taking a third of a
+ * phone screen before any content.
  */
 export function AppNav({ user }: { user: SessionUser }) {
   const t = useTranslations();
@@ -91,14 +111,18 @@ export function AppNav({ user }: { user: SessionUser }) {
       className="sticky top-0 z-10 border-b backdrop-blur"
       style={{ background: "color-mix(in oklab, var(--surface) 88%, transparent)" }}
     >
-      <div className="mx-auto flex w-full max-w-6xl items-center gap-x-4 px-4 py-3 sm:px-6 xl:gap-x-6">
-        <Link href="/dashboard" className="shrink-0 font-semibold tracking-tight">
-          {t("app.name")}
+      <div className="mx-auto grid w-full max-w-[88rem] grid-cols-[1fr_auto_1fr] items-center gap-x-4 px-4 py-3 sm:px-6 xl:gap-x-6">
+        <Link
+          href="/dashboard"
+          className="col-start-1 flex shrink-0 items-center gap-2 font-semibold tracking-tight whitespace-nowrap"
+        >
+          <BrandWordmark className="h-[0.875em] w-auto shrink-0" />
+          {t("app.product")}
         </Link>
 
         {/* `overflow-x-auto` is the release valve: a label longer than these
             leaves the row scrollable rather than pushing the bar apart. */}
-        <nav className="hidden items-center gap-1 overflow-x-auto lg:flex">
+        <nav className="col-start-2 hidden items-center gap-1 overflow-x-auto xl:flex">
           {links.map((link) => (
             <Link
               key={link.href}
@@ -115,15 +139,15 @@ export function AppNav({ user }: { user: SessionUser }) {
           ))}
         </nav>
 
-        <div className="ms-auto flex items-center gap-3">
-          <div className="hidden text-end xl:block">
+        <div className="col-start-3 flex items-center justify-end gap-3">
+          <div className="hidden text-end whitespace-nowrap 2xl:block">
             <div className="text-sm leading-tight">{user.fullName}</div>
             <div className="text-xs leading-tight" style={{ color: "var(--text-muted)" }}>
               {user.employeeCode} · {roleLabel}
             </div>
           </div>
 
-          <div className="hidden items-center gap-3 lg:flex">
+          <div className="hidden items-center gap-3 xl:flex">
             <ThemeSwitch />
             <LocaleSwitch />
 
@@ -136,11 +160,11 @@ export function AppNav({ user }: { user: SessionUser }) {
 
           {/* The wrapper is doing real work: `.btn` sets `display` from
               unlayered CSS in globals.css, and an unlayered rule beats a
-              Tailwind utility whatever the breakpoint — `lg:hidden` on the
+              Tailwind utility whatever the breakpoint — `xl:hidden` on the
               button itself is silently ignored, leaving two navigations on
               screen at once. Hiding a plain element around it has no such
               fight to lose. */}
-          <div className="lg:hidden">
+          <div className="xl:hidden">
             <button
               type="button"
               className="btn btn-secondary"
@@ -156,8 +180,8 @@ export function AppNav({ user }: { user: SessionUser }) {
       </div>
 
       {open && (
-        <div id="app-menu" className="border-t lg:hidden">
-          <div className="mx-auto w-full max-w-6xl space-y-3 px-4 py-3 sm:px-6">
+        <div id="app-menu" className="border-t xl:hidden">
+          <div className="mx-auto w-full max-w-[88rem] space-y-3 px-4 py-3 sm:px-6">
             <div>
               <div className="text-sm leading-tight">{user.fullName}</div>
               <div
