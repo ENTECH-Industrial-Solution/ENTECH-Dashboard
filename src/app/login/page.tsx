@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { BrandLockup } from "@/components/brand";
 import { LocaleSwitch } from "@/components/locale-switch";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -24,14 +25,16 @@ export default async function LoginPage({
   return (
     <main className="flex min-h-dvh items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-6">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">{t("app.name")}</h1>
+            <h1 className="text-xl">
+              <BrandLockup product={t("app.product")} />
+            </h1>
             <p className="text-sm" style={{ color: "var(--text-muted)" }}>
               {t("app.tagline")}
             </p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="ms-auto flex items-center justify-end gap-2">
             <ThemeSwitch />
             <LocaleSwitch />
           </div>
