@@ -261,6 +261,22 @@ model FieldTrip {
   latitude     Float?
   longitude    Float?
 
+  /// The place on the customer map this trip goes to, when it is one.
+  ///
+  /// Optional, and it always will be: plenty of trips go somewhere that is not
+  /// a prospect — a supplier, a training day, a site the company already owns.
+  /// The link is what makes "we have been to this pin four times" answerable
+  /// from either end.
+  ///
+  /// SetNull rather than Restrict or Cascade, and both of the others would be
+  /// wrong. A trip is never deleted, so Cascade would let a pin delete history;
+  /// Restrict would make a pin undeletable because somebody once drove there.
+  /// The trip keeps its own locationName and coordinates either way — the link
+  /// is a convenience, not the trip's record of where it went — so losing it
+  /// costs the trip nothing but the cross-reference.
+  pinId String?
+  pin   CustomerPin? @relation("FieldTripPin", fields: [pinId], references: [id], onDelete: SetNull)
+
   /// A pasted Google Maps place link, for when it is more precise than a name
   /// search. Only Google Maps hosts pass validation before this is stored.
   mapUrl String?
@@ -309,6 +325,7 @@ model FieldTrip {
 
   @@index([employeeId, startDate])
   @@index([startDate, endDate])
+  @@index([pinId])
 }
 
 /// Admin-controlled switches for what the task UI shows.
@@ -345,6 +362,34 @@ enum CustomerStatus {
   /// ติดต่อไม่ได้ — nobody picks up. Distinct from NOT_INTERESTED, which is an
   /// answer; this is the absence of one.
   UNREACHABLE
+}
+
+/// How a lead reached us.
+///
+/// A closed set, for the same reason CustomerStatus is one: marketing's
+/// question is "how many came in through each channel this month", and a
+/// free-text field answers it with forty spellings of "อีเมล". The five
+/// ENQUIRY_*/EVENT/REFERRAL values are all *inbound* — somebody came to us —
+/// and FIELD_VISIT is the one that is not; isInboundSource() in
+/// src/lib/customers.ts is the one place that split is expressed.
+///
+/// FIELD_VISIT is the default because it is what every row predating this
+/// column actually was: a pin dropped by somebody standing in the street.
+enum CustomerSource {
+  /// ออกไปเจอเอง — found on a visit, which is what the map was built for.
+  FIELD_VISIT
+  /// อีเมลเข้ามา
+  ENQUIRY_EMAIL
+  /// โทรเข้ามา
+  ENQUIRY_PHONE
+  /// ทัก LINE เข้ามา
+  ENQUIRY_LINE
+  /// กรอกฟอร์ม/เว็บไซต์
+  ENQUIRY_WEB
+  /// เจอกันที่งานอีเวนต์ ออกบูธ สัมมนา
+  EVENT
+  /// มีคนแนะนำต่อ
+  REFERRAL
 }
 
 /// A point on the map, and the customers standing at it.
@@ -389,6 +434,10 @@ model CustomerPin {
   /// deleteTaskAction strikes with TaskEvent.
   customers Customer[]
 
+  /// The trips that went here. SetNull on the other side, so deleting a pin
+  /// unlinks them rather than taking them with it — see FieldTrip.pinId.
+  fieldTrips FieldTrip[] @relation("FieldTripPin")
+
   @@index([latitude, longitude])
 }
 
@@ -406,6 +455,11 @@ model Customer {
   name   String
   status CustomerStatus @default(CONSIDERING)
 
+  /// How this lead reached us. Defaulted rather than required, so every row
+  /// written before the column existed keeps saying what it was — a pin
+  /// dropped in the field.
+  source CustomerSource @default(FIELD_VISIT)
+
   contactName String?
   phone       String?
   email       String?
@@ -418,6 +472,12 @@ model Customer {
   /// did survives them in the audit trail, which is where it belongs.
   ownerId String?
   owner   Employee? @relation("CustomerOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  /// When this lead first reached us, or we first reached them. Nullable, and
+  /// filled in from createdAt at display time: null means nobody said, which
+  /// is not the same as "the day the row was typed" — an enquiry that arrived
+  /// on Monday is often entered on Thursday, and marketing counts the Monday.
+  firstContactedAt DateTime?
 
   /// When somebody last spoke to them. Written by whoever files the update,
   /// not by the system — "we called on Tuesday" is a fact about the world, and
@@ -432,5 +492,6 @@ model Customer {
 
   @@index([pinId])
   @@index([status])
+  @@index([source])
   @@index([ownerId])
 }

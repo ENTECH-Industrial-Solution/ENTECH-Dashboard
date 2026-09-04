@@ -1,9 +1,14 @@
 "use client";
 
-import type { CustomerStatus } from "@prisma/client";
+import type { CustomerSource, CustomerStatus } from "@prisma/client";
 
 import { Alert, FieldError, SubmitButton } from "@/components/ui";
-import { CUSTOMER_STATUSES, CUSTOMER_STATUS_META } from "@/lib/customers";
+import {
+  CUSTOMER_SOURCES,
+  CUSTOMER_SOURCE_META,
+  CUSTOMER_STATUSES,
+  CUSTOMER_STATUS_META,
+} from "@/lib/customers";
 import { useTranslations } from "@/lib/i18n/client";
 
 /**
@@ -29,17 +34,62 @@ export type CustomerRow = {
   id: string;
   name: string;
   status: CustomerStatus;
+  source: CustomerSource;
   contactName: string | null;
   phone: string | null;
   email: string | null;
   lineId: string | null;
   note: string | null;
   /** ISO strings — a Date cannot cross into a client component. */
+  firstContactedAt: string | null;
   lastContactedAt: string | null;
   createdAt: string;
   updatedAt: string;
   owner: { id: string; employeeCode: string; fullName: string } | null;
   createdBy: { employeeCode: string; fullName: string };
+};
+
+/**
+ * One trip that went to this pin, as the panel lists it.
+ *
+ * A much smaller shape than `FieldTripRow`: the panel names the visit, says
+ * when and who, and stops. Everything else about a trip lives on the page that
+ * owns trips.
+ */
+export type PinTripRow = {
+  id: string;
+  purpose: string;
+  /** ISO strings, like every date crossing into a client component. */
+  startDate: string;
+  endDate: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  employee: { employeeCode: string; fullName: string };
+};
+
+/**
+ * One off-site trip, as the map draws it.
+ *
+ * Coordinates are non-null here, unlike `FieldTrip`'s: a trip known only by the
+ * name of a place cannot be put on a map, so those are filtered out before they
+ * reach this type rather than carried as a marker with nowhere to stand.
+ */
+export type MapTripRow = {
+  id: string;
+  purpose: string;
+  locationName: string;
+  latitude: number;
+  longitude: number;
+  /** ISO strings, like every date crossing into a client component. */
+  startDate: string;
+  endDate: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  /** Filled in from OFFICE_HOURS on the server — see lib/calendar.ts. */
+  hours: { start: string; end: string };
+  employee: { employeeCode: string; fullName: string };
 };
 
 export type CustomerPinRow = {
@@ -52,6 +102,8 @@ export type CustomerPinRow = {
   updatedAt: string;
   createdBy: { employeeCode: string; fullName: string };
   customers: CustomerRow[];
+  /** The five most recent visits here, newest first. */
+  fieldTrips: PinTripRow[];
   /**
    * Built on the server by src/lib/maps.ts, and a **link** rather than a frame
    * source — the basemap here is OpenStreetMap, and this is the "open the real
@@ -132,6 +184,32 @@ export function CustomerFields({
         <FieldError message={errors.status} />
       </div>
 
+      {/* Beside the status rather than buried with the contact details: this is
+          the other thing that classifies a lead, and it is the one the
+          marketing counts are read off. Defaulted to the field visit, which is
+          what a pin dropped from the street is. */}
+      <div>
+        <label className="label" htmlFor={`source-${idPrefix}`}>
+          {t("customers.source")}
+        </label>
+        <select
+          id={`source-${idPrefix}`}
+          name="source"
+          className="input"
+          defaultValue={customer?.source ?? "FIELD_VISIT"}
+        >
+          {CUSTOMER_SOURCES.map((source) => (
+            <option key={source} value={source}>
+              {t(CUSTOMER_SOURCE_META[source].label)}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          {t("customers.sourceHint")}
+        </p>
+        <FieldError message={errors.source} />
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className="label" htmlFor={`contactName-${idPrefix}`}>
@@ -210,6 +288,23 @@ export function CustomerFields({
             ))}
           </select>
           <FieldError message={errors.ownerId} />
+        </div>
+
+        <div>
+          <label className="label" htmlFor={`firstContactedAt-${idPrefix}`}>
+            {t("customers.firstContactedAt")}
+          </label>
+          <input
+            id={`firstContactedAt-${idPrefix}`}
+            name="firstContactedAt"
+            type="date"
+            className="input"
+            defaultValue={dateInputValue(customer?.firstContactedAt ?? null)}
+          />
+          <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            {t("customers.firstContactedAtHint")}
+          </p>
+          <FieldError message={errors.firstContactedAt} />
         </div>
 
         <div>

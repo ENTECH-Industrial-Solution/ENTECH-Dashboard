@@ -13,6 +13,7 @@ import {
   getActiveTasks,
   getAssignableEmployees,
   getCompletedTasks,
+  getCustomerPinOptions,
   getFieldTrips,
 } from "@/server/queries";
 
@@ -35,8 +36,13 @@ export default async function AdminTasksPage() {
   ]);
 
   const tripsEnabled = settings["fieldTrip.enabled"];
+  // Both switches have to be on for the pin picker to mean anything: it only
+  // appears on the trip form, and it can only offer places the map holds. The
+  // read is skipped rather than the list hidden, which is what `reads` on
+  // `customer.enabled` claims — see SETTING_IMPACT.
+  const pinsEnabled = tripsEnabled && settings["customer.enabled"];
 
-  const [assignees, active, completed, upcomingTrips, pastTrips] =
+  const [assignees, active, completed, upcomingTrips, pastTrips, pins] =
     await Promise.all([
       getAssignableEmployees(),
       getActiveTasks(admin),
@@ -45,6 +51,7 @@ export default async function AdminTasksPage() {
       tripsEnabled
         ? getFieldTrips({ window: "past", limit: 50 })
         : Promise.resolve([]),
+      pinsEnabled ? getCustomerPinOptions() : Promise.resolve([]),
     ]);
 
   return (
@@ -56,7 +63,11 @@ export default async function AdminTasksPage() {
             {t("app.tagline")}
           </p>
         </div>
-        <TaskCreator assignees={assignees} tripsEnabled={tripsEnabled} />
+        <TaskCreator
+          assignees={assignees}
+          tripsEnabled={tripsEnabled}
+          pins={pins}
+        />
       </header>
 
       <TaskSection title={t("tasks.active")} hint={t("tasks.activeHint")}>
@@ -82,6 +93,7 @@ export default async function AdminTasksPage() {
           upcoming={upcomingTrips.map((trip) => serialiseTrip(trip, locale))}
           past={pastTrips.map((trip) => serialiseTrip(trip, locale))}
           people={assignees}
+          pins={pins}
         />
       )}
 

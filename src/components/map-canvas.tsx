@@ -50,6 +50,17 @@ import {
 
 export type MapPin = {
   id: string;
+  /**
+   * What this marker is.
+   *
+   * A lead is a teardrop and a trip is a disc, and the *shape* is what tells
+   * them apart rather than the colour. The five lead statuses are the only
+   * saturated things on this map by design (see the `clean` basemap style), so
+   * a second palette competing with them would undo that; a trip's four states
+   * borrow the same tones and stay legible because nothing else on the map is
+   * round.
+   */
+  kind: "customer" | "trip";
   latitude: number;
   longitude: number;
   /** A CSS colour — a `var(--…)` token from CUSTOMER_STATUS_META. */
@@ -202,6 +213,18 @@ function labelHtml(id: string, label: MapPinLabel): string {
 function pinHtml(pin: MapPin): string {
   const badge = pin.count > 1 ? `<b class="map-pin-count">${pin.count}</b>` : "";
 
+  if (pin.kind === "trip") {
+    // A disc with a figure in it, sitting *on* the point rather than hanging
+    // above it — a trip is somebody at a place, not a place.
+    return `<span class="map-pin map-pin-trip" style="--pin:${pin.tone}">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="10.6" fill="currentColor"
+                stroke="var(--surface)" stroke-width="1.6" />
+        <circle cx="12" cy="9.4" r="2.9" fill="var(--surface)" />
+        <path d="M6.4 18.4a5.9 5.9 0 0 1 11.2 0Z" fill="var(--surface)" />
+      </svg>${badge}</span>`;
+  }
+
   return `<span class="map-pin" style="--pin:${pin.tone}">
     <svg viewBox="0 0 24 32" aria-hidden="true">
       <path d="M12 31s11-11.5 11-19a11 11 0 1 0-22 0c0 7.5 11 19 11 19Z"
@@ -218,6 +241,7 @@ export function MapCanvas({
   movingId,
   style,
   anchor,
+  initialFocus = null,
   onSelect,
   onPlace,
   onDragEnd,
@@ -237,6 +261,15 @@ export function MapCanvas({
   onPlace: (latitude: number, longitude: number) => void;
   onDragEnd: (id: string, latitude: number, longitude: number) => void;
   /** Called with the controls once the map exists, and with null on teardown. */
+  /**
+   * Where the map should open, when a link asked for somewhere specific.
+   *
+   * It lives here rather than being a `focus()` call from outside because the
+   * first view is this component's to decide: the initial `fit()` happens in a
+   * `requestAnimationFrame` *after* `onControls` publishes, so anything the
+   * caller did on receiving the controls was immediately framed away again.
+   */
+  initialFocus?: { latitude: number; longitude: number } | null;
   onControls: (controls: MapControls | null) => void;
   /** Where `anchor` currently sits in container pixels — tracked live. */
   onAnchorPoint: (point: { x: number; y: number } | null) => void;
@@ -256,6 +289,7 @@ export function MapCanvas({
   const latest = useRef({
     pins,
     placing,
+    initialFocus,
     onSelect,
     onPlace,
     onDragEnd,
@@ -265,6 +299,7 @@ export function MapCanvas({
   latest.current = {
     pins,
     placing,
+    initialFocus,
     onSelect,
     onPlace,
     onDragEnd,
@@ -369,7 +404,14 @@ export function MapCanvas({
       // import started.
       requestAnimationFrame(() => {
         instance.invalidateSize();
-        fit();
+
+        // One pin was asked for, so frame that instead of the whole board.
+        const opening = latest.current.initialFocus;
+        if (opening) {
+          instance.setView([opening.latitude, opening.longitude], 16);
+        } else {
+          fit();
+        }
       });
 
       latest.current.onControls({
@@ -474,13 +516,16 @@ export function MapCanvas({
 
     for (const pin of pins) {
       live.add(pin.id);
+      // A teardrop points at the ground from above it; a disc *is* the point.
+      // So the two anchor differently, and their labels hang from different
+      // heights — a shared anchor would leave one of them floating.
+      const trip = pin.kind === "trip";
       const icon = L.divIcon({
         className: `map-marker${pin.id === selectedId ? " is-selected" : ""}`,
         html: pinHtml(pin),
-        iconSize: [30, 40],
-        iconAnchor: [15, 40],
-        // The label hangs off the *top* of the pin, not off its tip.
-        tooltipAnchor: [0, -40],
+        iconSize: trip ? [26, 26] : [30, 40],
+        iconAnchor: trip ? [13, 13] : [15, 40],
+        tooltipAnchor: trip ? [0, -13] : [0, -40],
       });
 
       const existing = markers.current.get(pin.id);

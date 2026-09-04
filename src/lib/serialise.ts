@@ -67,8 +67,17 @@ export function serialiseCustomerPin(pin: CustomerPinListItem): CustomerPinRow {
       latitude: pin.latitude,
       longitude: pin.longitude,
     }),
+    fieldTrips: pin.fieldTrips.map((trip) => ({
+      ...trip,
+      startDate: trip.startDate.toISOString(),
+      endDate: trip.endDate.toISOString(),
+      startedAt: trip.startedAt?.toISOString() ?? null,
+      completedAt: trip.completedAt?.toISOString() ?? null,
+      cancelledAt: trip.cancelledAt?.toISOString() ?? null,
+    })),
     customers: pin.customers.map((customer) => ({
       ...customer,
+      firstContactedAt: customer.firstContactedAt?.toISOString() ?? null,
       lastContactedAt: customer.lastContactedAt?.toISOString() ?? null,
       createdAt: customer.createdAt.toISOString(),
       updatedAt: customer.updatedAt.toISOString(),

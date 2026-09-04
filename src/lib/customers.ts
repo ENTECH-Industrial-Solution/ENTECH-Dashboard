@@ -1,4 +1,4 @@
-import type { CustomerStatus } from "@prisma/client";
+import type { CustomerSource, CustomerStatus } from "@prisma/client";
 
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
 
@@ -57,6 +57,55 @@ export const CUSTOMER_STATUS_META: Record<
     soft: "var(--surface-muted)",
   },
 };
+
+/**
+ * The seven channels a lead can arrive through, in the order they are offered.
+ *
+ * FIELD_VISIT leads because it is the default and the commonest, and the
+ * inbound ones follow in rough order of how often they happen. Marketing reads
+ * counts off this order, so it is a display order rather than a ranking —
+ * nothing derives a colour or a precedence from it, unlike CUSTOMER_STATUSES.
+ */
+export const CUSTOMER_SOURCES = [
+  "FIELD_VISIT",
+  "ENQUIRY_EMAIL",
+  "ENQUIRY_PHONE",
+  "ENQUIRY_LINE",
+  "ENQUIRY_WEB",
+  "EVENT",
+  "REFERRAL",
+] as const satisfies readonly CustomerSource[];
+
+export const CUSTOMER_SOURCE_META: Record<
+  CustomerSource,
+  { label: TranslationKey }
+> = {
+  FIELD_VISIT: { label: "customers.source.fieldVisit" },
+  ENQUIRY_EMAIL: { label: "customers.source.enquiryEmail" },
+  ENQUIRY_PHONE: { label: "customers.source.enquiryPhone" },
+  ENQUIRY_LINE: { label: "customers.source.enquiryLine" },
+  ENQUIRY_WEB: { label: "customers.source.enquiryWeb" },
+  EVENT: { label: "customers.source.event" },
+  REFERRAL: { label: "customers.source.referral" },
+};
+
+/**
+ * Whether the lead came to us, rather than us going to it.
+ *
+ * The one place that split is expressed, and it is the question the whole
+ * column was added for: "which of these walked in the door". Written as a
+ * negation of the single outbound value on purpose — a new channel is almost
+ * certainly another way of being contacted, so the default for anything added
+ * later is inbound, and forgetting to update a list cannot silently drop it out
+ * of the count.
+ */
+export function isInboundSource(source: CustomerSource): boolean {
+  return source !== "FIELD_VISIT";
+}
+
+export function isCustomerSource(value: string): value is CustomerSource {
+  return (CUSTOMER_SOURCES as readonly string[]).includes(value);
+}
 
 /**
  * Which status a pin holding several customers wears.

@@ -233,6 +233,10 @@ const fieldTripSelect = {
   cancelledReason: true,
   employee: { select: { id: true, employeeCode: true, fullName: true } },
   createdBy: { select: { employeeCode: true, fullName: true } },
+  /// Just enough of the pin to draw a link back to the map. The trip's own
+  /// locationName and coordinates are what it is displayed from — this says
+  /// "and that place is on the board", nothing more.
+  pin: { select: { id: true, label: true } },
 } as const;
 
 export type FieldTripListItem = Awaited<ReturnType<typeof getFieldTrips>>[number];
@@ -767,11 +771,13 @@ const customerSelect = {
   id: true,
   name: true,
   status: true,
+  source: true,
   contactName: true,
   phone: true,
   email: true,
   lineId: true,
   note: true,
+  firstContactedAt: true,
   lastContactedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -802,6 +808,48 @@ export type CustomerListItem = CustomerPinListItem["customers"][number];
  * stops being true; when a pin count approaches it, bounded fetching is the
  * change to make, not a bigger number.
  */
+/**
+ * The pins as a pick list, for attaching a trip to one.
+ *
+ * A separate, much narrower read than `getCustomerPins()` rather than a reuse
+ * of it: /admin/tasks wants a label and four numbers per place, and the full
+ * board would drag every lead, every owner and every trip at every pin into a
+ * page that draws none of them.
+ *
+ * The label falls back the same way the map's panel does — the place name, then
+ * the first customer standing at it, then the coordinates. A pin is allowed to
+ * have no name of its own, and an option reading "—" would be unpickable.
+ */
+export async function getCustomerPinOptions(limit = 500) {
+  const pins = await db.customerPin.findMany({
+    select: {
+      id: true,
+      label: true,
+      address: true,
+      latitude: true,
+      longitude: true,
+      customers: {
+        select: { name: true },
+        orderBy: { createdAt: "asc" },
+        take: 1,
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+
+  return pins.map((pin) => ({
+    id: pin.id,
+    label:
+      pin.label ??
+      pin.customers[0]?.name ??
+      `${pin.latitude.toFixed(4)}, ${pin.longitude.toFixed(4)}`,
+    address: pin.address,
+    latitude: pin.latitude,
+    longitude: pin.longitude,
+  }));
+}
+
 export async function getCustomerPins(limit = 500) {
   return db.customerPin.findMany({
     select: {
@@ -814,6 +862,30 @@ export async function getCustomerPins(limit = 500) {
       updatedAt: true,
       createdBy: { select: { employeeCode: true, fullName: true } },
       customers: { select: customerSelect, orderBy: { createdAt: "asc" } },
+      /*
+       * The visits to this place, newest first.
+       *
+       * Nested in the one query that already fetches the board rather than
+       * fetched when a pin is opened: a join costs this query nothing like a
+       * second round trip through the pooler, and the panel needs them the
+       * moment it opens. Capped at five, because the panel is a few lines of
+       * context beside a map and a pin visited monthly for two years would
+       * otherwise push everything else out of it.
+       */
+      fieldTrips: {
+        select: {
+          id: true,
+          purpose: true,
+          startDate: true,
+          endDate: true,
+          startedAt: true,
+          completedAt: true,
+          cancelledAt: true,
+          employee: { select: { employeeCode: true, fullName: true } },
+        },
+        orderBy: { startDate: "desc" },
+        take: 5,
+      },
     },
     orderBy: { createdAt: "desc" },
     take: limit,

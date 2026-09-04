@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { MiniMap } from "@/components/map-embed";
@@ -44,21 +45,32 @@ export function useMomentFormatter() {
  */
 export type TripState = "SCHEDULED" | "ON_SITE" | "COMPLETED" | "CANCELLED";
 
-export function tripState(trip: FieldTripRow): TripState {
+/**
+ * Takes the three timestamps rather than a whole `FieldTripRow`, so every view
+ * of a trip can call it however much of one it happens to carry — the card has
+ * the full row, the pin panel's visit list and the map's markers have four
+ * fields. There were briefly two copies of this for exactly that reason, which
+ * is one more than a rule about what state something is in may have.
+ */
+export function tripState(trip: {
+  startedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+}): TripState {
   if (trip.cancelledAt) return "CANCELLED";
   if (trip.completedAt) return "COMPLETED";
   if (trip.startedAt) return "ON_SITE";
   return "SCHEDULED";
 }
 
-const TRIP_TONE: Record<TripState, { background: string; color: string }> = {
+export const TRIP_TONE: Record<TripState, { background: string; color: string }> = {
   SCHEDULED: { background: "var(--warning-soft)", color: "var(--warning)" },
   ON_SITE: { background: "var(--brand-soft)", color: "var(--brand)" },
   COMPLETED: { background: "var(--success-soft)", color: "var(--success)" },
   CANCELLED: { background: "var(--danger-soft)", color: "var(--danger)" },
 };
 
-const TRIP_LABEL: Record<TripState, TranslationKey> = {
+export const TRIP_LABEL: Record<TripState, TranslationKey> = {
   SCHEDULED: "trips.away",
   ON_SITE: "trips.onSite",
   COMPLETED: "trips.done",
@@ -122,6 +134,19 @@ export function TripLocation({ trip }: { trip: FieldTripRow }) {
               <PinIcon />
               {t("trips.openMap")}
             </a>
+            {/* Only when the trip is attached to a place on the board. An
+                internal link, unlike the Google one beside it — this one goes
+                to our own map, where the leads at that address are. */}
+            {trip.pin && (
+              <Link
+                href={`/customers?pin=${trip.pin.id}`}
+                className="inline-flex items-center gap-1 text-xs underline"
+                style={{ color: "var(--brand)" }}
+              >
+                <PinIcon />
+                {t("trips.openCustomerPin")}
+              </Link>
+            )}
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>
               {trip.pinned ? t("trips.pinned") : t("trips.searchOnly")}
               {trip.latitude !== null &&

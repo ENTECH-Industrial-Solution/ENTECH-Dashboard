@@ -263,6 +263,13 @@ const fieldTripFields = z.object({
   latitude: optionalCoordinate(90),
   longitude: optionalCoordinate(180),
   mapUrl: googleMapsUrl,
+  /// The customer pin this trip goes to, when it goes to one. Blank is a real
+  /// answer — most trips are not visits to a prospect — so it parses to null
+  /// rather than being rejected, exactly like a lead's ownerId.
+  pinId: z
+    .union([z.string().trim().cuid(), z.literal("")])
+    .nullish()
+    .transform((v) => (isBlank(v) ? null : v)),
   startDate: requiredDate,
   endDate: requiredDate,
   startTime: optionalTime,
@@ -475,6 +482,20 @@ const customerFields = z.object({
   status: z
     .enum(["INTERESTED", "CONSIDERING", "NOT_INTERESTED", "WON", "UNREACHABLE"])
     .default("CONSIDERING"),
+  /// How the lead reached us. Defaults to the outbound case, which is what a
+  /// pin dropped from the street is and what every row predating the column
+  /// was — so an old form posting no `source` still parses to the truth.
+  source: z
+    .enum([
+      "FIELD_VISIT",
+      "ENQUIRY_EMAIL",
+      "ENQUIRY_PHONE",
+      "ENQUIRY_LINE",
+      "ENQUIRY_WEB",
+      "EVENT",
+      "REFERRAL",
+    ])
+    .default("FIELD_VISIT"),
   contactName: optionalText(120),
   phone: optionalText(40),
   email: z
@@ -487,8 +508,9 @@ const customerFields = z.object({
     .union([z.string().trim().cuid(), z.literal("")])
     .nullish()
     .transform((v) => (isBlank(v) ? null : v)),
-  /// When somebody last spoke to them — a fact about the world, typed in, not
-  /// the row's updatedAt.
+  /// When it arrived, and when somebody last spoke to them. Both are facts
+  /// about the world, typed in, rather than the row's own timestamps.
+  firstContactedAt: optionalDate,
   lastContactedAt: optionalDate,
 });
 
