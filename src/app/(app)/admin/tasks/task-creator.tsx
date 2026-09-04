@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 
 import { Alert } from "@/components/ui";
 import { TaskForm, type AssigneeOption } from "@/components/task-form";
-import { TripForm } from "@/components/trip-form";
+import { TripForm, type TripPinOption } from "@/components/trip-form";
 import { useTranslations } from "@/lib/i18n/client";
 import { createFieldTripAction } from "@/server/actions/field-trips";
 import { createTaskAction } from "@/server/actions/tasks";
@@ -25,9 +25,12 @@ type Kind = "task" | "trip";
 export function TaskCreator({
   assignees,
   tripsEnabled,
+  pins = [],
 }: {
   assignees: AssigneeOption[];
   tripsEnabled: boolean;
+  /** Empty when the customer map is switched off — the picker then hides. */
+  pins?: TripPinOption[];
 }) {
   const t = useTranslations();
   const [open, setOpen] = useState(false);
@@ -116,6 +119,7 @@ export function TaskCreator({
               : undefined
           }
           people={assignees}
+          pins={pins}
           submitLabel={t("common.create")}
           onCancel={() => setOpen(false)}
         />

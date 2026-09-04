@@ -500,6 +500,172 @@ outranks `WON`: an office block with one signed customer and one still asking
 questions is somewhere to go back to, and colouring it "done" would hide the
 only reason to drive there. The count badge and the panel's list say the rest.
 
+### Where a lead came from
+
+`CustomerSource` is the second closed set on a lead, and it answers the
+question the map cannot: a coloured dot says *where* somebody is, never how
+many arrived this month or through which channel. Seven values — `FIELD_VISIT`
+and six inbound ones (`ENQUIRY_EMAIL`, `ENQUIRY_PHONE`, `ENQUIRY_LINE`,
+`ENQUIRY_WEB`, `EVENT`, `REFERRAL`) — and closed for the reason
+`CustomerStatus` is: marketing counts these, and free text counts as forty
+spellings of "อีเมล".
+
+`isInboundSource()` is the one place the inbound/outbound split lives, and it
+is written as a negation of the single outbound value on purpose. Any channel
+added later is almost certainly another way of being contacted, so the default
+for a new value is inbound and forgetting to update a list cannot silently drop
+one out of the count.
+
+`FIELD_VISIT` is the default because it is what every row predating the column
+actually was — a pin dropped by somebody standing in the street. There is no
+"unknown" to model, and the migration adds the column `NOT NULL DEFAULT` rather
+than nullable for that reason.
+
+`firstContactedAt` is **nullable and not backfilled**, which is the other half
+of making the counts honest. `createdAt` is the day the row was typed; an
+enquiry that arrived on Monday is routinely entered on Thursday, and marketing
+counts the Monday. Null means nobody said, and the fallback to `createdAt`
+happens at *display* time — where both the panel and the list mark it as the
+recorded date rather than passing it off as the arrival. Backfilling would make
+the two indistinguishable forever. It pairs with `lastContactedAt`, which is
+unchanged and means what it always did.
+
+`/customers/leads` is the list view of the same board, and it renders a
+`PageShell` like every ordinary page — only the map itself is full-bleed. It
+holds no client state at all: the channel and status facets are `searchParams`,
+so every count is a **link** that survives a reload and can be pasted into a
+chat. That costs nothing extra because `getCustomerPins()` already fetches the
+whole board, so the narrowing is an in-memory filter over rows that are already
+here — the same reasoning that keeps the map's own filters in the browser. The
+counts are computed over *every* lead rather than the filtered ones; a count
+that shrank to match its own filter could never be clicked back out of.
+
+It is reached from a button on the map rather than from a seventh nav link —
+`AppNav`'s row is already scrolling — and the nav's prefix match keeps the
+customer entry highlighted while it is open.
+
+### Exporting the leads
+
+`/customers/leads/export` is the **only route handler in the app**, and it
+exists because a download is the one thing a server action cannot do: an action
+returns a value to React, not a response carrying a `Content-Disposition`.
+
+Being under `(app)/` grants it nothing — the layout does not run for a route
+handler, and middleware only ever saw that a cookie existed — so it checks
+`getCurrentUser()` and `customer.enabled` itself, and re-parses both filters
+through the same guards the page uses. Any route handler added later must do
+the same.
+
+CSV rather than a real `.xlsx`, deliberately: Excel, Sheets and Numbers all
+open it by double-click, and the alternative is a dependency that writes zipped
+XML — weight the app would carry forever for formatting nobody asked for. Two
+details are not optional if you touch it:
+
+- **A UTF-8 BOM, and CRLF.** Without the BOM, Excel on Windows reads the file
+  in the system code page and every Thai character becomes mojibake — which is
+  most of this file.
+- **Every cell is quoted, and formula characters are defused.** A value
+  starting `=`, `+`, `-`, `@`, tab or CR is a *formula* to a spreadsheet, and
+  these values were typed by people into a shared board. A lead named
+  `=HYPERLINK(...)` would execute in the reader's Excel, so `csvCell()` prefixes
+  an apostrophe. Quoting everything rather than only what needs it is what stops
+  a comma or a newline in a note breaking a row later.
+
+The export carries the page's current filters, so what somebody sends on is the
+list they were looking at.
+
+### A trip and the place it goes to
+
+`FieldTrip.pinId` links a trip to a pin on the customer map. Optional, and it
+always will be — plenty of trips go somewhere that is not a prospect — but when
+it is set the cross-reference reads from both ends: the trip's card links to
+the map, and the pin's panel lists the visits to that place. "We have been here
+three times and the last one was cancelled" is the thing worth knowing before
+knocking again, and neither view could answer it before.
+
+`onDelete: SetNull`, and both alternatives would be wrong. A trip is never
+deleted, so `Cascade` would let a pin delete history; `Restrict` would make a
+pin undeletable because somebody once drove there. The trip keeps its own
+`locationName` and coordinates regardless — the link is a cross-reference, not
+the trip's record of where it went — so unlinking costs it nothing.
+`deleteCustomerPinAction` still lists the trips it unlinks in its audit row,
+because after it runs nothing else can.
+
+The picker sits on the trip form and **fills the four location fields** when a
+pin is chosen; they stay editable afterwards, since "Building A, 3rd floor" on
+top of a pinned address is a correction rather than a contradiction. That is
+the only reason those fields are controlled inputs. It appears only when
+`fieldTrip.enabled` **and** `customer.enabled` are both on, and
+`getCustomerPinOptions()` — a much narrower read than `getCustomerPins()` — is
+skipped entirely otherwise, which is what `reads` on that switch claims.
+
+The panel's visit list is **read-only on purpose**. A trip is scheduled from
+`/admin/tasks` and run by the person on it; a control here would be a third
+place trips are written from, with none of the guards those carry.
+
+The link out of a trip is `/customers?pin=<id>`, and it **opens that pin** —
+selected, panel up, framed at street level. A link that landed on the whole
+board would leave the reader to find the place again on a map of Thailand,
+which is the same as not linking; the lead list's place column points the same
+way. An id matching no pin falls back to the whole board in silence: that is a
+link to somewhere an admin has since deleted, and the reader did not type the
+URL.
+
+**Where that framing happens is not incidental.** `MapCanvas` does it, inside
+the `requestAnimationFrame` that also calls `invalidateSize()`, choosing
+`initialFocus` *or* `fit()`. The first attempt had `CustomerMap` call
+`controls.focus()` as soon as the controls arrived, and it looked like it did
+nothing — `onControls` publishes synchronously while the initial `fit()` is one
+frame later, so the board was framed straight back over the pin. The first view
+belongs to the component that draws it.
+
+### The off-site layer
+
+The customer map draws **two kinds of marker**: a lead is a teardrop, a trip is
+a disc with a figure in it. The *shape* is what separates them, never the
+colour — the five lead statuses are the only saturated things on this map by
+design (see the `clean` basemap style), and a second palette competing with them
+would undo that. A trip's four states borrow the same tones and stay readable
+because nothing else on the map is round.
+
+It exists because the two features answer halves of one question: the pins say
+where the leads are, the discs say who is out there this week. Neither could
+answer "is anybody already near this one" on its own.
+
+The mechanics worth keeping:
+
+- **One id space, two kinds.** `MapCanvas` reports a click as a bare id — from
+  the marker *and* from the always-on label, which it finds through a
+  `data-pin` attribute — and it has no business knowing this map draws two
+  things. Trip markers are therefore prefixed `trip:`, and `handleSelect`
+  splits on that.
+- **`MapPinLabel` fits a trip unchanged**: the place is where they are, and the
+  single row is the person plus the state. One row, never three — a trip is one
+  person at one place.
+- **Two exclusions, both borrowed from rules that already exist.** Cancelled
+  trips are dropped, exactly as the calendar drops them: they did not happen. A
+  trip with no coordinates is dropped, because `FieldTrip`'s latitude is
+  nullable on purpose — a trip may be known only by the name of a place, and
+  there is nowhere on a map to put one of those. A **completed** trip is *not*
+  dropped: it happened, and its marker says so, which is the "every view of a
+  trip must show its state" rule the calendar earned the hard way.
+- The narrowing to trips that have a point happens **in the page**, so
+  `MapTripRow` can promise non-null numbers instead of making every reader
+  check.
+- `fieldTrip.enabled` skips the read rather than hiding the markers, which is
+  what `reads` in `SETTING_IMPACT` claims. The layer's own chip is a client
+  toggle on top of that: the trips are already here, so hiding them costs
+  nothing.
+- The trip popup is **read-only**, on the same terms as the pin panel's visit
+  list. A trip is scheduled from `/admin/tasks` and run by the person on it; a
+  control here would be a third place trips are written from, with none of the
+  guards those two carry. It links to `/dashboard#trip-<id>` instead.
+
+`tripState()` takes **the three timestamps, not a whole `FieldTripRow`**, so
+every view can call it with however much of a trip it carries. There were
+briefly two copies for exactly that reason, which is one more than a rule about
+what state something is in may have.
+
 **Authorization here is deliberately wider than anywhere else in the app**, and
 it is the one thing to keep straight when adding to
 `src/server/actions/customers.ts`:
@@ -558,6 +724,28 @@ The form's Enter key is handled on the input as well as by the form, because a
 disabled submit button silently suppresses the browser's implicit submission and
 Enter is how most people will run a search.
 
+**Below `lg` the toolbar collapses to its search row.** It carries six rows of
+chrome — the hint, the three basemap styles, five status chips, the channel
+select and the list link, the counts — which on a phone was a 380px card
+covering most of a 500px map: the control panel hid the thing it controls. The
+extra rows now sit behind a chevron.
+
+Three things about that are deliberate and worth keeping:
+
+- The toggle's state is consulted **only below `lg`**. The desktop still draws
+  everything, through `hidden lg:block` rather than through the flag, so there
+  is no state that can leave a wide screen looking wrong.
+- It starts **closed**, not mirroring a media query. Reading one would mean
+  reading it after mount and flashing the wrong state through hydration.
+- **A place search opens it**, and **placing mode never collapses**. The results
+  list, the spinner and the error all live in the hidden half, so a search run
+  from a closed toolbar would look like the button did nothing; and the
+  crosshair's "ปักตรงนี้" is the only way out of that mode other than Escape, so
+  hiding it behind the same toggle would strand whoever opened it.
+
+The `lg:hidden` goes on a **wrapper around** the toggle, never on the `.btn`
+itself — see the Conventions below for why that would hide nothing at all.
+
 The crosshair mode survives for exactly one job: aiming when the point has to
 be exact. It fixes a **sight at the centre of the map** and you move the map
 under it, which on a phone is the difference between "tap exactly there" and
@@ -569,6 +757,24 @@ The search box does two jobs on one line. Typing **filters the pins already on
 the board** — instant and local, because the whole board is already here.
 Pressing Enter **asks the basemap where a place is**, which is a round trip to
 somebody else's service and so is deliberately not on every keystroke.
+
+The local half is `filterPins()`, and its two kinds of filter are questions
+about **different things** — which is easy to miss, because writing them as one
+loop over a pin's customers is the obvious implementation and it silently loses
+data:
+
+- the **text box** asks about a place *or* the people at it, so a pin answers on
+  its own name and address as well as on its leads;
+- the **status chips and the channel select** ask about people, so a pin with no
+  leads has nothing to answer with and drops out whenever one of them is on.
+
+That second rule is what makes "สนใจ" mean *pins holding an interested lead*
+rather than *pins that fail to contradict me*. The first is the one that was
+wrong: the place test started out inside the `customers.some(...)` call, and
+`[].some()` is always false, so **an empty pin could never match anything —
+including its own name**. An empty pin is a state this app deliberately supports
+("this place, I will find out who is in it later"), and a board that cannot find
+one by name has quietly lost it. Keep the place test outside that loop.
 
 `searchPlacesAction` is a read action in the shape `loadWorkloadTasksAction`
 set, and the lookup happens **on the server** for four reasons, any one of which
@@ -1007,6 +1213,23 @@ half a type error. Dates are formatted with `timeZone: "Asia/Bangkok"` pinned.
   *other* properties (`w-full`, `ms-auto`, `grid-cols-*`) work as expected.
   Where a primitive has to be hidden or repositioned responsively, put the
   utility on a plain wrapper around it — `AppNav`'s menu button is the worked
-  example.
+  example. **`.card-link` sets `display: block`**, which is the same trap one
+  step further along: `className="card card-link flex ..."` renders a block, the
+  children stay inline, `truncate` does nothing to an inline box, and a long
+  title runs off the side of a phone. Put the flex on a wrapper *inside* the
+  link — `TaskCalendar`'s day list is the worked example.
+- **`.card` sets no padding.** It is a background, a border and a radius, and
+  nothing else. Every caller passes its own (`card p-4`, `card p-3`); the two
+  that do not (`card table-scroll`) want a table bled to the edges on purpose.
+  A card without a padding utility renders its content flush against its own
+  border.
+- **A grid needs an explicit column count at every width it is used at.** A
+  `grid` with only `lg:grid-cols-3` has no template below `lg`, so its items go
+  into an *implicit* track — and an implicit track is `auto`, whose minimum is
+  the content's min-content width. One wide child (the calendar's seven columns
+  have a min-content width around 480px) then inflates the whole page: 375px of
+  viewport scrolling 530px sideways. Write `grid grid-cols-1 gap-4
+  lg:grid-cols-3`; `grid-cols-1` is `repeat(1, minmax(0, 1fr))`, and that `0`
+  floor is what stops it.
 - Prisma `schema.prisma` carries the invariants as comments — read them before
   changing a model.

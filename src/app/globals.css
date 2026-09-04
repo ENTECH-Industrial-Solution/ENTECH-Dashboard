@@ -515,6 +515,15 @@ button.pill:hover {
   height: 100%;
 }
 
+/*
+ * A trip's marker is a disc centred on its point, so it grows from its middle
+ * rather than from its tip — `.map-pin`'s bottom origin is for a teardrop that
+ * must keep its point still while it scales.
+ */
+.map-pin-trip {
+  transform-origin: 50% 50%;
+}
+
 .map-pin-count {
   position: absolute;
   inset-block-start: -3px;

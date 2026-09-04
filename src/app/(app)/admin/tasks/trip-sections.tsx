@@ -5,7 +5,12 @@ import { useActionState, useEffect, useState } from "react";
 import { CardGrid } from "@/components/card-grid";
 import { Alert } from "@/components/ui";
 import { TripCard } from "@/components/trip-card";
-import { TripForm, type FieldTripRow, type TripPerson } from "@/components/trip-form";
+import {
+  TripForm,
+  type FieldTripRow,
+  type TripPerson,
+  type TripPinOption,
+} from "@/components/trip-form";
 import { useTranslations } from "@/lib/i18n/client";
 import {
   cancelFieldTripAction,
@@ -22,10 +27,12 @@ export function TripSections({
   upcoming,
   past,
   people,
+  pins = [],
 }: {
   upcoming: FieldTripRow[];
   past: FieldTripRow[];
   people: TripPerson[];
+  pins?: TripPinOption[];
 }) {
   const t = useTranslations();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -81,6 +88,7 @@ export function TripSections({
                     : undefined
                 }
                 people={people}
+                pins={pins}
                 trip={trip}
                 submitLabel={t("common.save")}
                 onCancel={() => setEditingId(null)}

@@ -1,7 +1,24 @@
 "use client";
 
+import { useState } from "react";
+
 import { Alert, FieldError, SubmitButton } from "@/components/ui";
 import { useTranslations } from "@/lib/i18n/client";
+
+/**
+ * One place on the customer map, as the trip form offers it.
+ *
+ * Deliberately not the whole `CustomerPinRow`: this form needs a label to show
+ * and the four location values to copy, and taking the full row would drag the
+ * leads standing at the pin into a page that has no use for them.
+ */
+export type TripPinOption = {
+  id: string;
+  label: string;
+  address: string | null;
+  latitude: number;
+  longitude: number;
+};
 
 export type TripPerson = {
   id: string;
@@ -34,6 +51,8 @@ export type FieldTripRow = {
   cancelledReason: string | null;
   employee: { id: string; employeeCode: string; fullName: string };
   createdBy: { employeeCode: string; fullName: string };
+  /** The customer pin this trip goes to, when it goes to one. */
+  pin: { id: string; label: string | null } | null;
   /** Built on the server by src/lib/maps.ts. */
   mapHref: string;
   mapEmbedSrc: string;
@@ -57,6 +76,7 @@ export function TripForm({
   errors,
   formError,
   people,
+  pins = [],
   trip,
   submitLabel,
   onCancel,
@@ -65,12 +85,40 @@ export function TripForm({
   errors: Record<string, string>;
   formError?: string;
   people: TripPerson[];
+  /** Empty when the customer map is switched off, which hides the picker. */
+  pins?: TripPinOption[];
   trip?: FieldTripRow;
   submitLabel: string;
   onCancel: () => void;
 }) {
   const t = useTranslations();
   const id = trip?.id ?? "new";
+
+  /*
+   * The four location fields are controlled from here, and only because of the
+   * pin picker: choosing a place has to be able to fill them in. They stay
+   * editable afterwards — the pin says which prospect this visit is for, and
+   * the trip's own location is still what it is displayed from, so correcting
+   * "Building A, 3rd floor" on top of a pinned address is a normal thing to do
+   * rather than a contradiction.
+   */
+  const [place, setPlace] = useState({
+    locationName: trip?.locationName ?? "",
+    address: trip?.address ?? "",
+    latitude: trip?.latitude === null ? "" : String(trip?.latitude ?? ""),
+    longitude: trip?.longitude === null ? "" : String(trip?.longitude ?? ""),
+  });
+
+  const fillFromPin = (pinId: string) => {
+    const pin = pins.find((option) => option.id === pinId);
+    if (!pin) return;
+    setPlace({
+      locationName: pin.label,
+      address: pin.address ?? "",
+      latitude: String(pin.latitude),
+      longitude: String(pin.longitude),
+    });
+  };
 
   /*
    * The report is offered only on a trip that has filed one. Not rendering it
@@ -191,6 +239,37 @@ export function TripForm({
           </p>
         </div>
 
+        {/* The picker spans both columns: it fills the four fields under it,
+            so it has to read as sitting above them rather than beside one. */}
+        {pins.length > 0 && (
+          <div className="sm:col-span-2">
+            <label className="label" htmlFor={`pinId-${id}`}>
+              {t("trips.customerPin")}{" "}
+              <span style={{ opacity: 0.7 }}>({t("common.optional")})</span>
+            </label>
+            <select
+              id={`pinId-${id}`}
+              name="pinId"
+              className="input"
+              defaultValue={trip?.pin?.id ?? ""}
+              onChange={(event) => fillFromPin(event.target.value)}
+            >
+              {/* Blank is the common case, not a missing answer: most trips do
+                  not go to a prospect at all. */}
+              <option value="">{t("trips.noCustomerPin")}</option>
+              {pins.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              {t("trips.customerPinHint")}
+            </p>
+            <FieldError message={errors.pinId} />
+          </div>
+        )}
+
         <div>
           <label className="label" htmlFor={`locationName-${id}`}>
             {t("trips.location")}
@@ -201,7 +280,10 @@ export function TripForm({
             className="input"
             required
             maxLength={200}
-            defaultValue={trip?.locationName ?? ""}
+            value={place.locationName}
+            onChange={(event) =>
+              setPlace((p) => ({ ...p, locationName: event.target.value }))
+            }
           />
           <FieldError message={errors.locationName} />
         </div>
@@ -216,7 +298,10 @@ export function TripForm({
             name="address"
             className="input"
             maxLength={300}
-            defaultValue={trip?.address ?? ""}
+            value={place.address}
+            onChange={(event) =>
+              setPlace((p) => ({ ...p, address: event.target.value }))
+            }
           />
         </div>
 
@@ -231,7 +316,10 @@ export function TripForm({
             className="input"
             inputMode="decimal"
             placeholder="13.7563"
-            defaultValue={trip?.latitude ?? ""}
+            value={place.latitude}
+            onChange={(event) =>
+              setPlace((p) => ({ ...p, latitude: event.target.value }))
+            }
           />
           <FieldError message={errors.latitude} />
         </div>
@@ -247,7 +335,10 @@ export function TripForm({
             className="input"
             inputMode="decimal"
             placeholder="100.5018"
-            defaultValue={trip?.longitude ?? ""}
+            value={place.longitude}
+            onChange={(event) =>
+              setPlace((p) => ({ ...p, longitude: event.target.value }))
+            }
           />
           <FieldError message={errors.longitude} />
           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>

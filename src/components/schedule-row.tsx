@@ -33,7 +33,18 @@ export async function ScheduleRow({
   const both = showCalendar && showAway;
 
   return (
-    <div className={`grid gap-4 ${both ? "lg:grid-cols-3" : ""}`}>
+    /*
+     * `grid-cols-1` is load-bearing, not a tidy-up.
+     *
+     * A grid with no column template puts its items in an *implicit* track,
+     * and an implicit track is `auto` — whose minimum is the content's
+     * min-content width. The calendar's seven columns have a min-content width
+     * of about 480px, so on a phone that track grew to 480 and took the whole
+     * page with it: 375px of viewport scrolling 530px sideways. `grid-cols-1`
+     * is `repeat(1, minmax(0, 1fr))`, and that 0 floor is what stops a wide
+     * child from inflating the page.
+     */
+    <div className={`grid grid-cols-1 gap-4 ${both ? "lg:grid-cols-3" : ""}`}>
       {showCalendar && (
         <div className={both ? "lg:col-span-2" : undefined}>
           <CalendarSection

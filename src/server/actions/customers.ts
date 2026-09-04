@@ -47,12 +47,14 @@ function revalidateCustomerViews() {
 const CUSTOMER_FIELDS = [
   "name",
   "status",
+  "source",
   "contactName",
   "phone",
   "email",
   "lineId",
   "note",
   "ownerId",
+  "firstContactedAt",
   "lastContactedAt",
 ] as const;
 
@@ -164,6 +166,7 @@ export async function createCustomerPinAction(
             // later through customer.created, with its own entry.
             firstCustomer: name,
             status: name === null ? null : rest.status,
+            source: name === null ? null : rest.source,
             owner: owner.code,
           },
         },
@@ -314,6 +317,12 @@ export async function deleteCustomerPinAction(
       where: { id: pinId },
       include: {
         createdBy: { select: { employeeCode: true, fullName: true } },
+        // Not deleted with the pin — FieldTrip.pinId is SetNull — but the
+        // audit row should say how many cross-references the delete broke,
+        // because after it runs nothing else can.
+        fieldTrips: {
+          select: { id: true, purpose: true, startDate: true },
+        },
         customers: {
           include: {
             owner: { select: { employeeCode: true, fullName: true } },
@@ -340,12 +349,19 @@ export async function deleteCustomerPinAction(
             longitude: pin.longitude,
             createdBy: `${pin.createdBy.employeeCode} — ${pin.createdBy.fullName}`,
             createdAt: pin.createdAt.toISOString(),
+            // The trips survive; only their link to this place does not.
+            unlinkedFieldTrips: pin.fieldTrips.map((trip) => ({
+              id: trip.id,
+              purpose: trip.purpose,
+              startDate: trip.startDate.toISOString(),
+            })),
             // Named field by field rather than spread: a spread would copy
             // whatever the row grows next, and this metadata is rendered on a
             // page in a public repository.
             customers: pin.customers.map((customer) => ({
               name: customer.name,
               status: customer.status,
+              source: customer.source,
               contactName: customer.contactName,
               phone: customer.phone,
               email: customer.email,
@@ -354,6 +370,7 @@ export async function deleteCustomerPinAction(
               owner: customer.owner
                 ? `${customer.owner.employeeCode} — ${customer.owner.fullName}`
                 : null,
+              firstContactedAt: customer.firstContactedAt?.toISOString() ?? null,
               lastContactedAt: customer.lastContactedAt?.toISOString() ?? null,
               createdBy: `${customer.createdBy.employeeCode} — ${customer.createdBy.fullName}`,
               createdAt: customer.createdAt.toISOString(),
@@ -418,6 +435,7 @@ export async function createCustomerAction(
             pinLabel: pin.label,
             name: customer.name,
             status: customer.status,
+            source: customer.source,
             owner: owner.code,
           },
         },
@@ -588,6 +606,7 @@ export async function deleteCustomerAction(
             pinLabel: customer.pin.label,
             name: customer.name,
             status: customer.status,
+            source: customer.source,
             contactName: customer.contactName,
             phone: customer.phone,
             email: customer.email,
@@ -596,6 +615,7 @@ export async function deleteCustomerAction(
             owner: customer.owner
               ? `${customer.owner.employeeCode} — ${customer.owner.fullName}`
               : null,
+            firstContactedAt: customer.firstContactedAt?.toISOString() ?? null,
             lastContactedAt: customer.lastContactedAt?.toISOString() ?? null,
             createdBy: `${customer.createdBy.employeeCode} — ${customer.createdBy.fullName}`,
             createdAt: customer.createdAt.toISOString(),

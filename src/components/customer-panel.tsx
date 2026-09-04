@@ -10,9 +10,16 @@ import {
   type CustomerPerson,
   type CustomerPinRow,
   type CustomerRow,
+  type PinTripRow,
 } from "@/components/customer-form";
+import { TripStatusBadge, tripState } from "@/components/trip-card";
 import { Alert, SubmitButton } from "@/components/ui";
-import { CUSTOMER_STATUSES, CUSTOMER_STATUS_META, byStatusRank } from "@/lib/customers";
+import {
+  CUSTOMER_SOURCE_META,
+  CUSTOMER_STATUSES,
+  CUSTOMER_STATUS_META,
+  byStatusRank,
+} from "@/lib/customers";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
 import {
   createCustomerAction,
@@ -198,6 +205,9 @@ export function CustomerPanel({
           )}
         </section>
 
+        {/* --- who has been here ------------------------------------------- */}
+        {pin.fieldTrips.length > 0 && <VisitList trips={pin.fieldTrips} />}
+
         {/* --- adding another --------------------------------------------- */}
         {adding ? (
           <section className="card space-y-3 p-3">
@@ -247,6 +257,51 @@ export function CustomerPanel({
   );
 }
 
+/**
+ * The trips that went to this place.
+ *
+ * The other end of the link a trip's own card draws back to the map, and the
+ * reason the link is worth having at all: standing on a pin, "we have been
+ * here three times and the last one was cancelled" is the thing you want to
+ * know before knocking again.
+ *
+ * Read-only, deliberately. A trip is scheduled from /admin/tasks and run by
+ * the person on it; putting either control here would be a third place trips
+ * are written from, with none of the guards that page's controls carry.
+ */
+function VisitList({ trips }: { trips: PinTripRow[] }) {
+  const t = useTranslations();
+  const formatDay = useDayFormatter();
+
+  return (
+    <section className="space-y-2">
+      <h3
+        className="text-xs font-semibold uppercase tracking-wide"
+        style={{ color: "var(--text-muted)" }}
+      >
+        {t("customers.visits")} ({trips.length})
+      </h3>
+
+      {trips.map((trip) => (
+        <div key={trip.id} className="card space-y-1 p-3">
+          <div className="flex items-start gap-2">
+            <p className="min-w-0 flex-1 truncate text-sm font-medium">
+              {trip.purpose}
+            </p>
+            <TripStatusBadge state={tripState(trip)} />
+          </div>
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            {formatDay(trip.startDate)}
+            {trip.endDate !== trip.startDate && ` – ${formatDay(trip.endDate)}`}
+            {" · "}
+            {trip.employee.employeeCode} — {trip.employee.fullName}
+          </p>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 /** One lead, with its own status chips. */
 function CustomerEntry({
   customer,
@@ -293,9 +348,21 @@ function CustomerEntry({
         />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{customer.name}</p>
-          <span className="badge" style={{ background: meta.soft, color: meta.tone }}>
-            {t(meta.label)}
-          </span>
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="badge" style={{ background: meta.soft, color: meta.tone }}>
+              {t(meta.label)}
+            </span>
+            {/* Uncoloured, deliberately: the five status colours are the only
+                saturated things on this map and a second palette here would
+                compete with them. The channel is a fact about the lead, not a
+                call to action. */}
+            <span
+              className="badge"
+              style={{ background: "var(--surface-muted)", color: "var(--text-muted)" }}
+            >
+              {t(CUSTOMER_SOURCE_META[customer.source].label)}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -334,6 +401,14 @@ function CustomerEntry({
             customer.owner
               ? `${customer.owner.employeeCode} — ${customer.owner.fullName}`
               : t("customers.unassigned")
+          }
+        />
+        <Row
+          label={t("customers.firstContactedAt")}
+          value={
+            customer.firstContactedAt
+              ? formatDay(customer.firstContactedAt)
+              : `${formatDay(customer.createdAt)} (${t("customers.recordedOn")})`
           }
         />
         <Row

@@ -80,7 +80,9 @@ export function CardGrid({
 
   return (
     <div className="space-y-3">
-      <div ref={grid} className="grid gap-3 lg:grid-cols-2">
+      {/* grid-cols-1 for the reason ScheduleRow states: an implicit track is
+          `auto`, and `auto` lets a wide card inflate the whole page. */}
+      <div ref={grid} className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {collapsed ? items.slice(0, preview) : items}
       </div>
 

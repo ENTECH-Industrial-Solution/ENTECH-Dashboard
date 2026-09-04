@@ -109,7 +109,9 @@ function toneOf(task: CalendarTask, todayKey: string): Tone {
   return task.dayKey < todayKey ? "overdue" : "open";
 }
 
-function groupByDay<T extends { dayKey: string }>(items: T[]): Map<string, T[]> {
+function groupByDay<T extends { dayKey: string }>(
+  items: T[],
+): Map<string, T[]> {
   const byDay = new Map<string, T[]>();
   for (const item of items) {
     const bucket = byDay.get(item.dayKey);
@@ -241,7 +243,9 @@ export function TaskCalendar({
                   }`,
                 }}
               >
-                <span className={isToday ? "font-semibold" : undefined}>{day}</span>
+                <span className={isToday ? "font-semibold" : undefined}>
+                  {day}
+                </span>
 
                 {dots.length > 0 && (
                   <span className="flex flex-wrap items-center justify-center gap-0.5">
@@ -250,7 +254,9 @@ export function TaskCalendar({
                         key={dotIndex}
                         className="h-1.5 w-1.5 rounded-full"
                         style={{
-                          background: isSelected ? "var(--brand-contrast)" : color,
+                          background: isSelected
+                            ? "var(--brand-contrast)"
+                            : color,
                         }}
                       />
                     ))}
@@ -277,7 +283,9 @@ export function TaskCalendar({
       <div className="space-y-2 border-t pt-3">
         {selected === null ? (
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            {nothingThisMonth ? t("calendar.emptyMonth") : t("calendar.pickDay")}
+            {nothingThisMonth
+              ? t("calendar.emptyMonth")
+              : t("calendar.pickDay")}
           </p>
         ) : (
           <>
@@ -286,12 +294,18 @@ export function TaskCalendar({
                 {formatDayKey(selected, locale)}
               </span>
               {dueCount > 0 && (
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <span
+                  className="text-xs"
+                  style={{ color: "var(--text-muted)" }}
+                >
                   {dueCount} {t("calendar.dueCount")}
                 </span>
               )}
               {startCount > 0 && (
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                <span
+                  className="text-xs"
+                  style={{ color: "var(--text-muted)" }}
+                >
                   {startCount} {t("calendar.startCount")}
                 </span>
               )}
@@ -307,97 +321,110 @@ export function TaskCalendar({
                   const tone = TRIP_TONE[trip.state];
 
                   return (
-                  <li key={trip.id}>
-                    <div
-                      className="card flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2"
-                      style={{ background: tone.background }}
-                    >
-                      <span
-                        className="inline-flex items-center gap-1 text-xs"
-                        style={{ color: tone.color }}
+                    <li key={trip.id}>
+                      <div
+                        className="card flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2"
+                        style={{ background: tone.background }}
                       >
-                        <PinIcon />
-                        {t(tone.label)}
-                      </span>
-
-                      <span className="min-w-0 flex-1 truncate text-sm">
-                        {trip.purpose}
-                      </span>
-
-                      <span
-                        className="shrink-0 text-xs tabular-nums"
-                        style={{ color: "var(--text-muted)" }}
-                      >
-                        {trip.hours}
-                      </span>
-
-                      {showAssignee && (
                         <span
-                          className="truncate text-xs"
+                          className="inline-flex items-center gap-1 text-xs"
+                          style={{ color: tone.color }}
+                        >
+                          <PinIcon />
+                          {t(tone.label)}
+                        </span>
+
+                        <span className="min-w-0 flex-1 truncate text-sm">
+                          {trip.purpose}
+                        </span>
+
+                        <span
+                          className="shrink-0 text-xs tabular-nums"
                           style={{ color: "var(--text-muted)" }}
                         >
-                          {trip.personName}
+                          {trip.hours}
                         </span>
-                      )}
 
-                      <a
-                        href={trip.mapHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="truncate text-xs underline"
-                        style={{ color: "var(--brand)" }}
-                      >
-                        {trip.locationName}
-                      </a>
-                    </div>
-                  </li>
+                        {showAssignee && (
+                          <span
+                            className="min-w-0 truncate text-xs"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            {trip.personName}
+                          </span>
+                        )}
+
+                        <a
+                          href={trip.mapHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="truncate text-xs underline"
+                          style={{ color: "var(--brand)" }}
+                        >
+                          {trip.locationName}
+                        </a>
+                      </div>
+                    </li>
                   );
                 })}
 
                 {selectedTasks.map((task) => (
                   <li key={task.id}>
+                    {/*
+                      The row is laid out on a wrapper *inside* the link, not on
+                      the link itself, and that is the Conventions rule in
+                      CLAUDE.md rather than a preference: `.card-link` sets
+                      `display: block` from unlayered CSS, which beats any
+                      Tailwind utility, so a `flex` on this anchor was silently
+                      dead. The children stayed inline, `truncate` does nothing
+                      to an inline box, and a long task title ran 125px past the
+                      right edge of a phone — taking the whole page's horizontal
+                      scroll with it.
+                    */}
                     <Link
                       href={task.href}
-                      className="card card-link flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2"
+                      className="card card-link px-3 py-2"
                       style={{ background: "var(--surface-muted)" }}
                     >
-                      <span
-                        className="font-mono text-xs"
-                        style={{ color: "var(--text-muted)" }}
-                      >
-                        {task.code}
-                      </span>
-                      <span
-                        className="badge shrink-0"
-                        style={
-                          task.kind === "start"
-                            ? {
-                                background: "var(--surface)",
-                                color: "var(--text-muted)",
-                              }
-                            : {
-                                background: "var(--brand-soft)",
-                                color: "var(--brand)",
-                              }
-                        }
-                      >
-                        {task.kind === "start"
-                          ? t("calendar.marksStart")
-                          : t("calendar.marksDue")}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-sm">
-                        {task.title}
-                      </span>
-                      {showAssignee && (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                         <span
-                          className="truncate text-xs"
+                          className="font-mono text-xs"
                           style={{ color: "var(--text-muted)" }}
                         >
-                          {task.assigneeName}
+                          {task.code}
                         </span>
-                      )}
-                      <PriorityBadge priority={task.priority} />
-                      <StatusBadge status={task.status} />
+                        <span
+                          className="badge shrink-0"
+                          style={
+                            task.kind === "start"
+                              ? {
+                                  background: "var(--surface)",
+                                  color: "var(--text-muted)",
+                                }
+                              : {
+                                  background: "var(--brand-soft)",
+                                  color: "var(--brand)",
+                                }
+                          }
+                        >
+                          {task.kind === "start"
+                            ? t("calendar.marksStart")
+                            : t("calendar.marksDue")}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-sm">
+                          {task.title}
+                        </span>
+                        {showAssignee && (
+                          <span
+                            className="min-w-0 truncate text-xs"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            {task.assigneeName}
+                          </span>
+                        )}
+                        <PriorityBadge priority={task.priority} />
+                        <StatusBadge status={task.status} />
+                      </div>
                     </Link>
                   </li>
                 ))}

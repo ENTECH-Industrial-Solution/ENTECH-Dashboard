@@ -57,6 +57,7 @@ const EDITABLE_FIELDS = [
   "latitude",
   "longitude",
   "mapUrl",
+  "pinId",
   "startDate",
   "endDate",
   "startTime",
@@ -65,6 +66,28 @@ const EDITABLE_FIELDS = [
   "completionNote",
   "proofUrl",
 ] as const;
+
+/**
+ * The pin a trip is being attached to, if it is being attached to one.
+ *
+ * The foreign key would refuse a bad id on its own, but a raw FK violation
+ * reaches the browser as runAction's generic message — this turns it into a
+ * sentence that names the field. Returns null both for "not asked for" and for
+ * "not found"; the caller separates them by looking at the input.
+ */
+async function findPin(pinId: string | null) {
+  if (pinId === null) return null;
+  return db.customerPin.findUnique({
+    where: { id: pinId },
+    select: { id: true, label: true },
+  });
+}
+
+const PIN_NOT_FOUND = {
+  status: "error",
+  message: "ไม่พบหมุดนี้บนแผนที่ / That pin is not on the map",
+  fieldErrors: { pinId: "ไม่พบหมุด / Not found" },
+} as const;
 
 /** The message every guard below gives for a trip that is already closed out. */
 const COMPLETED_LOCKED = {
@@ -89,10 +112,15 @@ export async function createFieldTripAction(
       };
     }
 
-    const employee = await db.employee.findUnique({
-      where: { id: parsed.data.employeeId },
-      select: { id: true, isActive: true, employeeCode: true },
-    });
+    // Sent together, so checking the pin costs no wall clock on top of
+    // checking the employee — one round trip's latency for both.
+    const [employee, pin] = await Promise.all([
+      db.employee.findUnique({
+        where: { id: parsed.data.employeeId },
+        select: { id: true, isActive: true, employeeCode: true },
+      }),
+      findPin(parsed.data.pinId),
+    ]);
 
     if (!employee || !employee.isActive) {
       return {
@@ -102,6 +130,8 @@ export async function createFieldTripAction(
         fieldErrors: { employeeId: "ไม่พร้อมใช้งาน / Unavailable" },
       };
     }
+
+    if (parsed.data.pinId !== null && pin === null) return PIN_NOT_FOUND;
 
     await db.$transaction(async (tx) => {
       const trip = await tx.fieldTrip.create({
@@ -119,6 +149,8 @@ export async function createFieldTripAction(
             location: trip.locationName,
             startDate: trip.startDate.toISOString(),
             endDate: trip.endDate.toISOString(),
+            pinId: trip.pinId,
+            pinLabel: pin?.label ?? null,
           },
         },
         tx,
@@ -161,10 +193,13 @@ export async function updateFieldTripAction(
       };
     }
 
-    const employee = await db.employee.findUnique({
-      where: { id: data.employeeId },
-      select: { isActive: true, employeeCode: true },
-    });
+    const [employee, pin] = await Promise.all([
+      db.employee.findUnique({
+        where: { id: data.employeeId },
+        select: { isActive: true, employeeCode: true },
+      }),
+      findPin(data.pinId),
+    ]);
     if (!employee || !employee.isActive) {
       return {
         status: "error",
@@ -173,6 +208,8 @@ export async function updateFieldTripAction(
         fieldErrors: { employeeId: "ไม่พร้อมใช้งาน / Unavailable" },
       };
     }
+
+    if (data.pinId !== null && pin === null) return PIN_NOT_FOUND;
 
     const changes = diffFields(EDITABLE_FIELDS, before, data);
     if (Object.keys(changes).length === 0) return { status: "success" };
@@ -487,6 +524,7 @@ export async function deleteFieldTripAction(
             latitude: trip.latitude,
             longitude: trip.longitude,
             mapUrl: trip.mapUrl,
+            pinId: trip.pinId,
             startDate: trip.startDate.toISOString(),
             endDate: trip.endDate.toISOString(),
             startTime: trip.startTime,
