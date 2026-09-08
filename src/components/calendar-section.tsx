@@ -3,7 +3,6 @@ import {
   type CalendarTask,
   type CalendarTrip,
 } from "@/components/task-calendar";
-import { travellerSummary } from "@/components/trip-card";
 import type { SessionUser } from "@/lib/auth/session";
 import {
   bangkokDayKey,
@@ -19,6 +18,7 @@ import {
 import { getLocale, getTranslations } from "@/lib/i18n/server";
 import { mapsHref } from "@/lib/maps";
 import { getSettings } from "@/lib/settings/server";
+import { travellerSummary } from "@/lib/trips";
 import { getFieldTripsInMonth, getTasksInMonth } from "@/server/queries";
 
 /**

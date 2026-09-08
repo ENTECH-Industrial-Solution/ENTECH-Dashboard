@@ -689,11 +689,20 @@ The mechanics worth keeping:
   people are on the trip** — a pin's rows are separate leads with separate
   statuses, which is what the three-row shape is for, while a trip's travellers
   all share one state, so listing them would repeat the same badge down the
-  label and grow it past the marker it hangs off. `travellerSummary()` in
-  `trip-card.tsx` renders that row as "สมชาย +2", and the popup underneath is
-  where the full list goes. It has one copy for the reason `tripState()` does:
-  the calendar cell, the marker title and the label all summarise the same list,
-  and three implementations is three chances to disagree about who is on a trip.
+  label and grow it past the marker it hangs off. `travellerSummary()` renders
+  that row as "สมชาย +2", and the popup underneath is where the full list goes.
+  It has one copy for the reason `tripState()` does: the calendar cell, the
+  marker title and the label all summarise the same list, and three
+  implementations is three chances to disagree about who is on a trip.
+
+  It lives in **`src/lib/trips.ts` and not beside `tripState()`**, and the
+  reason is the client boundary rather than taste. `trip-card.tsx` is
+  `"use client"`, so everything it exports is a client reference — fine for
+  `tripState()`, which only client components call, but `CalendarSection` is a
+  *server* component and calling a client export from one throws at request
+  time. Nothing catches that: `lint`, `typecheck` and `build` all pass and the
+  page 500s the first time it is opened. If a trip display rule is needed on
+  both sides, it goes in `lib/trips.ts` — the counterpart of `lib/customers.ts`.
 - **Two exclusions, both borrowed from rules that already exist.** Cancelled
   trips are dropped, exactly as the calendar drops them: they did not happen. A
   trip with no coordinates is dropped, because `FieldTrip`'s latitude is

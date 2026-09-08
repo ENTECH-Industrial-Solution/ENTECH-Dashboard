@@ -26,7 +26,6 @@ import {
   TripStatusBadge,
   TRIP_LABEL,
   TRIP_TONE,
-  travellerSummary,
   tripState,
 } from "@/components/trip-card";
 import {
@@ -54,6 +53,7 @@ import {
   dominantStatus,
 } from "@/lib/customers";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
+import { travellerSummary } from "@/lib/trips";
 import { createCustomerPinAction } from "@/server/actions/customers";
 import { searchPlacesAction, type PlaceResult } from "@/server/actions/places";
 import { idleState } from "@/server/actions/types";
