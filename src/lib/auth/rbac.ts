@@ -52,12 +52,16 @@ export function canMutateTask(user: SessionUser, task: { assigneeId: string }): 
  * Deliberately wider than the rest of FieldTrip: scheduling, editing, and
  * cancelling stay admin-only, because the schedule is something an admin plans
  * and other people arrange their week around. Starting and finishing a trip is
- * the opposite — it is the traveller reporting from the field — so the person
+ * the opposite — it is the traveller reporting from the field — so anyone
  * named on the trip may do it as well.
+ *
+ * "Anyone", not "whoever is listed first": a trip's travellers are equals, and
+ * the one who happens to have signal when the job finishes is the one who
+ * should be able to close it out. There is no lead to wait for.
  */
 export function canRunFieldTrip(
   user: SessionUser,
-  trip: { employeeId: string },
+  trip: { travellerIds: readonly string[] },
 ): boolean {
-  return user.role === "ADMIN" || trip.employeeId === user.id;
+  return user.role === "ADMIN" || trip.travellerIds.includes(user.id);
 }

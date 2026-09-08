@@ -48,9 +48,14 @@ function revalidateTripViews() {
  * What an edit may write, and what it is diffed on. Everything a person chose;
  * nothing the system recorded — startedAt, completedAt, cancelledAt and
  * createdAt are the account of when things happened, not data to correct.
+ *
+ * The traveller list is editable too but is absent here on purpose: `diffFields`
+ * compares single values, and a list is not one. It is diffed by hand in
+ * `updateFieldTripAction` and lands in the same `changes` object under
+ * `travellers`, because a change nobody can see in the trail is the one outcome
+ * this design cannot have.
  */
 const EDITABLE_FIELDS = [
-  "employeeId",
   "purpose",
   "locationName",
   "address",
@@ -89,6 +94,72 @@ const PIN_NOT_FOUND = {
   fieldErrors: { pinId: "ไม่พบหมุด / Not found" },
 } as const;
 
+/**
+ * The people a trip is being given to, checked in one query for the whole list.
+ *
+ * One round trip rather than one per person — the same reason everything else
+ * here batches (see CLAUDE.md, "Round trips are the performance budget") — and
+ * it answers both questions at once: is every id real, and is every one of them
+ * still an active account.
+ *
+ * The failure *names the codes*. "Somebody on this list is deactivated" leaves
+ * an admin to work out which by removing people one at a time, and the list is
+ * exactly the thing that can now be long.
+ *
+ * The codes come back sorted, and every audit row below uses them in that
+ * order, so two trips with the same people read the same in the trail.
+ */
+async function checkTravellers(
+  employeeIds: string[],
+): Promise<
+  { ok: true; codes: string[] } | { ok: false; error: ActionState }
+> {
+  const found = await db.employee.findMany({
+    where: { id: { in: employeeIds } },
+    select: { isActive: true, employeeCode: true },
+  });
+
+  const inactive = found
+    .filter((employee) => !employee.isActive)
+    .map((employee) => employee.employeeCode)
+    .sort();
+
+  // Short by any amount means an id matched nothing at all. There is no code to
+  // name for those, so the count is what the message can offer.
+  const missing = employeeIds.length - found.length;
+
+  if (inactive.length > 0 || missing > 0) {
+    const named = inactive.length > 0 ? `: ${inactive.join(", ")}` : "";
+    return {
+      ok: false,
+      error: {
+        status: "error",
+        message: `ไม่สามารถบันทึกให้บัญชีที่ถูกระงับหรือไม่มีอยู่${named} / Cannot schedule for a missing or inactive account${named}`,
+        fieldErrors: { employeeIds: "ไม่พร้อมใช้งาน / Unavailable" },
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    codes: found.map((employee) => employee.employeeCode).sort(),
+  };
+}
+
+/** The staff codes already on a trip, sorted, as every audit row below wants them. */
+function codesOf(trip: {
+  travellers: { employee: { employeeCode: string } }[];
+}): string[] {
+  return trip.travellers.map((t) => t.employee.employeeCode).sort();
+}
+
+/** The ids `canRunFieldTrip` asks for. */
+function travellerIdsOf(trip: {
+  travellers: { employeeId: string }[];
+}): string[] {
+  return trip.travellers.map((t) => t.employeeId);
+}
+
 /** The message every guard below gives for a trip that is already closed out. */
 const COMPLETED_LOCKED = {
   status: "error",
@@ -112,30 +183,29 @@ export async function createFieldTripAction(
       };
     }
 
+    const { employeeIds, ...tripData } = parsed.data;
+
     // Sent together, so checking the pin costs no wall clock on top of
-    // checking the employee — one round trip's latency for both.
-    const [employee, pin] = await Promise.all([
-      db.employee.findUnique({
-        where: { id: parsed.data.employeeId },
-        select: { id: true, isActive: true, employeeCode: true },
-      }),
+    // checking the travellers — one round trip's latency for both.
+    const [travellers, pin] = await Promise.all([
+      checkTravellers(employeeIds),
       findPin(parsed.data.pinId),
     ]);
 
-    if (!employee || !employee.isActive) {
-      return {
-        status: "error",
-        message:
-          "ไม่สามารถบันทึกให้บัญชีที่ถูกระงับ / Cannot schedule for an inactive account",
-        fieldErrors: { employeeId: "ไม่พร้อมใช้งาน / Unavailable" },
-      };
-    }
-
+    if (!travellers.ok) return travellers.error;
     if (parsed.data.pinId !== null && pin === null) return PIN_NOT_FOUND;
 
     await db.$transaction(async (tx) => {
       const trip = await tx.fieldTrip.create({
-        data: { ...parsed.data, createdById: admin.id },
+        data: {
+          ...tripData,
+          createdById: admin.id,
+          // The schema validated the list is non-empty and deduplicated it, so
+          // createMany cannot collide with the join table's composite key.
+          travellers: {
+            createMany: { data: employeeIds.map((employeeId) => ({ employeeId })) },
+          },
+        },
       });
 
       await writeAudit(
@@ -145,7 +215,7 @@ export async function createFieldTripAction(
           entityType: "FieldTrip",
           entityId: trip.id,
           metadata: {
-            employeeCode: employee.employeeCode,
+            employeeCodes: travellers.codes,
             location: trip.locationName,
             startDate: trip.startDate.toISOString(),
             endDate: trip.endDate.toISOString(),
@@ -178,9 +248,19 @@ export async function updateFieldTripAction(
       };
     }
 
-    const { fieldTripId, ...data } = parsed.data;
+    const { fieldTripId, employeeIds, ...data } = parsed.data;
 
-    const before = await db.fieldTrip.findUnique({ where: { id: fieldTripId } });
+    const before = await db.fieldTrip.findUnique({
+      where: { id: fieldTripId },
+      include: {
+        travellers: {
+          select: {
+            employeeId: true,
+            employee: { select: { employeeCode: true } },
+          },
+        },
+      },
+    });
     if (!before) {
       return { status: "error", message: "ไม่พบรายการ / Trip not found" };
     }
@@ -193,29 +273,60 @@ export async function updateFieldTripAction(
       };
     }
 
-    const [employee, pin] = await Promise.all([
-      db.employee.findUnique({
-        where: { id: data.employeeId },
-        select: { isActive: true, employeeCode: true },
-      }),
+    const [travellers, pin] = await Promise.all([
+      checkTravellers(employeeIds),
       findPin(data.pinId),
     ]);
-    if (!employee || !employee.isActive) {
-      return {
-        status: "error",
-        message:
-          "ไม่สามารถบันทึกให้บัญชีที่ถูกระงับ / Cannot schedule for an inactive account",
-        fieldErrors: { employeeId: "ไม่พร้อมใช้งาน / Unavailable" },
-      };
-    }
+    if (!travellers.ok) return travellers.error;
 
     if (data.pinId !== null && pin === null) return PIN_NOT_FOUND;
 
+    /*
+     * The traveller list, diffed by hand because `diffFields` compares single
+     * values. Set comparison rather than a string compare of the two lists: the
+     * ids arrive in whatever order the picker produced them, and reordering the
+     * same three people is not an edit.
+     */
+    const beforeIds = before.travellers.map((t) => t.employeeId);
+    const added = employeeIds.filter((id) => !beforeIds.includes(id));
+    const removed = beforeIds.filter((id) => !employeeIds.includes(id));
+
     const changes = diffFields(EDITABLE_FIELDS, before, data);
+    if (added.length > 0 || removed.length > 0) {
+      // Codes, not ids, and joined into a string because FieldDiff carries
+      // `string | null`. This is what the audit page renders, and "ENT-0002,
+      // ENT-0007 -> ENT-0002" is the sentence somebody reading the trail needs.
+      changes.travellers = {
+        from: before.travellers
+          .map((t) => t.employee.employeeCode)
+          .sort()
+          .join(", "),
+        to: travellers.codes.join(", "),
+      };
+    }
     if (Object.keys(changes).length === 0) return { status: "success" };
 
     await db.$transaction(async (tx) => {
-      await tx.fieldTrip.update({ where: { id: fieldTripId }, data });
+      await tx.fieldTrip.update({
+        where: { id: fieldTripId },
+        data: {
+          ...data,
+          // Only the difference is written. The two sets are disjoint by
+          // construction, so it does not matter which of the two Prisma runs
+          // first, and a person who stayed on the trip keeps their row rather
+          // than being deleted and recreated on every unrelated edit.
+          ...(added.length > 0 || removed.length > 0
+            ? {
+                travellers: {
+                  deleteMany: { employeeId: { in: removed } },
+                  createMany: {
+                    data: added.map((employeeId) => ({ employeeId })),
+                  },
+                },
+              }
+            : {}),
+        },
+      });
 
       await writeAudit(
         {
@@ -224,7 +335,7 @@ export async function updateFieldTripAction(
           entityType: "FieldTrip",
           entityId: fieldTripId,
           metadata: {
-            employeeCode: employee.employeeCode,
+            employeeCodes: travellers.codes,
             location: before.locationName,
             // Worth its own key rather than being inferred from the timestamps:
             // "this edit touched a finished trip" is what someone auditing the
@@ -267,7 +378,7 @@ export async function cancelFieldTripAction(
         locationName: true,
         cancelledAt: true,
         completedAt: true,
-        employee: { select: { employeeCode: true } },
+        travellers: { select: { employee: { select: { employeeCode: true } } } },
       },
     });
     if (!trip) return { status: "error", message: "ไม่พบรายการ / Trip not found" };
@@ -290,7 +401,7 @@ export async function cancelFieldTripAction(
           entityType: "FieldTrip",
           entityId: fieldTripId,
           metadata: {
-            employeeCode: trip.employee.employeeCode,
+            employeeCodes: codesOf(trip),
             location: trip.locationName,
             reason,
           },
@@ -310,13 +421,16 @@ export async function cancelFieldTripAction(
  */
 const runnableTripSelect = {
   id: true,
-  employeeId: true,
   locationName: true,
   purpose: true,
   startedAt: true,
   completedAt: true,
   cancelledAt: true,
-  employee: { select: { employeeCode: true } },
+  /// Both halves of a traveller: the id is what decides whether the caller may
+  /// run this trip, the code is what the audit row records.
+  travellers: {
+    select: { employeeId: true, employee: { select: { employeeCode: true } } },
+  },
 } as const;
 
 export async function startFieldTripAction(
@@ -338,7 +452,7 @@ export async function startFieldTripAction(
     });
     if (!trip) return { status: "error", message: "ไม่พบรายการ / Trip not found" };
 
-    if (!canRunFieldTrip(user, trip)) {
+    if (!canRunFieldTrip(user, { travellerIds: travellerIdsOf(trip) })) {
       return {
         status: "error",
         message: "ไม่มีสิทธิ์แก้ไขรายการนี้ / Not authorized for this trip",
@@ -372,7 +486,7 @@ export async function startFieldTripAction(
           entityType: "FieldTrip",
           entityId: trip.id,
           metadata: {
-            employeeCode: trip.employee.employeeCode,
+            employeeCodes: codesOf(trip),
             location: trip.locationName,
             startedAt: startedAt.toISOString(),
           },
@@ -411,7 +525,7 @@ export async function completeFieldTripAction(
     });
     if (!trip) return { status: "error", message: "ไม่พบรายการ / Trip not found" };
 
-    if (!canRunFieldTrip(user, trip)) {
+    if (!canRunFieldTrip(user, { travellerIds: travellerIdsOf(trip) })) {
       return {
         status: "error",
         message: "ไม่มีสิทธิ์แก้ไขรายการนี้ / Not authorized for this trip",
@@ -449,7 +563,7 @@ export async function completeFieldTripAction(
           entityType: "FieldTrip",
           entityId: trip.id,
           metadata: {
-            employeeCode: trip.employee.employeeCode,
+            employeeCodes: codesOf(trip),
             purpose: trip.purpose,
             location: trip.locationName,
             completedAt: completedAt.toISOString(),
@@ -476,8 +590,10 @@ export async function completeFieldTripAction(
  * says; it removes the row and leaves an audit entry that says so, by name,
  * with a reason and a copy of everything the row held.
  *
- * FieldTrip owns no child rows, so nothing cascades — the snapshot is simply
- * the trip.
+ * FieldTrip owns one set of child rows, its travellers, and they are
+ * `onDelete: Cascade` — so they go with it and the snapshot has to carry them.
+ * A surviving row saying a trip to Rayong was deleted, without saying who was
+ * going on it, is the version of this audit entry the app should not have.
  */
 export async function deleteFieldTripAction(
   _prev: ActionState,
@@ -500,7 +616,10 @@ export async function deleteFieldTripAction(
     const trip = await db.fieldTrip.findUnique({
       where: { id: fieldTripId },
       include: {
-        employee: { select: { employeeCode: true, fullName: true } },
+        travellers: {
+          select: { employee: { select: { employeeCode: true, fullName: true } } },
+          orderBy: { employee: { employeeCode: "asc" } },
+        },
         createdBy: { select: { employeeCode: true, fullName: true } },
       },
     });
@@ -517,7 +636,9 @@ export async function deleteFieldTripAction(
           metadata: {
             reason,
             purpose: trip.purpose,
-            employee: `${trip.employee.employeeCode} — ${trip.employee.fullName}`,
+            travellers: trip.travellers.map(
+              (t) => `${t.employee.employeeCode} — ${t.employee.fullName}`,
+            ),
             createdBy: `${trip.createdBy.employeeCode} — ${trip.createdBy.fullName}`,
             locationName: trip.locationName,
             address: trip.address,

@@ -65,7 +65,8 @@ export type PinTripRow = {
   startedAt: string | null;
   completedAt: string | null;
   cancelledAt: string | null;
-  employee: { employeeCode: string; fullName: string };
+  /** Everyone who went. The panel lists their names — see VisitList. */
+  travellers: { employeeCode: string; fullName: string }[];
 };
 
 /**
@@ -89,7 +90,8 @@ export type MapTripRow = {
   cancelledAt: string | null;
   /** Filled in from OFFICE_HOURS on the server — see lib/calendar.ts. */
   hours: { start: string; end: string };
-  employee: { employeeCode: string; fullName: string };
+  /** Everyone on the trip. The marker's label summarises it, the popup lists it. */
+  travellers: { employeeCode: string; fullName: string }[];
 };
 
 export type CustomerPinRow = {

@@ -26,6 +26,7 @@ import {
   TripStatusBadge,
   TRIP_LABEL,
   TRIP_TONE,
+  travellerSummary,
   tripState,
 } from "@/components/trip-card";
 import {
@@ -330,12 +331,18 @@ export function CustomerMap({
           longitude: trip.longitude,
           tone: TRIP_TONE[state].color,
           count: 1,
-          title: `${trip.employee.fullName} — ${trip.locationName}`,
+          title: `${travellerSummary(trip.travellers)} — ${trip.locationName}`,
           label: {
             place: trip.locationName,
+            /* Still one row, even with four people on the trip. A pin's rows
+               are separate leads with separate statuses, which is what the
+               three-row shape is for; a trip's travellers share one state, so
+               listing them would repeat the same badge down the label and grow
+               it past the marker it is attached to. The summary carries the
+               "+2" that says this is a team, and the popup below lists them. */
             rows: [
               {
-                name: trip.employee.fullName,
+                name: travellerSummary(trip.travellers),
                 status: t(TRIP_LABEL[state]),
                 tone: TRIP_TONE[state].color,
               },
@@ -1217,11 +1224,13 @@ function TripPanel({
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-start gap-2 border-b px-4 py-3">
         <div className="min-w-0 flex-1">
+          {/* The popup has the room the label does not, so the codes below are
+              the whole list rather than a summary of it. */}
           <h2 className="truncate text-sm font-semibold">
-            {trip.employee.fullName}
+            {travellerSummary(trip.travellers)}
           </h2>
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-            {trip.employee.employeeCode}
+            {trip.travellers.map((person) => person.employeeCode).join(", ")}
           </p>
         </div>
         <TripStatusBadge state={state} />

@@ -95,10 +95,10 @@ export default async function CustomersPage({
                 // Resolved on the server, so "nobody said" becomes the office
                 // hours in one place rather than in every view.
                 hours: tripHours(trip),
-                employee: {
-                  employeeCode: trip.employee.employeeCode,
-                  fullName: trip.employee.fullName,
-                },
+                travellers: trip.travellers.map((person) => ({
+                  employeeCode: person.employeeCode,
+                  fullName: person.fullName,
+                })),
               },
             ],
       )}

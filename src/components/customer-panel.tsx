@@ -294,7 +294,7 @@ function VisitList({ trips }: { trips: PinTripRow[] }) {
             {formatDay(trip.startDate)}
             {trip.endDate !== trip.startDate && ` – ${formatDay(trip.endDate)}`}
             {" · "}
-            {trip.employee.employeeCode} — {trip.employee.fullName}
+            {trip.travellers.map((person) => person.fullName).join(", ")}
           </p>
         </div>
       ))}

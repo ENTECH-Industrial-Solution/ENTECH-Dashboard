@@ -63,6 +63,27 @@ export function tripState(trip: {
   return "SCHEDULED";
 }
 
+/**
+ * A trip's travellers as one short line: the first name, and how many more.
+ *
+ * The views that draw a trip small — a calendar cell, a map marker's label,
+ * the tooltip on it — have room for one name. A list truncated mid-name says
+ * less than a count does, and "+2" is the part that tells you this is a team
+ * going somewhere rather than a person. The full list belongs on the card and
+ * in the map popup, which have the room to draw it.
+ *
+ * One copy, for the reason `tripState` has one: three views summarising the
+ * same list three slightly different ways is three chances to disagree about
+ * who is on a trip.
+ */
+export function travellerSummary(
+  travellers: readonly { fullName: string }[],
+): string {
+  const [first, ...rest] = travellers;
+  if (!first) return "";
+  return rest.length > 0 ? `${first.fullName} +${rest.length}` : first.fullName;
+}
+
 export const TRIP_TONE: Record<TripState, { background: string; color: string }> = {
   SCHEDULED: { background: "var(--warning-soft)", color: "var(--warning)" },
   ON_SITE: { background: "var(--brand-soft)", color: "var(--brand)" },
@@ -533,8 +554,15 @@ export function TripCard({
           >
             {trip.purpose}
           </h3>
+          {/* The full list, not the summary the calendar and the map use: the
+              card is the view with room for it, and "who else is going" is
+              exactly what somebody opens a trip to find out. Wraps rather than
+              truncating — on a phone this is the line that tells four people
+              they are on the same job. */}
           <div className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-            {trip.employee.employeeCode} — {trip.employee.fullName}
+            {trip.travellers
+              .map((person) => `${person.employeeCode} — ${person.fullName}`)
+              .join(", ")}
           </div>
         </div>
 

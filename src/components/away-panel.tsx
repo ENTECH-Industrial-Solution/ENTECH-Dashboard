@@ -134,7 +134,7 @@ export async function AwayPanel({
 }
 
 type PersonTrips = {
-  employee: FieldTripListItem["employee"];
+  employee: FieldTripListItem["travellers"][number];
   trips: FieldTripListItem[];
 };
 
@@ -142,22 +142,32 @@ type PersonTrips = {
  * One box per person, in the order their first trip appears — the list arrives
  * sorted by start date, so the soonest name stays leftmost, which is where the
  * row opens.
+ *
+ * A trip with several travellers lands in *every* one of their boxes. This
+ * panel answers "where is everyone right now", and a shared trip is a true
+ * answer for each person on it; showing it once under whoever happened to be
+ * listed first would leave the others looking like they were in the office.
+ * That is also why the count on a group heading still counts trips rather than
+ * boxes — it is the number the calendar and the summary strip put on the same
+ * group, and it must not drift from them.
  */
 function byPerson(trips: FieldTripListItem[]): PersonTrips[] {
   const order: PersonTrips[] = [];
   const seen = new Map<string, PersonTrips>();
 
   for (const trip of trips) {
-    const found = seen.get(trip.employee.id);
+    for (const traveller of trip.travellers) {
+      const found = seen.get(traveller.id);
 
-    if (found) {
-      found.trips.push(trip);
-      continue;
+      if (found) {
+        found.trips.push(trip);
+        continue;
+      }
+
+      const entry: PersonTrips = { employee: traveller, trips: [trip] };
+      seen.set(traveller.id, entry);
+      order.push(entry);
     }
-
-    const entry: PersonTrips = { employee: trip.employee, trips: [trip] };
-    seen.set(trip.employee.id, entry);
-    order.push(entry);
   }
 
   return order;
@@ -254,10 +264,19 @@ async function Group({
                 <TripEvidence trip={row} />
 
                 {/* Decided here, on the server, from the session — the buttons
-                    are a reflection of the rule, never the thing enforcing it. */}
+                    are a reflection of the rule, never the thing enforcing it.
+
+                    Asked of the *trip's* travellers, not of the person whose
+                    box this is. A shared trip appears in several boxes, and the
+                    viewer may run it from any of them if they are on it — using
+                    the box's owner would have shown the button in the viewer's
+                    own box and hidden it in their colleague's, on one trip they
+                    are equally entitled to close out. */}
                 <TripActions
                   trip={row}
-                  canRun={canRunFieldTrip(user, { employeeId: employee.id })}
+                  canRun={canRunFieldTrip(user, {
+                    travellerIds: trip.travellers.map((person) => person.id),
+                  })}
                 />
               </div>
             );
