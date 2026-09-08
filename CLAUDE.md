@@ -317,6 +317,10 @@ included, which is not a hole in the completed lock. That lock stops a finished
 trip being rewritten or made to look cancelled — both ways of changing what the
 record *says*. A delete does not change what it says; it removes the row and
 leaves an entry stating so, with a reason and a copy of everything the row held.
+"Everything" now includes its travellers: `FieldTripTraveller.fieldTripId` is
+`onDelete: Cascade`, so those rows go with the trip, and an entry saying a trip
+to Rayong was deleted without saying who was going on it is the version of this
+the app should not have.
 
 `TaskEvent.taskId` is `onDelete: Cascade`, so the task's whole trail dies with
 it. That is why the action snapshots the entire task **and every one of its
@@ -342,13 +346,37 @@ anyone signed in — the schedule exists so the team can see who is out, so
 `getFieldTrips()` takes no `SessionUser` and narrows by nothing but an optional
 `employeeId`.
 
+**A trip carries any number of travellers, and they are equals.** They live in
+`FieldTripTraveller`, a pure pairing table whose whole row is its primary key,
+and there is deliberately no lead traveller: any of them may start and complete
+the trip, it appears on every one of their dashboards and in every one of their
+`AwayPanel` boxes, and it counts once toward each of their summary numbers. A
+trip with nobody on it is not a state the app creates — `createFieldTripSchema`
+demands at least one — but the database cannot say so, so that rule lives in
+`validation.ts`.
+
+That list reaches the server as **one comma-separated `employeeIds` field**, not
+a repeated input, and it has to: `formDataToObject` builds its object with
+`obj[key] = value` in a loop, so a repeated name silently collapses to whichever
+came last and a three-person trip would save as one person with no error
+anywhere. `travellerIds` in `validation.ts` splits and deduplicates it.
+
+The one place this shape is easy to get wrong is the **aggregate SQL**, and the
+two reads want opposite things. `travellerScopeSql` uses `EXISTS`, because
+joining would multiply a trip by the number of people on it and a three-person
+trip would add three to the company-wide "active" count an admin sees — a count
+of pairings rather than of work. `getEmployeeWorkloads()` *does* join, because
+it wants exactly one row per (trip, person): a trip three people are on is three
+people's work and belongs in all three frames. Keep them opposite.
+
 Writing splits in two (`src/server/actions/field-trips.ts`). **Scheduling** —
 create, update, cancel — is admin-only, because the schedule is something an
 admin plans and other people arrange their week around. **Running** a trip is
 not: `startFieldTripAction` and `completeFieldTripAction` are the traveller
 reporting from the field, so they go through `assertUser()` +
-`canRunFieldTrip()` (admin, or the person named on the trip) instead of
-`assertAdmin()`. That is the only widening, and it is the reason the buttons
+`canRunFieldTrip()` (admin, or *anyone* on the trip — the person who happens to
+have signal when the job finishes is the one who should be able to close it out)
+instead of `assertAdmin()`. That is the only widening, and it is the reason the buttons
 appear in `AwayPanel` on the dashboard — `/admin/tasks` is admin-only, so it is
 the only view of a trip an employee has.
 
@@ -372,6 +400,15 @@ including its report, and writes a `diffFields()` before/after plus an
 it never happened, so there is nothing about it to correct. There is no reopen
 path for either; do not add one without the reason-and-audit shape
 `reopenTaskAction` uses.
+
+The traveller list is editable too, and it is **absent from `EDITABLE_FIELDS` on
+purpose**: `diffFields()` compares single values and a list is not one. It is
+diffed by hand in `updateFieldTripAction` — compared as a set, so reordering the
+same people is not an edit — and written into the same `changes` object under
+`travellers` as joined staff codes. If you make some other list editable, do the
+same rather than leaving it out: the rule that an edit nobody can see in the
+trail is unacceptable does not have an exception for the fields `diffFields`
+cannot express.
 
 `TripActions` is the single row of controls a trip carries, shared by the card
 and the off-site panel. One row, not two: splitting "what the traveller does"
@@ -451,6 +488,14 @@ and the rest wait beside it. Someone with two trips on the same day gets one
 box holding both — the question this panel answers is about people. The count
 on the group heading still counts *trips*, because that is the number the
 calendar and the summary strip put on the same group.
+
+The corollary of a trip having several travellers is that **one trip appears in
+several boxes**, once under each person on it. That is the right answer to "who
+is out right now": drawing a shared trip once, under whoever sorted first, would
+leave the others looking like they were at their desks. It is also why `canRun`
+on those buttons is asked of the *trip's* traveller list and not of the person
+whose box it is — otherwise the same trip would offer the viewer a button in
+their own box and withhold it in a colleague's.
 
 `SlideRow` is that row, and it draws no bar (`scroll-bare`, as the panel's own
 scroll already does). Two things replace it. `.slide-card` sizes a box at 85%
@@ -640,8 +685,24 @@ The mechanics worth keeping:
   things. Trip markers are therefore prefixed `trip:`, and `handleSelect`
   splits on that.
 - **`MapPinLabel` fits a trip unchanged**: the place is where they are, and the
-  single row is the person plus the state. One row, never three — a trip is one
-  person at one place.
+  single row is who is there plus the state. **Still one row even when several
+  people are on the trip** — a pin's rows are separate leads with separate
+  statuses, which is what the three-row shape is for, while a trip's travellers
+  all share one state, so listing them would repeat the same badge down the
+  label and grow it past the marker it hangs off. `travellerSummary()` renders
+  that row as "สมชาย +2", and the popup underneath is where the full list goes.
+  It has one copy for the reason `tripState()` does: the calendar cell, the
+  marker title and the label all summarise the same list, and three
+  implementations is three chances to disagree about who is on a trip.
+
+  It lives in **`src/lib/trips.ts` and not beside `tripState()`**, and the
+  reason is the client boundary rather than taste. `trip-card.tsx` is
+  `"use client"`, so everything it exports is a client reference — fine for
+  `tripState()`, which only client components call, but `CalendarSection` is a
+  *server* component and calling a client export from one throws at request
+  time. Nothing catches that: `lint`, `typecheck` and `build` all pass and the
+  page 500s the first time it is opened. If a trip display rule is needed on
+  both sides, it goes in `lib/trips.ts` — the counterpart of `lib/customers.ts`.
 - **Two exclusions, both borrowed from rules that already exist.** Cancelled
   trips are dropped, exactly as the calendar drops them: they did not happen. A
   trip with no coordinates is dropped, because `FieldTrip`'s latitude is
@@ -1196,6 +1257,47 @@ switching never changes the URL. Two entry points: `getTranslations()` for serve
 components, `useTranslations()` for client components. Adding a UI string means
 adding a key with both `th` and `en` — the `satisfies` constraint makes a missing
 half a type error. Dates are formatted with `timeZone: "Asia/Bangkok"` pinned.
+
+## Workflow
+
+Pushing to `main` deploys to production and merges are squashed, so one merged PR is one
+release. Work on a branch and open a PR.
+
+### Before writing code
+
+- Name the verification first - which of `lint`, `typecheck`, `build`, or a manual pass
+  in the browser will show this works. If none of them can, say so before starting,
+  not after.
+- State what is in scope and what is not. Anything found along the way that is out of
+  scope gets reported, not fixed in the same PR.
+- For a schema change, read the invariant comments in `schema.prisma` first and say
+  which of them the change touches.
+
+### Before claiming it works
+
+There is no test suite, so verification is these, actually run:
+
+```bash
+npm run lint
+npm run typecheck
+npm run build   # needs DATABASE_URL and SESSION_SECRET; dummy values are fine
+```
+
+- **Run them, do not predict them.** "This should typecheck" is not a result. Report
+  what the command printed.
+- A UI change also needs `npm run dev` and a look at the real page at 375px and at
+  desktop width. Both layout traps in Conventions compile clean and break only on a
+  phone - a dead utility on an unlayered primitive, and a grid with no `grid-cols-1`.
+- If a check fails and the fix is out of scope, stop and report. Do not ship red.
+
+### Shipping
+
+- Write the PR body with the `pr-description` skill rather than by hand, so the tier
+  and the bilingual format stay consistent across releases.
+- The project is past 1.0, so versions follow plain semver: a breaking change is a
+  major, not a minor.
+- A schema change ships with its migration - `db:migrate` in dev, `db:deploy` in CI.
+  Never ship the result of `db:push`; it leaves no migration behind for production.
 
 ## Conventions
 

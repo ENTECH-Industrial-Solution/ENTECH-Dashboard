@@ -69,6 +69,9 @@ export function serialiseCustomerPin(pin: CustomerPinListItem): CustomerPinRow {
     }),
     fieldTrips: pin.fieldTrips.map((trip) => ({
       ...trip,
+      // Same flattening getFieldTrips does: the panel wants the people, not the
+      // pairing rows they arrived in.
+      travellers: trip.travellers.map((t) => t.employee),
       startDate: trip.startDate.toISOString(),
       endDate: trip.endDate.toISOString(),
       startedAt: trip.startedAt?.toISOString() ?? null,

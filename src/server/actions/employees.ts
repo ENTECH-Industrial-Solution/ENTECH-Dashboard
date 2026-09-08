@@ -363,7 +363,7 @@ export async function deleteEmployeeAction(
           select: {
             assignedTasks: true,
             createdTasks: true,
-            fieldTrips: true,
+            tripsTravelled: true,
             createdFieldTrips: true,
             createdCustomerPins: true,
             createdCustomers: true,
@@ -393,7 +393,10 @@ export async function deleteEmployeeAction(
     const held =
       employee._count.assignedTasks +
       employee._count.createdTasks +
-      employee._count.fieldTrips +
+      // One row per trip this person is on. A shared trip pins every one of its
+      // travellers' accounts, which is the same rule as before — the trip is
+      // still that person's history whoever else was in the van.
+      employee._count.tripsTravelled +
       employee._count.createdFieldTrips +
       // Pins and leads this person filed. Counted here for the same reason
       // tasks are: both foreign keys are Restrict, so the delete would be

@@ -96,13 +96,19 @@ model Employee {
   createdBy        Employee?  @relation("EmployeeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdEmployees Employee[] @relation("EmployeeCreatedBy")
 
-  sessions          Session[]
-  assignedTasks     Task[]      @relation("TaskAssignee")
-  createdTasks      Task[]      @relation("TaskCreator")
-  fieldTrips        FieldTrip[] @relation("FieldTripTraveller")
-  createdFieldTrips FieldTrip[] @relation("FieldTripCreator")
-  taskEvents        TaskEvent[]
-  auditLogs         AuditLog[]
+  sessions      Session[]
+  assignedTasks Task[]     @relation("TaskAssignee")
+  createdTasks  Task[]     @relation("TaskCreator")
+
+  /// Trips this person is going on, through the join table — a trip carries any
+  /// number of travellers and none of them outranks another. Restrict on that
+  /// side, so a trip somebody went on keeps their account alive exactly as an
+  /// assigned task does; deleteEmployeeAction counts it.
+  tripsTravelled    FieldTripTraveller[] @relation("FieldTripTraveller")
+  createdFieldTrips FieldTrip[]          @relation("FieldTripCreator")
+
+  taskEvents TaskEvent[]
+  auditLogs  AuditLog[]
 
   /// The two Restrict sides are counted by deleteEmployeeAction, so a pin or a
   /// lead somebody filed keeps their account alive exactly as a task does.
@@ -252,8 +258,16 @@ model Counter {
 model FieldTrip {
   id String @id @default(cuid())
 
-  employeeId String
-  employee   Employee @relation("FieldTripTraveller", fields: [employeeId], references: [id], onDelete: Restrict)
+  /// Everyone going on this trip, and they are equals — there is no lead
+  /// traveller to be the "real" one. Any of them may start and complete the
+  /// trip (canRunFieldTrip), it appears on every one of their dashboards, and
+  /// it counts once toward each of their summary numbers.
+  ///
+  /// A trip with an empty list is not a state the application creates:
+  /// createFieldTripSchema demands at least one, because a trip nobody is on
+  /// is not a plan. The database cannot express that constraint, so it lives
+  /// in validation.ts.
+  travellers FieldTripTraveller[]
 
   purpose      String
   locationName String
@@ -323,9 +337,29 @@ model FieldTrip {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([employeeId, startDate])
   @@index([startDate, endDate])
   @@index([pinId])
+}
+
+/// Who is on a trip. The whole model is its primary key: a person is on a trip
+/// or they are not, and there is nothing else to say about the pairing.
+///
+/// The two sides are deliberately opposite. Cascade towards the trip, because
+/// the trip owns this row — deleteFieldTripAction snapshots the travellers into
+/// its audit entry and the rows go with it. Restrict towards the employee,
+/// because the row is that person's history: it is what makes an account with a
+/// trip behind it undeletable, which is the same rule an assigned task carries.
+model FieldTripTraveller {
+  fieldTripId String
+  fieldTrip   FieldTrip @relation(fields: [fieldTripId], references: [id], onDelete: Cascade)
+
+  employeeId String
+  employee   Employee @relation("FieldTripTraveller", fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@id([fieldTripId, employeeId])
+  /// "Which trips is this person on" — the per-person dashboard, the workload
+  /// aggregate, and the EXISTS in travellerScopeSql all enter from this side.
+  @@index([employeeId])
 }
 
 /// Admin-controlled switches for what the task UI shows.

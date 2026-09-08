@@ -67,19 +67,29 @@ function assigneeScopeSql(user: SessionUser, assigneeId?: string): Prisma.Sql {
 }
 
 /**
- * The same narrowing for FieldTrip, whose owner column is `employeeId`.
+ * The same narrowing for FieldTrip, whose travellers live in a join table.
  *
- * A column name cannot be a bound parameter, so the two are written out rather
- * than interpolated — the id stays bound either way.
+ * `EXISTS`, and not a join, and that is the whole correctness of the number it
+ * feeds. Joining the two tables multiplies a trip by the number of people on
+ * it, so a three-person trip would add *three* to the company-wide "active"
+ * count an admin sees — a count of pairings rather than of work. EXISTS asks
+ * whether the person is on the trip without changing how many rows the trip is,
+ * so the result stays one row per trip whether the scope is one person or
+ * nobody at all.
  *
  * Note this is *stricter* than `getFieldTrips()`, which narrows by nobody
  * because the schedule is shared. That is the right direction: the summary
  * strip answers "what am I carrying", and one person's number has no business
- * counting another person's trip.
+ * counting a trip they are not on.
  */
 function travellerScopeSql(user: SessionUser, assigneeId?: string): Prisma.Sql {
   const id = scopedAssigneeId(user, assigneeId);
-  return id ? Prisma.sql`WHERE "employeeId" = ${id}` : Prisma.empty;
+  return id
+    ? Prisma.sql`WHERE EXISTS (
+        SELECT 1 FROM ${TRIP_TRAVELLER_TABLE} tt
+        WHERE tt."fieldTripId" = ${TRIP_TABLE}."id" AND tt."employeeId" = ${id}
+      )`
+    : Prisma.empty;
 }
 
 /**
@@ -93,6 +103,7 @@ function travellerScopeSql(user: SessionUser, assigneeId?: string): Prisma.Sql {
  */
 const TASK_TABLE = Prisma.sql`app."Task"`;
 const TRIP_TABLE = Prisma.sql`app."FieldTrip"`;
+const TRIP_TRAVELLER_TABLE = Prisma.sql`app."FieldTripTraveller"`;
 const AUDIT_TABLE = Prisma.sql`app."AuditLog"`;
 
 /**
@@ -231,13 +242,37 @@ const fieldTripSelect = {
   proofUrl: true,
   cancelledAt: true,
   cancelledReason: true,
-  employee: { select: { id: true, employeeCode: true, fullName: true } },
+  /// Everyone going, ordered by staff code. The join table's composite key
+  /// implies no order of its own, and a list that reshuffles between two
+  /// renders of the same trip reads as a change to the trip.
+  travellers: {
+    select: {
+      employee: { select: { id: true, employeeCode: true, fullName: true } },
+    },
+    orderBy: { employee: { employeeCode: "asc" } },
+  },
   createdBy: { select: { employeeCode: true, fullName: true } },
   /// Just enough of the pin to draw a link back to the map. The trip's own
   /// locationName and coordinates are what it is displayed from — this says
   /// "and that place is on the board", nothing more.
   pin: { select: { id: true, label: true } },
 } as const;
+
+export type TripTraveller = { id: string; employeeCode: string; fullName: string };
+
+/**
+ * Drops the pairing rows and leaves the people.
+ *
+ * No reader of a trip cares that its travellers arrive through a join table,
+ * and making all seven of them write `.map((t) => t.employee)` would spread
+ * that detail across the UI. Done here, once, `trip.travellers` is a list of
+ * people exactly as `trip.employee` was a person.
+ */
+function flattenTravellers<
+  T extends { travellers: { employee: TripTraveller }[] },
+>(trip: T): Omit<T, "travellers"> & { travellers: TripTraveller[] } {
+  return { ...trip, travellers: trip.travellers.map((t) => t.employee) };
+}
 
 export type FieldTripListItem = Awaited<ReturnType<typeof getFieldTrips>>[number];
 
@@ -270,15 +305,19 @@ export async function getFieldTrips({
 }) {
   const boundary = dayStart(todayKey());
 
-  return db.fieldTrip.findMany({
+  const trips = await db.fieldTrip.findMany({
     where: {
-      ...(employeeId ? { employeeId } : {}),
+      // "Trips this person is on", which for a shared trip is every one of
+      // them — the same row reaches all its travellers' dashboards.
+      ...(employeeId ? { travellers: { some: { employeeId } } } : {}),
       endDate: window === "upcoming" ? { gte: boundary } : { lt: boundary },
     },
     select: fieldTripSelect,
     orderBy: { startDate: window === "upcoming" ? "asc" : "desc" },
     take: limit,
   });
+
+  return trips.map(flattenTravellers);
 }
 
 /**
@@ -293,15 +332,17 @@ export async function getFieldTripsInMonth({
 }: YearMonth & { employeeId?: string }) {
   const { from, to } = monthBounds(year, month);
 
-  return db.fieldTrip.findMany({
+  const trips = await db.fieldTrip.findMany({
     where: {
-      ...(employeeId ? { employeeId } : {}),
+      ...(employeeId ? { travellers: { some: { employeeId } } } : {}),
       startDate: { lt: to },
       endDate: { gte: from },
     },
     select: fieldTripSelect,
     orderBy: { startDate: "asc" },
   });
+
+  return trips.map(flattenTravellers);
 }
 
 /**
@@ -502,6 +543,16 @@ export async function getEmployeeWorkloads(
    * `connection_limit` above 1 is for. Unioning them would have meant padding
    * the trip side with three zero columns and a NULL timestamp to match the
    * task side's shape, for no saving.
+   *
+   * The trip pass *joins* the travellers, where `travellerScopeSql` refuses to
+   * — and the two are right for opposite reasons. This query wants one row per
+   * (trip, person) pairing, because a trip three people are on is three
+   * people's work and belongs in all three of their frames. The summary strip's
+   * total wants one row per trip, because the same trip is still one job.
+   *
+   * The predicates stay unqualified and resolve to the trip. FieldTripTraveller
+   * holds nothing but the two key columns, by design, so there is no
+   * `cancelledAt` or `endDate` on that side for a bare name to bind to.
    */
   const [taskRows, tripRows] = await Promise.all([
     db.$queryRaw<
@@ -536,13 +587,14 @@ export async function getEmployeeWorkloads(
       }[]
     >`
       SELECT
-        "employeeId",
+        tt."employeeId",
         count(*) FILTER (WHERE ${TRIP_ACTIVE})              AS "active",
         count(*) FILTER (WHERE ${TRIP_COMPLETED})           AS "completed",
         count(*) FILTER (WHERE ${tripOverdue(boundary)})    AS "overdue"
-      FROM ${TRIP_TABLE}
-      WHERE "employeeId" = ANY(${ids})
-      GROUP BY "employeeId"
+      FROM ${TRIP_TRAVELLER_TABLE} tt
+      JOIN ${TRIP_TABLE} t ON t."id" = tt."fieldTripId"
+      WHERE tt."employeeId" = ANY(${ids})
+      GROUP BY tt."employeeId"
     `,
   ]);
 
@@ -674,7 +726,12 @@ export async function getWorkloadTasks(
     db.fieldTrip.findMany({
       // scopedAssigneeId, not the raw argument: for a non-admin it answers with
       // their own id whatever was asked for.
-      where: { ...(tripScope ? { employeeId: tripScope } : {}), ...tripPredicate },
+      where: {
+        ...(tripScope
+          ? { travellers: { some: { employeeId: tripScope } } }
+          : {}),
+        ...tripPredicate,
+      },
       select: {
         id: true,
         purpose: true,
@@ -881,7 +938,12 @@ export async function getCustomerPins(limit = 500) {
           startedAt: true,
           completedAt: true,
           cancelledAt: true,
-          employee: { select: { employeeCode: true, fullName: true } },
+          travellers: {
+            select: {
+              employee: { select: { employeeCode: true, fullName: true } },
+            },
+            orderBy: { employee: { employeeCode: "asc" } },
+          },
         },
         orderBy: { startDate: "desc" },
         take: 5,

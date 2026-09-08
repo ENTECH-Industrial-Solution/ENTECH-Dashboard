@@ -18,6 +18,7 @@ import {
 import { getLocale, getTranslations } from "@/lib/i18n/server";
 import { mapsHref } from "@/lib/maps";
 import { getSettings } from "@/lib/settings/server";
+import { travellerSummary } from "@/lib/trips";
 import { getFieldTripsInMonth, getTasksInMonth } from "@/server/queries";
 
 /**
@@ -160,8 +161,10 @@ export async function CalendarSection({
         id: `${trip.id}-${key}`,
         purpose: trip.purpose,
         dayKey: key,
-        personCode: trip.employee.employeeCode,
-        personName: trip.employee.fullName,
+        // "สมชาย +2" where a cell has room for one name. Every view of a trip
+        // must still say who is on it; the card and the map popup carry the
+        // full list.
+        personName: travellerSummary(trip.travellers),
         locationName: trip.locationName,
         state: trip.completedAt
           ? "COMPLETED"

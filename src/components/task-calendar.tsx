@@ -49,7 +49,7 @@ export type CalendarTrip = {
   id: string;
   purpose: string;
   dayKey: string;
-  personCode: string;
+  /** Who is going, summarised — see travellerSummary in trip-card.tsx. */
   personName: string;
   locationName: string;
   /**

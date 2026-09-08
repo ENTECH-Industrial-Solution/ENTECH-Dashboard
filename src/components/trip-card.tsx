@@ -533,8 +533,15 @@ export function TripCard({
           >
             {trip.purpose}
           </h3>
+          {/* The full list, not the summary the calendar and the map use: the
+              card is the view with room for it, and "who else is going" is
+              exactly what somebody opens a trip to find out. Wraps rather than
+              truncating — on a phone this is the line that tells four people
+              they are on the same job. */}
           <div className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-            {trip.employee.employeeCode} — {trip.employee.fullName}
+            {trip.travellers
+              .map((person) => `${person.employeeCode} — ${person.fullName}`)
+              .join(", ")}
           </div>
         </div>
 
