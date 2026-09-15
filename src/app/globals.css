@@ -273,12 +273,19 @@ body {
  * - never over the row itself, so a lone box in a narrow column fills it
  *   exactly rather than sticking out past the edge it is meant to sit in.
  *
- * `flex-grow` with no shrink is what makes one box fill the row and four spread
- * across a wide one — once they no longer fit there is no free space left to
- * grow into, and the row scrolls instead.
+ * `minmax(…, 1fr)` is what makes one box fill the row and four spread across
+ * a wide one — once they no longer fit there is no free space left to grow
+ * into, every column drops to its minimum, and the row scrolls instead.
+ *
+ * The size is on the rail rather than the card because the rail is a grid
+ * (see SlideRow): a column's width is the rail's to set, and the card's own
+ * rule is only where it snaps.
  */
+.slide-rail {
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(min(100%, clamp(17.5rem, 85%, 20rem)), 1fr);
+}
 .slide-card {
-  flex: 1 0 min(100%, clamp(17.5rem, 85%, 20rem));
   scroll-snap-align: start;
 }
 

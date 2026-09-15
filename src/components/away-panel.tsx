@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 import { Avatar } from "@/components/employee-frame";
 import { SlideRow } from "@/components/slide-row";
 import { TripActions, TripEvidence, TripLocation } from "@/components/trip-card";
@@ -17,11 +19,11 @@ import { getFieldTrips, type FieldTripListItem } from "@/server/queries";
  * today changes who you can reach, who is going next is something to plan
  * around, and who has reported back is the day's work already accounted for.
  *
- * Inside each of the three, one box is one *person*, not one trip: the question
- * this panel answers is about people, and someone with two trips on the same
- * day is still one person to look for. The boxes run left to right and the row
- * scrolls (see SlideRow) — the panel is a third of the dashboard's width, so a
- * column of them buried everyone past the second or third name.
+ * Inside each of the three, one box is one *trip*, wearing the faces of
+ * everyone on it — a team going somewhere is one thing to see, not one box per
+ * name (see Group). The boxes run left to right and the row scrolls (see
+ * SlideRow) — the panel is a third of the dashboard's width, so a column of
+ * them buried everyone past the second or third name.
  *
  * This is also where the traveller runs their own trip. It is the only view an
  * employee has of one — /admin/tasks is admin-only — so the start and complete
@@ -133,46 +135,37 @@ export async function AwayPanel({
   );
 }
 
-type PersonTrips = {
-  employee: FieldTripListItem["travellers"][number];
-  trips: FieldTripListItem[];
-};
+/**
+ * How many faces a box draws before it says "+n" instead. Four fills the
+ * header's width at the box's floor without pushing the names off it.
+ */
+const MAX_FACES = 4;
 
 /**
- * One box per person, in the order their first trip appears — the list arrives
- * sorted by start date, so the soonest name stays leftmost, which is where the
- * row opens.
- *
- * A trip with several travellers lands in *every* one of their boxes. This
- * panel answers "where is everyone right now", and a shared trip is a true
- * answer for each person on it; showing it once under whoever happened to be
- * listed first would leave the others looking like they were in the office.
- * That is also why the count on a group heading still counts trips rather than
- * boxes — it is the number the calendar and the summary strip put on the same
- * group, and it must not drift from them.
+ * The parts of a box, top to bottom, as the rows of the rail's grid. Every
+ * part places itself on its own row (`row-start-N`) so the five sit at the
+ * same five heights in every box on the row — a part that renders nothing
+ * (a trip with no evidence yet) leaves its row empty rather than pulling
+ * the buttons up into it. Spacing is each part's own `pt-3`, not the grid's
+ * row gap, for the same reason: an empty row must take no room at all.
  */
-function byPerson(trips: FieldTripListItem[]): PersonTrips[] {
-  const order: PersonTrips[] = [];
-  const seen = new Map<string, PersonTrips>();
+const BOX_ROWS = 5;
 
-  for (const trip of trips) {
-    for (const traveller of trip.travellers) {
-      const found = seen.get(traveller.id);
-
-      if (found) {
-        found.trips.push(trip);
-        continue;
-      }
-
-      const entry: PersonTrips = { employee: traveller, trips: [trip] };
-      seen.set(traveller.id, entry);
-      order.push(entry);
-    }
-  }
-
-  return order;
-}
-
+/**
+ * One box per trip, in the order the trips arrive — sorted by start date, so
+ * the soonest stays leftmost, which is where the row opens.
+ *
+ * A trip several people are on is *one* box, wearing all of their faces. It was
+ * one box per person once, on the grounds that the panel asks about people;
+ * but that drew the same job three times over with a different name on each,
+ * and reading three boxes to learn that three colleagues went to Rayong
+ * together is the wrong way round. A team going somewhere is one thing to see,
+ * and the header is where the whole team is named. Someone on two trips the
+ * same day appears in two boxes, which is also true: they have two places to
+ * be. The count on the group heading counts the same trips as the boxes now,
+ * and it is still the number the calendar and the summary strip put on the
+ * same group.
+ */
 async function Group({
   label,
   tone,
@@ -189,16 +182,12 @@ async function Group({
   highlight?: boolean;
 }) {
   const t = await getTranslations();
-  const people = byPerson(trips);
-
-  // The count stays a count of *trips*, not of boxes: it is the same number the
-  // calendar and the summary strip put on this group, and a second meaning for
-  // it here would be one more thing to keep in step.
   const heading = `${label} · ${trips.length}`;
 
   return (
     <SlideRow
       label={heading}
+      rows={BOX_ROWS}
       heading={
         <div
           className="truncate text-xs font-medium uppercase tracking-wide"
@@ -208,81 +197,117 @@ async function Group({
         </div>
       }
     >
-      {people.map(({ employee, trips: theirs }) => (
-        /* `slide-card` is the width rule: 85% of the row so the next person
-           shows past the edge, floored and capped so the box stays readable.
-           It lives in globals.css beside .card, with the reasoning. */
-        <article
-          key={employee.id}
-          className="card slide-card flex flex-col gap-3 p-3"
-          style={
-            highlight
-              ? { borderColor: "var(--warning)", background: "var(--warning-soft)" }
-              : undefined
-          }
-        >
-          <header className="flex items-center gap-2">
-            <Avatar fullName={employee.fullName} />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">{employee.fullName}</div>
-              <div className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
-                {employee.employeeCode}
-                {theirs.length > 1 && ` · ${theirs.length} ${t("trips.tripCount")}`}
+      {trips.map((trip) => {
+        const row = serialiseTrip(trip, locale);
+        const faces = trip.travellers.slice(0, MAX_FACES);
+        const more = trip.travellers.length - faces.length;
+
+        return (
+          /* `slide-card` is the width rule: 85% of the row so the next trip
+             shows past the edge, floored and capped so the box stays readable.
+             It lives in globals.css beside .card, with the reasoning.
+
+             Same anchor TripCard uses, so a capsule line or a map popup
+             pointing at a trip lands on it here too — `.trip-anchor:target`
+             is what rings it. */
+          <article
+            key={trip.id}
+            id={`trip-${trip.id}`}
+            className="card slide-card trip-anchor grid row-span-full grid-rows-subgrid scroll-mt-24 p-3"
+            style={
+              {
+                // The faces below ring themselves in the box's own colour, so
+                // the box says what that colour is.
+                "--face-ring": highlight ? "var(--warning-soft)" : "var(--surface)",
+                ...(highlight
+                  ? { borderColor: "var(--warning)", background: "var(--warning-soft)" }
+                  : undefined),
+              } as CSSProperties
+            }
+          >
+            <header className="row-start-1 flex items-center gap-3">
+              {/* The faces overlap so four of them take the room of two and a
+                  half; each carries a ring in the box's colour so the overlap
+                  reads as a stack rather than a smear. */}
+              <div className="flex shrink-0 -space-x-2">
+                {faces.map((person) => (
+                  <span
+                    key={person.id}
+                    className="rounded-full ring-2"
+                    style={{ "--tw-ring-color": "var(--face-ring)" } as CSSProperties}
+                    title={`${person.employeeCode} — ${person.fullName}`}
+                  >
+                    <Avatar fullName={person.fullName} />
+                  </span>
+                ))}
+                {more > 0 && (
+                  <span
+                    aria-hidden
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-2"
+                    style={
+                      {
+                        background: "var(--surface-muted)",
+                        color: "var(--text-muted)",
+                        "--tw-ring-color": "var(--face-ring)",
+                      } as CSSProperties
+                    }
+                  >
+                    +{more}
+                  </span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                {/* Every name, wrapping — this is the line that tells four
+                    people they are on the same job, and the full list is what
+                    a box with room for it owes them. */}
+                <div className="text-sm font-medium leading-snug break-words">
+                  {trip.travellers.map((person) => person.fullName).join(", ")}
+                </div>
+                <div className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
+                  {trip.travellers.length > 1
+                    ? `${trip.travellers.length} ${t("trips.peopleCount")}`
+                    : trip.travellers[0]?.employeeCode}
+                </div>
+              </div>
+            </header>
+
+            <div className="row-start-2 pt-3">
+              <div className="text-sm font-medium leading-snug break-words">
+                {trip.purpose}
+              </div>
+              <div className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                {formatDate(trip.startDate, locale)}
+                {bangkokDayKey(trip.startDate) !== bangkokDayKey(trip.endDate) &&
+                  ` ${t("trips.untilDate")} ${formatDate(trip.endDate, locale)}`}
+                {` · ${tripHours(trip).start}–${tripHours(trip).end}`}
               </div>
             </div>
-          </header>
 
-          {theirs.map((trip, index) => {
-            const row = serialiseTrip(trip, locale);
+            {/* These two render nothing on some trips, so their rows are
+                wrappers that always exist and take no height when empty:
+                the `pt-3` lives on the content, not on the wrapper. */}
+            <div className="row-start-3 [&>*]:mt-3">
+              <TripLocation trip={row} />
+            </div>
 
-            return (
-              <div
-                key={trip.id}
-                // Same anchor TripCard uses, so a capsule line pointing at a
-                // trip lands on it here too. It sits on the trip rather than on
-                // the box, because the box is a person now — `.trip-anchor:target`
-                // is what rings the right one.
-                id={`trip-${trip.id}`}
-                className={`trip-anchor scroll-mt-24 space-y-2${
-                  index > 0 ? " border-t pt-3" : ""
-                }`}
-              >
-                <div>
-                  <div className="text-sm font-medium leading-snug break-words">
-                    {trip.purpose}
-                  </div>
-                  <div className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                    {formatDate(trip.startDate, locale)}
-                    {bangkokDayKey(trip.startDate) !== bangkokDayKey(trip.endDate) &&
-                      ` ${t("trips.untilDate")} ${formatDate(trip.endDate, locale)}`}
-                    {` · ${tripHours(trip).start}–${tripHours(trip).end}`}
-                  </div>
-                </div>
+            <div className="row-start-4 [&>*]:mt-3">
+              <TripEvidence trip={row} />
+            </div>
 
-                <TripLocation trip={row} />
-
-                <TripEvidence trip={row} />
-
-                {/* Decided here, on the server, from the session — the buttons
-                    are a reflection of the rule, never the thing enforcing it.
-
-                    Asked of the *trip's* travellers, not of the person whose
-                    box this is. A shared trip appears in several boxes, and the
-                    viewer may run it from any of them if they are on it — using
-                    the box's owner would have shown the button in the viewer's
-                    own box and hidden it in their colleague's, on one trip they
-                    are equally entitled to close out. */}
-                <TripActions
-                  trip={row}
-                  canRun={canRunFieldTrip(user, {
-                    travellerIds: trip.travellers.map((person) => person.id),
-                  })}
-                />
-              </div>
-            );
-          })}
-        </article>
-      ))}
+            {/* Decided here, on the server, from the session — the buttons are
+                a reflection of the rule, never the thing enforcing it. Asked of
+                the trip's travellers: anyone on it may run it. */}
+            <div className="row-start-5 pt-3">
+              <TripActions
+                trip={row}
+                canRun={canRunFieldTrip(user, {
+                  travellerIds: trip.travellers.map((person) => person.id),
+                })}
+              />
+            </div>
+          </article>
+        );
+      })}
     </SlideRow>
   );
 }

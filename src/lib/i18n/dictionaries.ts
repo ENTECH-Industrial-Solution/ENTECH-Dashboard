@@ -231,7 +231,7 @@ export const dictionary = {
   "trips.comingUp": { th: "กำลังจะไป", en: "Coming up" },
   "trips.allIn": { th: "ตอนนี้ทุกคนอยู่ในออฟฟิศ", en: "Everyone is in the office" },
   "trips.untilDate": { th: "ถึง", en: "until" },
-  "trips.tripCount": { th: "รายการ", en: "trips" },
+  "trips.peopleCount": { th: "คน", en: "people" },
 
   "trips.startTime": { th: "เวลาออก", en: "Leaves at" },
   "trips.endTime2": { th: "เวลากลับ", en: "Back at" },

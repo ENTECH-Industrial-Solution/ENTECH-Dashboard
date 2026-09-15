@@ -10,7 +10,14 @@ import { useTranslations } from "@/lib/i18n/client";
  * The off-site panel is a third of the dashboard's width and as tall as the
  * calendar beside it. Stacked, three trips filled it and the fourth was a
  * scroll away with nothing to say it existed. Laid out left to right, one
- * person's box is what the panel is sized for and the rest wait beside it.
+ * trip's box is what the panel is sized for and the rest wait beside it.
+ *
+ * The row is a grid rather than a flex row so the cards can line up *inside*
+ * as well as at their edges — see `rows`. A flex row stretched every card to
+ * the tallest, but the parts within drifted: a two-line address put one
+ * card's buttons halfway down and the next card's at the bottom, and a row
+ * of the same controls at three different heights read as three different
+ * cards.
  *
  * With the bar hidden (`scroll-bare`) the row needs its own cues, and it has
  * two. The cards are sized so the next one is *part visible* at the edge — see
@@ -26,11 +33,22 @@ import { useTranslations } from "@/lib/i18n/client";
 export function SlideRow({
   heading,
   label,
+  rows,
   children,
 }: {
   heading: ReactNode;
   /** Names the scrolling region for a screen reader; the heading is visual. */
   label: string;
+  /**
+   * How many rows a card is made of. The rail is a grid and every card is a
+   * subgrid of it, so a card's parts — its header, its text, its buttons —
+   * are tracks the whole row shares, and each sits at one height in every
+   * card. The rail has to be told how many there are: a subgrid can only
+   * span tracks that exist. Each child places itself with `row-start-N`, so a
+   * part that renders nothing leaves its track empty rather than shifting
+   * the parts below it up.
+   */
+  rows: number;
   children: ReactNode;
 }) {
   const t = useTranslations();
@@ -127,7 +145,8 @@ export function SlideRow({
         tabIndex={0}
         role="group"
         aria-label={label}
-        className="scroll-bare flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-p-1 p-1"
+        className="scroll-bare slide-rail grid snap-x snap-mandatory gap-x-3 overflow-x-auto scroll-p-1 p-1"
+        style={{ gridTemplateRows: `repeat(${rows}, auto)` }}
       >
         {children}
       </div>
