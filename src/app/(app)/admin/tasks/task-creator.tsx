@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 
+import { Reveal } from "@/components/motion";
 import { Alert } from "@/components/ui";
 import { TaskForm, type AssigneeOption } from "@/components/task-form";
 import { TripForm, type TripPinOption } from "@/components/trip-form";
@@ -77,7 +78,7 @@ export function TaskCreator({
   }
 
   return (
-    <div className="card space-y-4 p-4">
+    <Reveal className="card space-y-4 p-4">
       {tripsEnabled && (
       <div>
         <span className="label">{t("tasks.kind")}</span>
@@ -137,6 +138,6 @@ export function TaskCreator({
           onCancel={() => setOpen(false)}
         />
       )}
-    </div>
+    </Reveal>
   );
 }

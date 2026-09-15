@@ -164,6 +164,13 @@ export const dictionary = {
   "calendar.startCount": { th: "งานเริ่มวันนี้", en: "starting" },
   "calendar.marksDue": { th: "ครบกำหนด", en: "Due" },
   "calendar.marksStart": { th: "เริ่มงาน", en: "Starts" },
+  "calendar.move": { th: "ย้ายวัน", en: "Move" },
+  "calendar.moveHint": {
+    th: "แตะวันที่ต้องการย้ายไป หรือลากงานไปวางบนวันนั้น",
+    en: "Tap the new day, or drag the task onto it",
+  },
+  "calendar.moveDue": { th: "ย้ายกำหนดส่ง", en: "Move due date" },
+  "calendar.moveStart": { th: "ย้ายวันเริ่มงาน", en: "Move start date" },
 
   "dashboard.byPerson": { th: "งานรายบุคคล", en: "By employee" },
   "dashboard.byPersonHint": {

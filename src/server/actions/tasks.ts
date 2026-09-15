@@ -13,6 +13,7 @@ import {
   deleteTaskSchema,
   formDataToObject,
   reopenTaskSchema,
+  rescheduleTaskSchema,
   updateTaskSchema,
   updateTaskStatusSchema,
 } from "@/lib/validation";
@@ -194,38 +195,105 @@ export async function updateTaskAction(
     const changes = diffFields(EDITABLE_FIELDS, before, data);
     if (Object.keys(changes).length === 0) return { status: "success" };
 
-    await db.$transaction(async (tx) => {
-      await tx.task.update({ where: { id: taskId }, data });
-
-      await tx.taskEvent.create({
-        data: {
-          taskId,
-          actorId: admin.id,
-          actorLabel: actorLabel(admin),
-          type: "UPDATED",
-          note: `แก้ไข: ${Object.keys(changes).join(", ")}`,
-        },
-      });
-
-      await writeAudit(
-        {
-          actor: admin,
-          action: "task.updated",
-          entityType: "Task",
-          entityId: taskId,
-          // The archive flag is worth its own key rather than being inferred
-          // from the status field: "this edit touched a completed task" is the
-          // thing someone auditing the archive is scanning for.
-          metadata: { code: before.code, archived: before.status === "COMPLETED", changes },
-        },
-        tx,
-      );
-    });
-
-    revalidatePath("/dashboard");
-    revalidatePath("/admin/tasks");
+    await commitTaskEdit({ admin, before, data, changes });
     return { status: "success", message: "บันทึกแล้ว / Saved" };
   });
+}
+
+/**
+ * Moving one planned day of a task from the calendar — a drop, or a tap on
+ * the destination. The same edit `updateTaskAction` makes to that one field,
+ * with the same accounting: an UPDATED event, an audit row with the
+ * before/after and the archive flag. It is a separate action rather than a
+ * call into the update one because the calendar holds a day and a task id,
+ * not the whole form, and an action that demanded every field to move one
+ * would have the client re-sending content it never showed.
+ */
+export async function rescheduleTaskAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAction(async () => {
+    // Admin-only, exactly as updateTaskAction: a deadline is assigned work.
+    const admin = await assertAdmin();
+    const parsed = rescheduleTaskSchema.safeParse(formDataToObject(formData));
+
+    if (!parsed.success) {
+      return { status: "error", message: "ข้อมูลไม่ถูกต้อง / Invalid input" };
+    }
+
+    const { taskId, field, day } = parsed.data;
+    const before = await db.task.findUnique({ where: { id: taskId } });
+    if (!before) return { status: "error", message: "ไม่พบงาน / Task not found" };
+
+    const data = field === "due" ? { dueDate: day } : { startDate: day };
+    const startDate = data.startDate ?? before.startDate;
+    const dueDate = data.dueDate ?? before.dueDate;
+
+    // The rule the form enforces, enforced here too — a drop cannot put the
+    // start after the deadline any more than typing could.
+    if (startDate && dueDate && startDate > dueDate) {
+      return {
+        status: "error",
+        message:
+          "วันเริ่มงานต้องไม่เกินกำหนดส่ง / Start date cannot be after the due date",
+      };
+    }
+
+    const changes = diffFields(EDITABLE_FIELDS, before, data);
+    if (Object.keys(changes).length === 0) return { status: "success" };
+
+    await commitTaskEdit({ admin, before, data, changes });
+    return { status: "success", message: "ย้ายวันแล้ว / Moved" };
+  });
+}
+
+/**
+ * The write half of every content edit to a task: the update, the UPDATED
+ * event naming the fields that moved, and the audit row carrying the diff —
+ * all in one transaction, so state and evidence cannot drift apart.
+ */
+async function commitTaskEdit({
+  admin,
+  before,
+  data,
+  changes,
+}: {
+  admin: SessionUser;
+  before: { id: string; code: string; status: string };
+  data: Prisma.TaskUpdateInput;
+  changes: ReturnType<typeof diffFields>;
+}) {
+  await db.$transaction(async (tx) => {
+    await tx.task.update({ where: { id: before.id }, data });
+
+    await tx.taskEvent.create({
+      data: {
+        taskId: before.id,
+        actorId: admin.id,
+        actorLabel: actorLabel(admin),
+        type: "UPDATED",
+        note: `แก้ไข: ${Object.keys(changes).join(", ")}`,
+      },
+    });
+
+    await writeAudit(
+      {
+        actor: admin,
+        action: "task.updated",
+        entityType: "Task",
+        entityId: before.id,
+        // The archive flag is worth its own key rather than being inferred
+        // from the status field: "this edit touched a completed task" is the
+        // thing someone auditing the archive is scanning for.
+        metadata: { code: before.code, archived: before.status === "COMPLETED", changes },
+      },
+      tx,
+    );
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/admin/tasks");
 }
 
 export async function updateTaskStatusAction(

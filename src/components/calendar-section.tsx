@@ -95,6 +95,7 @@ export async function CalendarSection({
     // A task can appear twice in the month, so the row id carries which entry
     // this is. The href still points at the one card behind both.
     id: `${task.id}-${kind}`,
+    taskId: task.id,
     kind,
     code: task.code,
     title: task.title,
@@ -199,6 +200,9 @@ export async function CalendarSection({
         nextHref={monthHref(1)}
         todayHref={`${basePath}?cal=${monthParam(monthOf(today))}`}
         showAssignee={user.role === "ADMIN"}
+        // Moving a day is assigning work, so it is offered on the same terms
+        // as editing: the action refuses anyone else regardless.
+        canReschedule={user.role === "ADMIN"}
       />
     </section>
   );

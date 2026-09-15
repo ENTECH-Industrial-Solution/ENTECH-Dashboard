@@ -36,6 +36,16 @@
   --danger: light-dark(oklch(0.55 0.19 25), oklch(0.68 0.17 25));
   --danger-soft: light-dark(oklch(0.95 0.04 25), oklch(0.28 0.06 25));
   --ring: light-dark(oklch(0.52 0.16 250 / 0.45), oklch(0.68 0.14 250 / 0.5));
+
+  /*
+   * Motion. Three durations and one curve, shared with `components/motion.tsx`
+   * so a CSS hover and a React entrance read as the same hand. `--ease-out`
+   * decelerates hard at the end — things arrive, they do not drift in.
+   */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 300ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* An explicit choice pins the scheme and wins over the device setting. */
@@ -53,6 +63,19 @@
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;
+  }
+}
+
+/* The CSS half of honouring the OS setting; MotionConfig is the React half.
+   Near-zero rather than `none`, so `animationend` still fires for anything
+   that waits on it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
@@ -102,7 +125,8 @@ body {
   padding: 0.5rem 0.75rem;
   font-size: 0.9375rem;
   color: var(--text);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 .input:focus {
   outline: none;
@@ -122,7 +146,23 @@ body {
   margin-bottom: 0.375rem;
 }
 
+/*
+ * Every button is a face resting on a base: a solid block the colour of the
+ * variant's shadow, drawn under it, with the face lifted off it by
+ * `--btn-lift`. Hover lifts it a little further; pressing drops it flat onto
+ * the base, which is the whole of the feedback a button gives before the
+ * server answers. Adapted from "Button" by Voxybuns on uiverse.io (MIT), with
+ * the base as a box-shadow rather than a second element so the hundred-odd
+ * existing buttons need no markup change, and the footprint in the layout is
+ * exactly the box it always was — the face rises out of it, the base fills
+ * what it left.
+ *
+ * `--btn-lift` is the one thing the states change; the transform and the
+ * shadow both derive from it, and both transition.
+ */
 .btn {
+  --btn-lift: 3px;
+  --btn-base: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -133,21 +173,34 @@ body {
   font-weight: 500;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: background-color 120ms ease, opacity 120ms ease;
+  transform: translateY(calc(-1 * var(--btn-lift)));
+  box-shadow: 0 var(--btn-lift) 0 var(--btn-base);
+  transition: background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
   white-space: nowrap;
 }
+.btn:hover:not(:disabled) {
+  --btn-lift: 4px;
+}
+.btn:active:not(:disabled) {
+  --btn-lift: 0px;
+}
+/* Flat: a button that cannot be pressed has nothing to press down onto. */
 .btn:disabled {
+  --btn-lift: 0px;
   opacity: 0.55;
   cursor: not-allowed;
 }
 .btn-primary {
+  --btn-base: color-mix(in oklab, var(--brand) 62%, black);
   background: var(--brand);
   color: var(--brand-contrast);
 }
-.btn-primary:hover:not(:disabled) {
-  opacity: 0.9;
-}
 .btn-secondary {
+  --btn-base: color-mix(in oklab, var(--border) 65%, var(--text-muted));
   background: var(--surface);
   border-color: var(--border);
   color: var(--text);
@@ -156,14 +209,15 @@ body {
   background: var(--surface-muted);
 }
 .btn-danger {
+  --btn-base: color-mix(in oklab, var(--danger) 55%, var(--danger-soft));
   background: var(--danger-soft);
   color: var(--danger);
   border-color: transparent;
 }
-.btn-danger:hover:not(:disabled) {
-  opacity: 0.85;
-}
+/* The base is only a hint of one — a ghost with a solid block under it is
+   no longer a ghost. */
 .btn-ghost {
+  --btn-base: color-mix(in oklab, var(--text-muted) 28%, transparent);
   background: transparent;
   color: var(--text-muted);
 }
@@ -289,14 +343,34 @@ body {
   scroll-snap-align: start;
 }
 
+/*
+ * A card that takes both columns of a CardGrid. The grid wraps every card in a
+ * cell of its own (see card-grid.tsx), so the span has to be asked of the cell
+ * rather than written on the card, and `:has` is how the cell hears it.
+ */
+@media (min-width: 1024px) {
+  .card-cell:has(> .card-wide) {
+    grid-column: 1 / -1;
+  }
+}
+
 /* A whole card that is one link — the per-person frames on the dashboard. */
 .card-link {
   display: block;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
 }
+/* Lifts two pixels and casts a little further; a whole card that is a link
+   should answer the pointer with more than a border. */
 .card-link:hover {
   border-color: var(--brand);
-  box-shadow: 0 1px 4px color-mix(in oklab, var(--brand) 22%, transparent);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px color-mix(in oklab, var(--brand) 18%, transparent);
+}
+.card-link:active {
+  transform: translateY(0);
+  transition-duration: var(--dur-fast);
 }
 
 /*
@@ -326,6 +400,32 @@ body {
   inset-block: 0;
   inset-inline-start: 0;
   border-radius: 999px;
+  /* The bar grows from the left when it first paints and whenever a value
+     moves. `pill-grow` is a one-shot; the transition covers the rest. */
+  transform-origin: 0 50%;
+  animation: pill-grow var(--dur-slow) var(--ease-out);
+  transition: width var(--dur-slow) var(--ease-out);
+}
+@keyframes pill-grow {
+  from {
+    scale: 0 1;
+  }
+  to {
+    scale: 1 1;
+  }
+}
+
+/* A placeholder line the shape of the text it stands in for. */
+.skeleton {
+  /* A step darker than the muted surface: on a white card the surface alone
+     is too close to the paper to read as a placeholder at all. */
+  background: color-mix(in oklab, var(--text-muted) 22%, var(--surface-muted));
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
 }
 .pill > .pill-label,
 .pill > .pill-value {
@@ -383,6 +483,483 @@ button.pill:hover {
   height: 100%;
   border-radius: 999px;
   background: var(--success);
+}
+
+/* --- pinned note ---------------------------------------------------------- */
+
+/*
+ * The calendar's pushpin. The selected day wears one, and so does the note
+ * under the calendar that lists what happens on it — the one image the whole
+ * calendar borrows from a corkboard, kept this small on purpose: the grid
+ * itself stays a grid, because a month with fifteen jobs on it drawn as
+ * fifteen sheets of paper is a pile, not a plan.
+ *
+ * The pin drops in a little too big and settles; the note swings on it once
+ * and hangs a fraction off square. Both are keyframes rather than motion
+ * variants because they are pure decoration on elements that are already
+ * keyed on the day — remounting is what replays them.
+ */
+.day-pin {
+  position: absolute;
+  inset-inline-start: 50%;
+  inset-block-start: -0.55rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  translate: -50% 0;
+  /* A pushpin is red; this is the red the palette has. */
+  color: var(--danger);
+  filter: drop-shadow(0 1px 1px oklch(0 0 0 / 0.35));
+  pointer-events: none;
+  animation: pin-drop var(--dur-slow) var(--ease-out) both;
+}
+.day-pin svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+@keyframes pin-drop {
+  from {
+    opacity: 0;
+    translate: -50% -0.6rem;
+    scale: 1.5;
+  }
+  65% {
+    opacity: 1;
+    translate: -50% 0.06rem;
+    scale: 0.94;
+  }
+  to {
+    opacity: 1;
+    translate: -50% 0;
+    scale: 1;
+  }
+}
+
+/*
+ * Changing month slides the page. The stack holds one page in flow and,
+ * while a month changes, the old one on top of it, absolutely positioned
+ * and on its way out. Forward: out to the left, in from the right; back:
+ * the other way. A month that was previewed settles in with no slide and
+ * only its marks appearing; the first month simply fades. The stack clips,
+ * so a page half out is half gone rather than across the sidebar; the
+ * padding keeps the selected day's ring inside the clip.
+ */
+.calendar-stack {
+  position: relative;
+  overflow: hidden;
+  padding: 4px;
+  margin: -4px;
+}
+.calendar-page {
+  position: relative;
+  animation-duration: 0.4s;
+  animation-timing-function: var(--ease-out);
+  animation-fill-mode: both;
+}
+.calendar-page--leaving {
+  position: absolute;
+  inset: 4px;
+  pointer-events: none;
+}
+.calendar-page[data-turn="in-first"] {
+  animation-name: page-fade;
+  animation-duration: var(--dur-slow);
+}
+.calendar-page[data-turn="in-right"] {
+  animation-name: page-in-right;
+}
+.calendar-page[data-turn="in-left"] {
+  animation-name: page-in-left;
+}
+.calendar-page[data-turn="out-left"] {
+  animation-name: page-out-left;
+}
+.calendar-page[data-turn="out-right"] {
+  animation-name: page-out-right;
+}
+.calendar-page[data-turn="settle"] .day-marks {
+  animation: marks-in var(--dur-slow) var(--ease-out) both;
+}
+@keyframes page-fade {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes page-in-right {
+  from {
+    opacity: 0;
+    translate: 40px 0;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes page-in-left {
+  from {
+    opacity: 0;
+    translate: -40px 0;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes page-out-left {
+  to {
+    opacity: 0;
+    translate: -40px 0;
+  }
+}
+@keyframes page-out-right {
+  to {
+    opacity: 0;
+    translate: 40px 0;
+  }
+}
+@keyframes marks-in {
+  from {
+    opacity: 0;
+    scale: 0.4;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+/* While a task is being moved, every day is somewhere it could land: a
+   dashed ring says so, and the one under the pointer fills in. */
+.day-cell[data-target="open"] {
+  box-shadow: inset 0 0 0 1px var(--brand);
+  outline: 1px dashed var(--ring);
+  outline-offset: 1px;
+}
+.day-cell[data-target="over"] {
+  background: var(--brand-soft) !important;
+  box-shadow: 0 0 0 3px var(--ring);
+  scale: 1.06;
+}
+
+/*
+ * One note on the board. `--tilt` is its resting angle and `--i` its place in
+ * the row, so neighbours lean opposite ways and hang one after another. The
+ * whole thing is `user-select: none` and callout-free because a finger holds
+ * it to pick it up, and a long press must not open the title link's preview
+ * or select the text instead.
+ */
+.sticky-note {
+  --tilt: -0.8deg;
+  --i: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-height: 7.5rem;
+  /* Room for the pin's head above the note: the rail clips at its own edge,
+     and a pin hanging over that edge is a pin cut in half. */
+  margin-top: 0.6rem;
+  transform-origin: 50% 0;
+  rotate: var(--tilt);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1rem 0.875rem 0.75rem;
+  box-shadow:
+    0 10px 24px -10px oklch(0 0 0 / 0.3),
+    0 1px 2px oklch(0 0 0 / 0.06);
+  animation: note-hang 0.7s var(--ease-out) both;
+  animation-delay: calc(var(--i) * 70ms);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  /* The sway the rail reports while it scrolls (see SlideRow). On `transform`
+     rather than `rotate`, because the hang animation owns `rotate` and a
+     filled animation keeps owning it; the two compose. The curve overshoots
+     so a note swings back past straight and settles, like paper would. */
+  transform: rotate(var(--sway, 0deg));
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.sticky-note[draggable="true"] {
+  cursor: grab;
+}
+/* Off the board and in the hand: what is left behind fades. */
+.sticky-note[data-lifted] {
+  opacity: 0.35;
+}
+/* The copy that travels with a finger. Fixed, so the rail cannot clip it;
+   no pointer events, so the day under it can be found through it. */
+.sticky-ghost {
+  position: fixed;
+  z-index: 60;
+  margin: 0;
+  pointer-events: none;
+  opacity: 1;
+  rotate: 2deg;
+  scale: 1.04;
+  animation: none;
+  box-shadow:
+    0 24px 40px -12px oklch(0 0 0 / 0.45),
+    0 2px 4px oklch(0 0 0 / 0.1);
+}
+@keyframes note-hang {
+  from {
+    opacity: 0;
+    rotate: calc(var(--tilt) - 2.5deg);
+    translate: 0 -0.25rem;
+  }
+  40% {
+    opacity: 1;
+    rotate: calc(var(--tilt) + 1.4deg);
+  }
+  70% {
+    rotate: calc(var(--tilt) - 0.5deg);
+  }
+  to {
+    opacity: 1;
+    rotate: var(--tilt);
+    translate: 0 0;
+  }
+}
+
+/* --- theme switch --------------------------------------------------------- */
+
+/*
+ * The sun-and-moon toggle in the header. Adapted from "Switch" by Galahhad on
+ * uiverse.io (MIT), with two changes that are the whole point of the port.
+ *
+ * The original keys every state off a hidden checkbox's `:checked`. Here the
+ * state is `--on`, 0 or 1, set from the `data-choice` the component writes —
+ * and, when the choice is "system", from `prefers-color-scheme`. That is what
+ * lets the switch show the device's real scheme on the very first paint with
+ * no JavaScript deciding it, and no hydration flash. Every position and colour
+ * below is a `calc()` between its off and on value, and the transitions still
+ * run: a custom property does not animate, but the `left` and `transform`
+ * computed from it do.
+ *
+ * The palette is deliberately its own, not the app's tokens. This is a small
+ * illustration — a daytime sky and a night sky — and painting it in `--brand`
+ * would make it a blue pill with a yellow dot. It is declared here in one
+ * block so it is still one place to change.
+ */
+.theme-switch {
+  --toggle-size: 10px;
+  --on: 0;
+  --container-width: 5.625em;
+  --container-height: 2.5em;
+  --container-radius: 6.25em;
+  --container-light-bg: #3d7eae;
+  --container-night-bg: #1d1f2c;
+  --circle-container-diameter: 3.375em;
+  --sun-moon-diameter: 2.125em;
+  --sun-bg: #ecca2f;
+  --moon-bg: #c4c9d1;
+  --spot-color: #959db1;
+  --circle-container-offset: calc(
+    (var(--circle-container-diameter) - var(--container-height)) / 2 * -1
+  );
+  --circle-on-left: calc(
+    100% - var(--circle-container-offset) - var(--circle-container-diameter)
+  );
+  --stars-color: #fff;
+  --clouds-color: #f3fdff;
+  --back-clouds-color: #aacadf;
+  --transition: 0.5s cubic-bezier(0, -0.02, 0.4, 1.25);
+  --circle-transition: 0.3s cubic-bezier(0, -0.02, 0.35, 1.17);
+
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--container-radius);
+}
+.theme-switch[data-choice="dark"] {
+  --on: 1;
+}
+@media (prefers-color-scheme: dark) {
+  .theme-switch[data-choice="system"] {
+    --on: 1;
+  }
+}
+.theme-switch:disabled {
+  cursor: progress;
+}
+
+/* Spans rather than divs, so the whole thing can live inside a <button>;
+   they are blocks here because the artwork is laid out in boxes. */
+.theme-switch *,
+.theme-switch *::before,
+.theme-switch *::after {
+  display: block;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-size: var(--toggle-size);
+}
+
+.theme-switch__container {
+  width: var(--container-width);
+  height: var(--container-height);
+  background-color: color-mix(
+    in oklab,
+    var(--container-night-bg) calc(var(--on) * 100%),
+    var(--container-light-bg)
+  );
+  border-radius: var(--container-radius);
+  overflow: hidden;
+  box-shadow:
+    0 -0.062em 0.062em rgba(0, 0, 0, 0.25),
+    0 0.062em 0.125em rgba(255, 255, 255, 0.94);
+  transition: var(--transition);
+  position: relative;
+}
+
+.theme-switch__container::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  box-shadow:
+    0 0.05em 0.187em rgba(0, 0, 0, 0.25) inset,
+    0 0.05em 0.187em rgba(0, 0, 0, 0.25) inset;
+  border-radius: var(--container-radius);
+}
+
+.theme-switch__circle-container {
+  width: var(--circle-container-diameter);
+  height: var(--circle-container-diameter);
+  background-color: rgba(255, 255, 255, 0.1);
+  position: absolute;
+  left: calc(
+    var(--circle-container-offset) +
+      var(--on) * (var(--circle-on-left) - var(--circle-container-offset))
+  );
+  top: var(--circle-container-offset);
+  border-radius: var(--container-radius);
+  box-shadow:
+    inset 0 0 0 3.375em rgba(255, 255, 255, 0.1),
+    inset 0 0 0 3.375em rgba(255, 255, 255, 0.1),
+    0 0 0 0.625em rgba(255, 255, 255, 0.1),
+    0 0 0 1.25em rgba(255, 255, 255, 0.1);
+  display: flex;
+  transition: var(--circle-transition);
+  pointer-events: none;
+}
+/* The knob leans toward where it would go. */
+.theme-switch:hover:not(:disabled) .theme-switch__circle-container {
+  left: calc(
+    var(--circle-container-offset) +
+      var(--on) * (var(--circle-on-left) - var(--circle-container-offset)) +
+      (1 - 2 * var(--on)) * 0.187em
+  );
+}
+
+.theme-switch__sun-moon-container {
+  position: relative;
+  z-index: 2;
+  width: var(--sun-moon-diameter);
+  height: var(--sun-moon-diameter);
+  margin: auto;
+  border-radius: var(--container-radius);
+  background-color: var(--sun-bg);
+  box-shadow:
+    0.062em 0.062em 0.062em 0 rgba(254, 255, 239, 0.61) inset,
+    0 -0.062em 0.062em 0 #a1872a inset;
+  filter: drop-shadow(0.062em 0.125em 0.125em rgba(0, 0, 0, 0.25))
+    drop-shadow(0 0.062em 0.125em rgba(0, 0, 0, 0.25));
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+/* The moon slides across the sun rather than fading in over it. */
+.theme-switch__moon {
+  transform: translateX(calc((1 - var(--on)) * 100%));
+  width: 100%;
+  height: 100%;
+  background-color: var(--moon-bg);
+  border-radius: inherit;
+  box-shadow:
+    0.062em 0.062em 0.062em 0 rgba(254, 255, 239, 0.61) inset,
+    0 -0.062em 0.062em 0 #969696 inset;
+  transition: var(--transition);
+  position: relative;
+}
+
+.theme-switch__spot {
+  position: absolute;
+  top: 0.75em;
+  left: 0.312em;
+  width: 0.75em;
+  height: 0.75em;
+  border-radius: var(--container-radius);
+  background-color: var(--spot-color);
+  box-shadow: 0 0.0312em 0.062em rgba(0, 0, 0, 0.25) inset;
+}
+.theme-switch__spot:nth-of-type(2) {
+  width: 0.375em;
+  height: 0.375em;
+  top: 0.937em;
+  left: 1.375em;
+}
+.theme-switch__spot:nth-last-of-type(3) {
+  width: 0.25em;
+  height: 0.25em;
+  top: 0.312em;
+  left: 0.812em;
+}
+
+/* Two rows of cloud drawn as one element's shadows; they sink out of the
+   bottom when night comes. */
+.theme-switch__clouds {
+  width: 1.25em;
+  height: 1.25em;
+  background-color: var(--clouds-color);
+  border-radius: var(--container-radius);
+  position: absolute;
+  bottom: calc(-0.625em - var(--on) * 3.437em);
+  left: 0.312em;
+  box-shadow:
+    0.937em 0.312em var(--clouds-color),
+    -0.312em -0.312em var(--back-clouds-color),
+    1.437em 0.375em var(--clouds-color),
+    0.5em -0.125em var(--back-clouds-color),
+    2.187em 0 var(--clouds-color),
+    1.25em -0.062em var(--back-clouds-color),
+    2.937em 0.312em var(--clouds-color),
+    2em -0.312em var(--back-clouds-color),
+    3.625em -0.062em var(--clouds-color),
+    2.625em 0 var(--back-clouds-color),
+    4.5em -0.312em var(--clouds-color),
+    3.375em -0.437em var(--back-clouds-color),
+    4.625em -1.75em 0 0.437em var(--clouds-color),
+    4em -0.625em var(--back-clouds-color),
+    4.125em -2.125em 0 0.437em var(--back-clouds-color);
+  transition: var(--transition);
+}
+
+/* The stars drop in from above the frame. */
+.theme-switch__stars-container {
+  position: absolute;
+  color: var(--stars-color);
+  top: calc(-100% + var(--on) * 150%);
+  transform: translateY(calc(var(--on) * -50%));
+  left: 0.312em;
+  width: 2.75em;
+  height: auto;
+  transition: var(--transition);
+}
+.theme-switch__stars-container svg {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
 /* --- customer map --------------------------------------------------------- */
@@ -512,7 +1089,7 @@ button.pill:hover {
   height: 100%;
   color: var(--pin, var(--brand));
   filter: drop-shadow(0 2px 3px oklch(0 0 0 / 0.35));
-  transition: transform 120ms ease;
+  transition: transform var(--dur-fast) var(--ease-out);
   transform-origin: 50% 100%;
 }
 
@@ -678,6 +1255,19 @@ button.pill:hover {
      `max-block-size`, so `h-full` silently became `auto` and the form ran off
      the bottom of the map. */
   overflow: hidden;
+  /* The sheet rises from the bottom edge. `translate` rather than `transform`
+     so it composes with the positioning transform the desktop rule sets
+     below, instead of replacing it for the length of the animation. */
+  animation: sheet-up var(--dur-slow) var(--ease-out);
+}
+
+@keyframes sheet-up {
+  from {
+    translate: 0 100%;
+  }
+  to {
+    translate: 0 0;
+  }
 }
 
 @media (min-width: 1024px) {
@@ -699,10 +1289,26 @@ button.pill:hover {
     border-radius: 0.9rem;
     border: 1px solid var(--border);
     box-shadow: 0 18px 40px oklch(0 0 0 / 0.28);
+    /* Grows out of its own tail. `scale` is the individual property for the
+       same reason `translate` is above: `transform` is spoken for. */
+    transform-origin: 50% calc(100% + 2.75rem);
+    animation: popup-in var(--dur-base) var(--ease-out);
   }
 
   .map-popup[data-flip="below"] {
     transform: translate(-50%, 0.5rem);
+    transform-origin: 50% -0.5rem;
+  }
+
+  @keyframes popup-in {
+    from {
+      opacity: 0;
+      scale: 0.92;
+    }
+    to {
+      opacity: 1;
+      scale: 1;
+    }
   }
 
   /* The pin has been panned off the map; the card goes with it. Hidden rather

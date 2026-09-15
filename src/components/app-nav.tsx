@@ -8,6 +8,7 @@ import { BrandWordmark } from "@/components/brand";
 import { LocaleSwitch } from "@/components/locale-switch";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { useTranslations } from "@/lib/i18n/client";
+import { Collapse } from "@/components/motion";
 import { useSettings } from "@/lib/settings/client";
 import type { SessionUser } from "@/lib/auth/session";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
@@ -179,8 +180,8 @@ export function AppNav({ user }: { user: SessionUser }) {
         </div>
       </div>
 
-      {open && (
-        <div id="app-menu" className="border-t xl:hidden">
+      <Collapse open={open} id="app-menu" className="xl:hidden">
+        <div className="border-t">
           <div className="mx-auto w-full max-w-[88rem] space-y-3 px-4 py-3 sm:px-6">
             <div>
               <div className="text-sm leading-tight">{user.fullName}</div>
@@ -227,7 +228,7 @@ export function AppNav({ user }: { user: SessionUser }) {
             </div>
           </div>
         </div>
-      )}
+      </Collapse>
     </header>
   );
 }

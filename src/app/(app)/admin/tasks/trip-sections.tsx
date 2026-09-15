@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 
 import { CardGrid } from "@/components/card-grid";
+import { Reveal } from "@/components/motion";
 import { Alert } from "@/components/ui";
 import { TripCard } from "@/components/trip-card";
 import {
@@ -78,7 +79,7 @@ export function TripSections({
       <CardGrid>
         {trips.map((trip) =>
           editingId === trip.id ? (
-            <div key={trip.id} className="card p-4 lg:col-span-2">
+            <Reveal key={trip.id} className="card card-wide p-4">
               <TripForm
                 action={updateAction}
                 errors={updateErrors}
@@ -93,7 +94,7 @@ export function TripSections({
                 submitLabel={t("common.save")}
                 onCancel={() => setEditingId(null)}
               />
-            </div>
+            </Reveal>
           ) : (
             <TripCard
               key={trip.id}

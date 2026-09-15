@@ -1193,6 +1193,34 @@ a fact, not a problem, and colouring it as overdue would make the calendar cry
 wolf. A task with neither planned date appears nowhere on it, which is why an
 edit that empties `dueDate` silently drops the task off the calendar.
 
+### The calendar changes month before the server answers
+
+`TaskCalendar` draws the month as a plain grid, and changing month **slides
+the page before the server answers**. The arrow computes the target month,
+`beginTurn()` sets a `preview`, and the component draws that month's days
+from arithmetic alone (`PreviewPage`, a skeleton where each day's marks will
+go) while the link's own navigation fetches it. Forward, the current page
+slides out to the left and the preview in from the right; back, the other
+way. Every page is six weeks tall (`monthCells`) so the height never changes
+between months.
+
+The real month arrives by **remount** — `CalendarSection` keys the component
+per month — so the instance that started the turn is gone by then. Two
+module-scope variables carry what it knew: `lastMonthShown`, so a month that
+arrives without a preview (browser back, a pasted link) knows to slide itself
+in, and `previewedMonth`, so the one that *was* previewed settles in with no
+second slide and only its marks popping in. Both are decided in a
+`useLayoutEffect`, never during render: the server renders every page
+without motion and hydration has nothing to disagree with. StrictMode runs that
+effect twice, which is why it ignores a month it has already recorded.
+
+The day's entries under it are one pinned note each on a `SlideRow`. An
+admin can carry a note to another day — the browser's drag for a mouse,
+press-and-hold for a finger (`StickyNote`, with a fixed-position copy because
+the rail clips) — and nothing is written on the drop: `MoveConfirm` asks
+first, then `rescheduleTaskAction` makes the same audited edit
+`updateTaskAction` would have made to that one field.
+
 ### Employees are deactivated, and deleted only when empty
 
 `deactivateEmployeeAction` is the normal end of an account: it sets
@@ -1357,3 +1385,40 @@ npm run build   # needs DATABASE_URL and SESSION_SECRET; dummy values are fine
   floor is what stops it.
 - Prisma `schema.prisma` carries the invariants as comments — read them before
   changing a model.
+
+### Motion
+
+Two layers, and which one a thing belongs to is decided by whether it needs an
+*exit*. Hover, press and focus are CSS on the primitives, timed by the
+`--dur-fast` / `--dur-base` / `--dur-slow` / `--ease-out` tokens in
+`globals.css`. Things that appear and disappear go through
+`src/components/motion.tsx`, which is the **only file that imports
+`motion/react`**: it mounts one `LazyMotion` (`domAnimation`, `strict`) and one
+`MotionConfig reducedMotion="user"` in the app layout, and exports `Reveal`
+(fade-and-rise on mount), `Collapse` (height 0 ↔ auto with an exit) and the `m`
+component. Use `m`, never `motion` — `strict` throws on the latter because it
+pulls the full ~30kB back into the bundle.
+
+Two rules that came from the first pass:
+
+- **Server-rendered content is not given an entrance.** `initial={{opacity:0}}`
+  is rendered on the server too, so the first row of every `CardGrid` would sit
+  invisible until hydration. Only what appears *after* load animates — the
+  cards a "ดูเพิ่มเติม" press reveals, a capsule's list, a form that opens —
+  and the page itself gets one fade from `(app)/template.tsx`, which remounts
+  per navigation where the layout does not.
+- **Anything positioned by `transform` animates with `scale` / `translate`
+  instead.** `.map-popup` places itself with `transform`, so a `motion` value
+  or a keyframe on `transform` would replace the position for the length of
+  the animation; the individual properties compose with it.
+
+`CardGrid` wraps every card in a `.card-cell` so the revealed ones can be
+staggered, which means a card is no longer a grid item: a card that wants both
+columns says `card-wide` and the cell picks it up through `:has`, and
+`lg:col-span-2` on the card itself does nothing.
+
+`reducedMotion="user"` plus the `prefers-reduced-motion` block in `globals.css`
+mean the OS setting is honoured without any component checking it; a
+transform-driven entrance becomes an instant fade. Keep an opacity in every
+variant for that reason — a reduced-motion viewer should still see something
+appear rather than snap.

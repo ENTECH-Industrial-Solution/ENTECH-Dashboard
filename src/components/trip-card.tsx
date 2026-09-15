@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { MiniMap } from "@/components/map-embed";
+import { Reveal } from "@/components/motion";
 import { VideoPlayer } from "@/components/video-embed";
 import { tripHours } from "@/lib/calendar";
 import { Alert, SubmitButton } from "@/components/ui";
@@ -288,6 +289,7 @@ export function TripActions({
 
   if (open === "cancelling" && cancelAction) {
     return (
+      <Reveal>
       <form action={cancelAction} className="space-y-2 pt-1">
         <input type="hidden" name="fieldTripId" value={trip.id} />
         <div>
@@ -313,11 +315,13 @@ export function TripActions({
           </button>
         </div>
       </form>
+      </Reveal>
     );
   }
 
   if (open === "finishing") {
     return (
+      <Reveal>
       <form action={completeAction} className="space-y-3 pt-1">
         {completeState.status === "error" && (
           <Alert tone="error">{completeState.message}</Alert>
@@ -364,6 +368,7 @@ export function TripActions({
           </button>
         </div>
       </form>
+      </Reveal>
     );
   }
 
@@ -449,6 +454,7 @@ function TripDeleter({
   const [state, formAction] = useActionState(deleteFieldTripAction, idleState);
 
   return (
+    <Reveal>
     <form action={formAction} className="space-y-2 pt-1">
       <Alert tone="warning">{t("trips.deleteWarning")}</Alert>
       {state.status === "error" && <Alert tone="error">{state.message}</Alert>}
@@ -481,6 +487,7 @@ function TripDeleter({
         </button>
       </div>
     </form>
+    </Reveal>
   );
 }
 
@@ -522,7 +529,7 @@ export function TripCard({
   return (
     <article
       id={`trip-${trip.id}`}
-      className="card scroll-mt-24 space-y-3 p-4"
+      className="card flex scroll-mt-24 flex-col gap-3 p-4"
       style={cancelled ? { opacity: 0.7 } : undefined}
     >
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
@@ -608,15 +615,18 @@ export function TripCard({
 
       {/* The actions sit with the record they act on, not stranded under the
           footnote: what someone reads last on a finished trip is the report,
-          and the buttons belong next to it. */}
-      <TripActions
-        trip={trip}
-        canRun={canRun}
-        canDelete={canDelete}
-        isAdmin={isAdmin}
-        onEdit={onEdit}
-        cancelAction={cancelAction}
-      />
+          and the buttons belong next to it. `mt-auto` is what lines the row
+          up with the card beside it (see the task card). */}
+      <div className="mt-auto">
+        <TripActions
+          trip={trip}
+          canRun={canRun}
+          canDelete={canDelete}
+          isAdmin={isAdmin}
+          onEdit={onEdit}
+          cancelAction={cancelAction}
+        />
+      </div>
 
       {isAdmin && state === "COMPLETED" && (
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>

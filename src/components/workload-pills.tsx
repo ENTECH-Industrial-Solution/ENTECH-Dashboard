@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { Collapse } from "@/components/motion";
 import { PinIcon } from "@/components/trip-card";
 import { StatusBadge } from "@/components/ui";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
@@ -117,16 +118,14 @@ export function WorkloadPills({
               </span>
             </button>
 
-            {open && (
-              <div id={panelId} className="mt-1.5" aria-live="polite">
+            <Collapse open={open} id={panelId}>
+              <div className="mt-1.5" aria-live="polite">
                 {error ? (
                   <p className="px-2 text-xs" style={{ color: "var(--danger)" }}>
                     {error}
                   </p>
                 ) : !tasks ? (
-                  <p className="px-2 text-xs" style={{ color: "var(--text-muted)" }}>
-                    {t("common.loading")}
-                  </p>
+                  <Skeleton label={t("common.loading")} />
                 ) : tasks.length === 0 ? (
                   <p className="px-2 text-xs" style={{ color: "var(--text-muted)" }}>
                     {t("tasks.empty")}
@@ -140,7 +139,7 @@ export function WorkloadPills({
                   />
                 )}
               </div>
-            )}
+            </Collapse>
           </div>
         );
       })}
@@ -235,6 +234,25 @@ function useDayFormatter() {
  * resolve inside the capsule (it computes to the identity matrix), and swapping
  * the path is both simpler and immune to that.
  */
+/**
+ * What a capsule shows while its list is on the wire: two lines the shape of
+ * the answer, pulsing. A word saying "loading" made the capsule open onto
+ * nothing and then jump; these hold the height the answer will take.
+ */
+function Skeleton({ label }: { label: string }) {
+  return (
+    <div className="space-y-1.5 px-2 py-1" role="status" aria-label={label}>
+      {[0.85, 0.6].map((width) => (
+        <span
+          key={width}
+          className="skeleton block h-3 rounded"
+          style={{ width: `${width * 100}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function Chevron({ open }: { open: boolean }) {
   return (
     <svg
@@ -246,10 +264,14 @@ function Chevron({ open }: { open: boolean }) {
       strokeWidth={3}
       strokeLinecap="round"
       strokeLinejoin="round"
-      style={{ color: "var(--text-muted)" }}
+      style={{
+        color: "var(--text-muted)",
+        transform: open ? "rotate(180deg)" : "none",
+        transition: "transform var(--dur-base) var(--ease-out)",
+      }}
       aria-hidden
     >
-      <path d={open ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"} />
+      <path d="m6 9 6 6 6-6" />
     </svg>
   );
 }
