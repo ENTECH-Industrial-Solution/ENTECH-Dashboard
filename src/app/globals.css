@@ -548,35 +548,78 @@ button.pill:hover {
   scale: 1.06;
 }
 
-.pinned-note {
+/*
+ * One note on the board. `--tilt` is its resting angle and `--i` its place in
+ * the row, so neighbours lean opposite ways and hang one after another. The
+ * whole thing is `user-select: none` and callout-free because a finger holds
+ * it to pick it up, and a long press must not open the title link's preview
+ * or select the text instead.
+ */
+.sticky-note {
+  --tilt: -0.8deg;
+  --i: 0;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-height: 7.5rem;
+  /* Room for the pin's head above the note: the rail clips at its own edge,
+     and a pin hanging over that edge is a pin cut in half. */
+  margin-top: 0.6rem;
   transform-origin: 50% 0;
-  rotate: -0.6deg;
+  rotate: var(--tilt);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
-  padding: 0.875rem 1rem;
+  padding: 1rem 0.875rem 0.75rem;
   box-shadow:
     0 10px 24px -10px oklch(0 0 0 / 0.3),
     0 1px 2px oklch(0 0 0 / 0.06);
   animation: note-hang 0.7s var(--ease-out) both;
+  animation-delay: calc(var(--i) * 70ms);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.sticky-note[draggable="true"] {
+  cursor: grab;
+}
+/* Off the board and in the hand: what is left behind fades. */
+.sticky-note[data-lifted] {
+  opacity: 0.35;
+}
+/* The copy that travels with a finger. Fixed, so the rail cannot clip it;
+   no pointer events, so the day under it can be found through it. */
+.sticky-ghost {
+  position: fixed;
+  z-index: 60;
+  margin: 0;
+  pointer-events: none;
+  opacity: 1;
+  rotate: 2deg;
+  scale: 1.04;
+  animation: none;
+  box-shadow:
+    0 24px 40px -12px oklch(0 0 0 / 0.45),
+    0 2px 4px oklch(0 0 0 / 0.1);
 }
 @keyframes note-hang {
   from {
     opacity: 0;
-    rotate: -3deg;
+    rotate: calc(var(--tilt) - 2.5deg);
     translate: 0 -0.25rem;
   }
   40% {
     opacity: 1;
-    rotate: 0.7deg;
+    rotate: calc(var(--tilt) + 1.4deg);
   }
   70% {
-    rotate: -1.1deg;
+    rotate: calc(var(--tilt) - 0.5deg);
   }
   to {
     opacity: 1;
-    rotate: -0.6deg;
+    rotate: var(--tilt);
     translate: 0 0;
   }
 }

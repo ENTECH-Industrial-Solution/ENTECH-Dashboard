@@ -34,6 +34,7 @@ export function SlideRow({
   heading,
   label,
   rows,
+  autoColumns,
   children,
 }: {
   heading: ReactNode;
@@ -49,6 +50,12 @@ export function SlideRow({
    * the parts below it up.
    */
   rows: number;
+  /**
+   * The width of one card, as a `grid-auto-columns` value. The default in
+   * `.slide-rail` is sized for a trip's box; the calendar's notes are
+   * narrower so three fit across the calendar.
+   */
+  autoColumns?: string;
   children: ReactNode;
 }) {
   const t = useTranslations();
@@ -146,7 +153,7 @@ export function SlideRow({
         role="group"
         aria-label={label}
         className="scroll-bare slide-rail grid snap-x snap-mandatory gap-x-3 overflow-x-auto scroll-p-1 p-1"
-        style={{ gridTemplateRows: `repeat(${rows}, auto)` }}
+        style={{ gridTemplateRows: `repeat(${rows}, auto)`, gridAutoColumns: autoColumns }}
       >
         {children}
       </div>

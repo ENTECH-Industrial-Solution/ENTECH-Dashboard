@@ -1,9 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect, useState, type DragEvent } from "react";
+import {
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 
 import { Reveal } from "@/components/motion";
+import { SlideRow } from "@/components/slide-row";
 import { Alert, PriorityBadge, StatusBadge, SubmitButton } from "@/components/ui";
 import { dayKeyOf, monthGrid } from "@/lib/calendar";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
@@ -295,6 +304,7 @@ export function TaskCalendar({
                   moving ? pointAt(moving, key) : setSelected(isSelected ? null : key)
                 }
                 aria-pressed={isSelected}
+                data-day={key}
                 data-target={moving ? (dragOver === key ? "over" : "open") : undefined}
                 className="day-cell relative flex min-h-14 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs transition-colors"
                 style={{
@@ -356,11 +366,9 @@ export function TaskCalendar({
               : t("calendar.pickDay")}
           </p>
         ) : (
-          /* Keyed on the day, so picking another one hangs a fresh note
-             rather than swapping the text on the old one. */
-          <div key={selected} className="pinned-note space-y-2">
-            <Pushpin />
-
+          /* Keyed on the day, so picking another one hangs fresh notes
+             rather than swapping the text on the old ones. */
+          <div key={selected} className="space-y-2">
             {pendingMove && (
               <MoveConfirm
                 move={pendingMove}
@@ -388,190 +396,357 @@ export function TaskCalendar({
                 </button>
               </div>
             )}
-            <div className="flex flex-wrap items-baseline gap-2">
-              <span className="text-sm font-medium">
-                {formatDayKey(selected, locale)}
-              </span>
-              {dueCount > 0 && (
-                <span
-                  className="text-xs"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  {dueCount} {t("calendar.dueCount")}
-                </span>
-              )}
-              {startCount > 0 && (
-                <span
-                  className="text-xs"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  {startCount} {t("calendar.startCount")}
-                </span>
-              )}
-            </div>
 
             {selectedTrips.length === 0 && selectedTasks.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                {t("calendar.emptyDay")}
-              </p>
+              <>
+                <DayHeading
+                  label={formatDayKey(selected, locale)}
+                  dueCount={dueCount}
+                  startCount={startCount}
+                />
+                <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                  {t("calendar.emptyDay")}
+                </p>
+              </>
             ) : (
-              <ul className="space-y-1.5">
-                {selectedTrips.map((trip) => {
+              /*
+               * One note per entry, pinned side by side, the rest waiting past
+               * the edge — the same rail the off-site panel uses. The width
+               * puts three across the calendar on a desktop and one on a
+               * phone, and the row is what says "there is more": the next note
+               * shows past the edge, and the arrows appear when it does.
+               */
+              <SlideRow
+                heading={
+                  <DayHeading
+                    label={formatDayKey(selected, locale)}
+                    dueCount={dueCount}
+                    startCount={startCount}
+                  />
+                }
+                label={formatDayKey(selected, locale)}
+                rows={1}
+                autoColumns="minmax(min(100%, 12.5rem), 1fr)"
+              >
+                {selectedTrips.map((trip, index) => {
                   const tone = TRIP_TONE[trip.state];
 
                   return (
-                    <li key={trip.id}>
-                      <div
-                        className="card flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2"
-                        style={{ background: tone.background }}
+                    <StickyNote key={trip.id} index={index}>
+                      <span
+                        className="inline-flex items-center gap-1 text-xs"
+                        style={{ color: tone.color }}
                       >
-                        <span
-                          className="inline-flex items-center gap-1 text-xs"
-                          style={{ color: tone.color }}
-                        >
-                          <PinIcon />
-                          {t(tone.label)}
-                        </span>
-
-                        <span className="min-w-0 flex-1 truncate text-sm">
-                          {trip.purpose}
-                        </span>
-
-                        <span
-                          className="shrink-0 text-xs tabular-nums"
-                          style={{ color: "var(--text-muted)" }}
-                        >
-                          {trip.hours}
-                        </span>
-
-                        {showAssignee && (
-                          <span
-                            className="min-w-0 truncate text-xs"
-                            style={{ color: "var(--text-muted)" }}
-                          >
-                            {trip.personName}
-                          </span>
-                        )}
-
-                        <a
-                          href={trip.mapHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="truncate text-xs underline"
-                          style={{ color: "var(--brand)" }}
-                        >
-                          {trip.locationName}
-                        </a>
-                      </div>
-                    </li>
+                        <PinIcon />
+                        {t(tone.label)}
+                      </span>
+                      <span className="line-clamp-3 text-sm leading-snug">
+                        {trip.purpose}
+                      </span>
+                      <span
+                        className="text-xs tabular-nums"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        {trip.hours}
+                        {showAssignee && ` · ${trip.personName}`}
+                      </span>
+                      <a
+                        href={trip.mapHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="truncate text-xs underline"
+                        style={{ color: "var(--brand)" }}
+                      >
+                        {trip.locationName}
+                      </a>
+                    </StickyNote>
                   );
                 })}
 
-                {selectedTasks.map((task) => (
-                  <li
+                {selectedTasks.map((task, index) => (
+                  <StickyNote
                     key={task.id}
-                    className={canReschedule ? "flex items-stretch gap-1.5" : undefined}
-                    // HTML5 drag, desktop only in practice — a phone gets the
-                    // button beside it. The li is the draggable rather than the
-                    // link, so dragging does not start a navigation.
-                    draggable={canReschedule || undefined}
-                    onDragStart={
+                    index={selectedTrips.length + index}
+                    lifted={moving?.id === task.id}
+                    drag={
                       canReschedule
-                        ? (event) => {
-                            event.dataTransfer.effectAllowed = "move";
-                            event.dataTransfer.setData("text/plain", task.code);
-                            setMoving(task);
-                          }
-                        : undefined
-                    }
-                    // A drop has already been handled by the time this fires;
-                    // what is left is a drag let go somewhere that was not a
-                    // day, which should not leave the grid waiting for a tap.
-                    onDragEnd={
-                      canReschedule
-                        ? () => {
-                            setDragOver(null);
-                            setMoving(null);
+                        ? {
+                            code: task.code,
+                            onLift: () => setMoving(task),
+                            onHover: setDragOver,
+                            onDrop: (day) => pointAt(task, day),
+                            onCancel: () => {
+                              setDragOver(null);
+                              setMoving(null);
+                            },
                           }
                         : undefined
                     }
                   >
-                    {/*
-                      The row is laid out on a wrapper *inside* the link, not on
-                      the link itself, and that is the Conventions rule in
-                      CLAUDE.md rather than a preference: `.card-link` sets
-                      `display: block` from unlayered CSS, which beats any
-                      Tailwind utility, so a `flex` on this anchor was silently
-                      dead. The children stayed inline, `truncate` does nothing
-                      to an inline box, and a long task title ran 125px past the
-                      right edge of a phone — taking the whole page's horizontal
-                      scroll with it.
-                    */}
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="font-mono text-xs"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        {task.code}
+                      </span>
+                      <span
+                        className="badge shrink-0"
+                        style={
+                          task.kind === "start"
+                            ? { background: "var(--surface-muted)", color: "var(--text-muted)" }
+                            : { background: "var(--brand-soft)", color: "var(--brand)" }
+                        }
+                      >
+                        {task.kind === "start"
+                          ? t("calendar.marksStart")
+                          : t("calendar.marksDue")}
+                      </span>
+                    </span>
+
                     <Link
                       href={task.href}
-                      className="card card-link px-3 py-2"
-                      style={{ background: "var(--surface-muted)" }}
+                      className="line-clamp-3 text-sm font-medium leading-snug hover:underline"
                     >
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                        <span
-                          className="font-mono text-xs"
-                          style={{ color: "var(--text-muted)" }}
-                        >
-                          {task.code}
-                        </span>
-                        <span
-                          className="badge shrink-0"
-                          style={
-                            task.kind === "start"
-                              ? {
-                                  background: "var(--surface)",
-                                  color: "var(--text-muted)",
-                                }
-                              : {
-                                  background: "var(--brand-soft)",
-                                  color: "var(--brand)",
-                                }
+                      {task.title}
+                    </Link>
+
+                    {showAssignee && (
+                      <span
+                        className="truncate text-xs"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        {task.assigneeName}
+                      </span>
+                    )}
+
+                    <span className="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
+                      <PriorityBadge priority={task.priority} />
+                      <StatusBadge status={task.status} />
+                      {canReschedule && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost ms-auto"
+                          aria-pressed={moving?.id === task.id}
+                          title={t("calendar.move")}
+                          onClick={() =>
+                            setMoving(moving?.id === task.id ? null : task)
                           }
                         >
-                          {task.kind === "start"
-                            ? t("calendar.marksStart")
-                            : t("calendar.marksDue")}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-sm">
-                          {task.title}
-                        </span>
-                        {showAssignee && (
-                          <span
-                            className="min-w-0 truncate text-xs"
-                            style={{ color: "var(--text-muted)" }}
-                          >
-                            {task.assigneeName}
-                          </span>
-                        )}
-                        <PriorityBadge priority={task.priority} />
-                        <StatusBadge status={task.status} />
-                      </div>
-                    </Link>
-                    {canReschedule && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary shrink-0"
-                        aria-pressed={moving?.id === task.id}
-                        title={t("calendar.move")}
-                        onClick={() => setMoving(moving?.id === task.id ? null : task)}
-                      >
-                        <MoveIcon />
-                        <span className="sr-only">{t("calendar.move")}</span>
-                      </button>
-                    )}
-                  </li>
+                          <MoveIcon />
+                          <span className="sr-only">{t("calendar.move")}</span>
+                        </button>
+                      )}
+                    </span>
+                  </StickyNote>
                 ))}
-              </ul>
+              </SlideRow>
             )}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function DayHeading({
+  label,
+  dueCount,
+  startCount,
+}: {
+  label: string;
+  dueCount: number;
+  startCount: number;
+}) {
+  const t = useTranslations();
+  return (
+    <div className="flex flex-wrap items-baseline gap-2">
+      <span className="text-sm font-medium">{label}</span>
+      {dueCount > 0 && (
+        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+          {dueCount} {t("calendar.dueCount")}
+        </span>
+      )}
+      {startCount > 0 && (
+        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+          {startCount} {t("calendar.startCount")}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** How long a finger holds still on a note before it comes off the board. */
+const HOLD_MS = 350;
+/** How far it may wander during the hold before it is a scroll instead. */
+const HOLD_SLOP = 8;
+
+/** The day cell under a point on screen, if any. */
+function dayUnder(x: number, y: number): string | null {
+  const cell = document.elementFromPoint(x, y)?.closest<HTMLElement>(".day-cell");
+  return cell?.dataset.day ?? null;
+}
+
+/**
+ * One note on the board: a card with a pin through the top, hung a fraction
+ * off square, that can be picked up and carried to a day.
+ *
+ * Two ways to pick it up, because the two kinds of pointer are nothing alike.
+ * A mouse gets the browser's own drag — `draggable`, with the day cells as
+ * drop targets — which starts the moment it moves and draws its own ghost. A
+ * finger gets press-and-hold: hold still for a beat and the note lifts off
+ * and follows, with a fixed-position copy standing in for it because the rail
+ * clips anything that leaves it. Move too soon and it is a scroll, exactly as
+ * it always was — the wait is what tells the two apart, and it is short.
+ *
+ * Where a lifted note is over a day is asked of the page (`elementFromPoint`)
+ * rather than tracked by the cells, since the finger is captured by the note.
+ */
+function StickyNote({
+  index,
+  lifted = false,
+  drag,
+  children,
+}: {
+  index: number;
+  lifted?: boolean;
+  drag?: {
+    code: string;
+    onLift: () => void;
+    onHover: (day: string | null) => void;
+    onDrop: (day: string) => void;
+    onCancel: () => void;
+  };
+  children: ReactNode;
+}) {
+  const note = useRef<HTMLDivElement>(null);
+  const [ghost, setGhost] = useState<{ x: number; y: number; w: number; h: number } | null>(
+    null,
+  );
+  const hold = useRef<{
+    timer: number;
+    start: { x: number; y: number };
+    grip: { dx: number; dy: number; w: number; h: number } | null;
+  } | null>(null);
+
+  const release = () => {
+    if (hold.current) window.clearTimeout(hold.current.timer);
+    hold.current = null;
+    setGhost(null);
+  };
+
+  // Registered from the start rather than on lift: a browser decides at
+  // touchstart whether a scroll may begin without asking, and it only asks
+  // if something is already listening. Passive elsewhere; cancelled only
+  // while a note is in the air.
+  useEffect(() => {
+    const el = note.current;
+    if (!el || !drag) return;
+    const block = (event: TouchEvent) => {
+      if (hold.current?.grip) event.preventDefault();
+    };
+    el.addEventListener("touchmove", block, { passive: false });
+    return () => el.removeEventListener("touchmove", block);
+  }, [drag]);
+
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag || event.pointerType === "mouse") return;
+    const el = note.current;
+    if (!el) return;
+    const start = { x: event.clientX, y: event.clientY };
+    const pointerId = event.pointerId;
+
+    hold.current = {
+      start,
+      grip: null,
+      timer: window.setTimeout(() => {
+        const current = hold.current;
+        if (!current) return;
+        const r = el.getBoundingClientRect();
+        current.grip = { dx: start.x - r.left, dy: start.y - r.top, w: r.width, h: r.height };
+        // Keeps the moves coming to the note once the finger leaves it.
+        // Throws if the pointer is already gone, in which case there is
+        // nothing to follow anyway.
+        try {
+          el.setPointerCapture(pointerId);
+        } catch {}
+        setGhost({ x: r.left, y: r.top, w: r.width, h: r.height });
+        navigator.vibrate?.(10);
+        drag.onLift();
+      }, HOLD_MS),
+    };
+  };
+
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const current = hold.current;
+    if (!current || !drag) return;
+
+    if (!current.grip) {
+      const moved = Math.hypot(event.clientX - current.start.x, event.clientY - current.start.y);
+      if (moved > HOLD_SLOP) release();
+      return;
+    }
+
+    const { dx, dy, w, h } = current.grip;
+    setGhost({ x: event.clientX - dx, y: event.clientY - dy, w, h });
+    drag.onHover(dayUnder(event.clientX, event.clientY));
+  };
+
+  const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const current = hold.current;
+    if (!current || !drag) return;
+
+    if (current.grip) {
+      const day = dayUnder(event.clientX, event.clientY);
+      if (day) drag.onDrop(day);
+      else drag.onCancel();
+    }
+    release();
+  };
+
+  return (
+    <>
+      <div
+        ref={note}
+        className="sticky-note slide-card"
+        style={{ "--i": index, "--tilt": `${index % 2 ? 0.9 : -1.1}deg` } as React.CSSProperties}
+        data-lifted={lifted || undefined}
+        draggable={drag ? true : undefined}
+        onDragStart={
+          drag
+            ? (event) => {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", drag.code);
+                drag.onLift();
+              }
+            : undefined
+        }
+        // A drop has already been handled by the time this fires; what is
+        // left is a drag let go somewhere that was not a day.
+        onDragEnd={drag ? () => drag.onCancel() : undefined}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={release}
+        onContextMenu={drag ? (event) => { if (hold.current) event.preventDefault(); } : undefined}
+      >
+        <Pushpin />
+        {children}
+      </div>
+
+      {ghost &&
+        createPortal(
+          <div
+            className="sticky-note sticky-ghost"
+            style={{ left: ghost.x, top: ghost.y, width: ghost.w, height: ghost.h }}
+            aria-hidden
+          >
+            <Pushpin />
+            {children}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 
