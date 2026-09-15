@@ -426,7 +426,10 @@ export function TaskCalendar({
                 }
                 label={formatDayKey(selected, locale)}
                 rows={1}
-                autoColumns="minmax(min(100%, 12.5rem), 1fr)"
+                // A fixed width, not `1fr`: one note on a quiet day must be the
+                // same size as one of five on a busy one.
+                autoColumns="min(100%, 12.5rem)"
+                padding="px-2 pt-1 pb-5 scroll-p-2"
               >
                 {selectedTrips.map((trip, index) => {
                   const tone = TRIP_TONE[trip.state];

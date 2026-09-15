@@ -580,7 +580,14 @@ button.pill:hover {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
-  transition: opacity var(--dur-fast) var(--ease-out);
+  /* The sway the rail reports while it scrolls (see SlideRow). On `transform`
+     rather than `rotate`, because the hang animation owns `rotate` and a
+     filled animation keeps owning it; the two compose. The curve overshoots
+     so a note swings back past straight and settles, like paper would. */
+  transform: rotate(var(--sway, 0deg));
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .sticky-note[draggable="true"] {
   cursor: grab;

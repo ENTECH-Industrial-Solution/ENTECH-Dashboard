@@ -35,6 +35,7 @@ export function SlideRow({
   label,
   rows,
   autoColumns,
+  padding = "p-1 scroll-p-1",
   children,
 }: {
   heading: ReactNode;
@@ -56,11 +57,18 @@ export function SlideRow({
    * narrower so three fit across the calendar.
    */
   autoColumns?: string;
+  /**
+   * The rail's padding utilities. The default leaves a pixel for the focus
+   * ring; a row of tilted notes needs more, or the overflow clips their
+   * corners and their shadows.
+   */
+  padding?: string;
   children: ReactNode;
 }) {
   const t = useTranslations();
   const rail = useRef<HTMLDivElement>(null);
   const [reach, setReach] = useState({ back: false, forward: false });
+  const motion = useRef({ left: 0, settle: 0 });
 
   const measure = useCallback(() => {
     const el = rail.current;
@@ -87,12 +95,30 @@ export function SlideRow({
 
     el.addEventListener("scroll", measure, { passive: true });
 
+    // The sway. Paper on a pin lags when the board moves, so the rail reports
+    // how fast it is scrolling as `--sway`, an angle the cards may lean by,
+    // and settles it back to zero once the scrolling stops. What leans is up
+    // to the card — the notes do, the trip boxes do not.
+    const m = motion.current;
+    const sway = () => {
+      const dx = el.scrollLeft - m.left;
+      m.left = el.scrollLeft;
+      const angle = Math.max(-9, Math.min(9, dx * 0.35));
+      el.style.setProperty("--sway", `${angle.toFixed(2)}deg`);
+      window.clearTimeout(m.settle);
+      m.settle = window.setTimeout(() => el.style.setProperty("--sway", "0deg"), 90);
+    };
+    m.left = el.scrollLeft;
+    el.addEventListener("scroll", sway, { passive: true });
+
     // The panel is a grid column: its width changes without the window's.
     const observer = new ResizeObserver(measure);
     observer.observe(el);
 
     return () => {
       el.removeEventListener("scroll", measure);
+      el.removeEventListener("scroll", sway);
+      window.clearTimeout(m.settle);
       observer.disconnect();
     };
   }, [measure]);
@@ -152,7 +178,7 @@ export function SlideRow({
         tabIndex={0}
         role="group"
         aria-label={label}
-        className="scroll-bare slide-rail grid snap-x snap-mandatory gap-x-3 overflow-x-auto scroll-p-1 p-1"
+        className={`scroll-bare slide-rail grid snap-x snap-mandatory gap-x-3 overflow-x-auto ${padding}`}
         style={{ gridTemplateRows: `repeat(${rows}, auto)`, gridAutoColumns: autoColumns }}
       >
         {children}
