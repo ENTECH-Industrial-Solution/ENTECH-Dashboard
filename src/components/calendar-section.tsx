@@ -95,6 +95,7 @@ export async function CalendarSection({
     // A task can appear twice in the month, so the row id carries which entry
     // this is. The href still points at the one card behind both.
     id: `${task.id}-${kind}`,
+    taskId: task.id,
     kind,
     code: task.code,
     title: task.title,

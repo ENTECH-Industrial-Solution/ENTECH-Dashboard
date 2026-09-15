@@ -35,7 +35,10 @@ import { idleState } from "@/server/actions/types";
  */
 
 export type CalendarTask = {
+  /** The entry's own id — a task appears once per date it has in the month. */
   id: string;
+  /** The task behind the entry, which is what a move is written against. */
+  taskId: string;
   /**
    * Which of the task's two dates put it on this day. One task can produce two
    * entries in a month — the day it is planned to start and the day it falls
@@ -860,7 +863,7 @@ function MoveConfirm({
     >
       {state.status === "error" && <Alert tone="error">{state.message}</Alert>}
 
-      <input type="hidden" name="taskId" value={task.id} />
+      <input type="hidden" name="taskId" value={task.taskId} />
       <input type="hidden" name="field" value={task.kind} />
       <input type="hidden" name="day" value={toDay} />
 
