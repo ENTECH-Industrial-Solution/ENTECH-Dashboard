@@ -91,6 +91,11 @@ export const dictionary = {
   },
   "tasks.empty": { th: "ยังไม่มีงานในหมวดนี้", en: "No tasks in this section" },
   "tasks.new": { th: "สร้างงานใหม่", en: "New task" },
+  "tasks.newSelf": { th: "เพิ่มงานของฉัน", en: "Add my task" },
+  "tasks.newSelfHint": {
+    th: "งานหรือการออกนอกสถานที่ที่คุณเพิ่มเองจะอยู่ในชื่อคุณ และบันทึกไว้ว่าคุณเป็นคนสร้าง",
+    en: "Work you add here is yours alone, and recorded as created by you",
+  },
   "tasks.kind": { th: "ออกนอกสถานที่ไหม", en: "What kind of work?" },
   "tasks.kindTask": { th: "งานปกติ", en: "Task" },
   "tasks.kindTrip": { th: "ออกนอกสถานที่", en: "Field trip" },

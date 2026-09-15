@@ -28,6 +28,7 @@ export function TaskForm({
   errors,
   formError,
   assignees,
+  lockedAssignee,
   task,
   submitLabel,
   onCancel,
@@ -36,6 +37,14 @@ export function TaskForm({
   errors: Record<string, string>;
   formError?: string;
   assignees: AssigneeOption[];
+  /**
+   * When set, the assignee is stated rather than chosen: the select becomes a
+   * line of text and the id rides in a hidden field. This is the employee
+   * creating a task for themselves — the server pins the assignee to the
+   * caller regardless, so this is the form agreeing with the rule, not
+   * enforcing it.
+   */
+  lockedAssignee?: AssigneeOption;
   task?: TaskCardData;
   submitLabel: string;
   onCancel: () => void;
@@ -99,23 +108,32 @@ export function TaskForm({
           <label className="label" htmlFor={`assigneeId-${id}`}>
             {t("tasks.assignee")}
           </label>
-          <select
-            id={`assigneeId-${id}`}
-            name="assigneeId"
-            className="input"
-            required
-            defaultValue={task?.assignee.id ?? ""}
-          >
-            <option value="" disabled>
-              —
-            </option>
-            {assignees.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.employeeCode} — {a.fullName}
-                {a.department ? ` (${a.department})` : ""}
+          {lockedAssignee ? (
+            <>
+              <input type="hidden" name="assigneeId" value={lockedAssignee.id} />
+              <div id={`assigneeId-${id}`} className="input" aria-readonly>
+                {lockedAssignee.employeeCode} — {lockedAssignee.fullName}
+              </div>
+            </>
+          ) : (
+            <select
+              id={`assigneeId-${id}`}
+              name="assigneeId"
+              className="input"
+              required
+              defaultValue={task?.assignee.id ?? ""}
+            >
+              <option value="" disabled>
+                —
               </option>
-            ))}
-          </select>
+              {assignees.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.employeeCode} — {a.fullName}
+                  {a.department ? ` (${a.department})` : ""}
+                </option>
+              ))}
+            </select>
+          )}
           <FieldError message={errors.assigneeId} />
         </div>
 

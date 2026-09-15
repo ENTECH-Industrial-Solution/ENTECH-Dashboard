@@ -81,6 +81,7 @@ export function TripForm({
   errors,
   formError,
   people,
+  lockedTravellers,
   pins = [],
   trip,
   submitLabel,
@@ -90,6 +91,14 @@ export function TripForm({
   errors: Record<string, string>;
   formError?: string;
   people: TripPerson[];
+  /**
+   * When set, the travellers are stated rather than chosen: the picker and
+   * the × on each chip go, and the list rides in the hidden field as it
+   * always did. This is an employee scheduling themselves — the server pins
+   * the list to the caller regardless, so this is the form agreeing with the
+   * rule, not enforcing it.
+   */
+  lockedTravellers?: TripPerson[];
   /** Empty when the customer map is switched off, which hides the picker. */
   pins?: TripPinOption[];
   trip?: FieldTripRow;
@@ -110,8 +119,12 @@ export function TripForm({
    * here, and a mis-tap costs one × on the chip that appears.
    */
   const [travellerIds, setTravellerIds] = useState<string[]>(
-    () => trip?.travellers.map((person) => person.id) ?? [],
+    () =>
+      lockedTravellers?.map((person) => person.id) ??
+      trip?.travellers.map((person) => person.id) ??
+      [],
   );
+  const locked = lockedTravellers !== undefined;
 
   /*
    * Names for the chips, from the picker's list *and* the trip's own.
@@ -124,6 +137,7 @@ export function TripForm({
   const byId = new Map<string, TripPerson>();
   for (const person of trip?.travellers ?? []) byId.set(person.id, person);
   for (const person of people) byId.set(person.id, person);
+  for (const person of lockedTravellers ?? []) byId.set(person.id, person);
 
   const unchosen = people.filter((person) => !travellerIds.includes(person.id));
 
@@ -178,6 +192,7 @@ export function TripForm({
             {t("trips.people")}
           </label>
 
+          {!locked && (
           <select
             id={`travellers-${id}`}
             className="input"
@@ -201,6 +216,7 @@ export function TripForm({
               </option>
             ))}
           </select>
+          )}
 
           {/* What the form actually submits: one field holding the whole list.
               A repeated `employeeIds` input would collapse to its last value in
@@ -225,19 +241,21 @@ export function TripForm({
                         ? `${person.employeeCode} — ${person.fullName}`
                         : personId}
                     </span>
-                    <button
-                      type="button"
-                      aria-label={t("trips.removePerson")}
-                      onClick={() =>
-                        setTravellerIds((current) =>
-                          current.filter((value) => value !== personId),
-                        )
-                      }
-                      className="leading-none"
-                      style={{ color: "var(--text-muted)" }}
-                    >
-                      ×
-                    </button>
+                    {!locked && (
+                      <button
+                        type="button"
+                        aria-label={t("trips.removePerson")}
+                        onClick={() =>
+                          setTravellerIds((current) =>
+                            current.filter((value) => value !== personId),
+                          )
+                        }
+                        className="leading-none"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        ×
+                      </button>
+                    )}
                   </li>
                 );
               })}

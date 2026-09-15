@@ -159,6 +159,16 @@ calls one:
 - `assertUser()` / `assertAdmin()` — action guards, throw on failure.
 - `canMutateTask(user, task)` — admins may touch any task; employees only their own.
 
+`createTaskAction` and `createFieldTripAction` are the two writes an
+employee may make that *create* work, and both are narrowed the way reads
+are: a non-admin's `assigneeId` is replaced with their own id on the server,
+and a non-admin's traveller list with `[their own id]`, never validated
+against the request. So an employee can add a task for themselves, or put
+themselves on a one-person trip, from their own dashboard
+(`SelfWorkCreator`) — and for nobody else. The audit rows carry
+`selfAssigned` / `selfScheduled` so the trail tells self-made work from an
+assignment. Editing, cancelling, and every delete stay admin-only.
+
 Adding a page under `src/app/(app)/` does **not** protect it by itself. Call a
 guard in the page component.
 
@@ -370,9 +380,11 @@ it wants exactly one row per (trip, person): a trip three people are on is three
 people's work and belongs in all three frames. Keep them opposite.
 
 Writing splits in two (`src/server/actions/field-trips.ts`). **Scheduling** —
-create, update, cancel — is admin-only, because the schedule is something an
-admin plans and other people arrange their week around. **Running** a trip is
-not: `startFieldTripAction` and `completeFieldTripAction` are the traveller
+update and cancel — is admin-only, because the schedule is something an
+admin plans and other people arrange their week around. Creating is the one
+exception, on the terms `createTaskAction` set: an employee may schedule a
+trip whose only traveller is themselves, the list pinned on the server (see
+"The security boundary"). **Running** a trip is not admin-only either: `startFieldTripAction` and `completeFieldTripAction` are the traveller
 reporting from the field, so they go through `assertUser()` +
 `canRunFieldTrip()` (admin, or *anyone* on the trip — the person who happens to
 have signal when the job finishes is the one who should be able to close it out)

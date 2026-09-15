@@ -76,8 +76,14 @@ export async function createTaskAction(
   formData: FormData,
 ): Promise<ActionState> {
   return runAction(async () => {
-    // Only admins assign work; employees complete what they are given.
-    const admin = await assertAdmin();
+    // Admins assign work to anyone. An employee may create a task too, but
+    // only for themselves: the assignee is pinned to the caller here, on the
+    // server, and whatever id the form carried is discarded outright rather
+    // than checked — the same rule `assigneeScope()` applies to reads, so an
+    // id typed into the request can never widen what a person may do. The
+    // row still records who created it, so a self-assigned task is one the
+    // trail can tell apart from an assignment.
+    const user = await assertUser();
     const parsed = createTaskSchema.safeParse(formDataToObject(formData));
 
     if (!parsed.success) {
@@ -88,8 +94,11 @@ export async function createTaskAction(
       };
     }
 
+    const assigneeId = user.role === "ADMIN" ? parsed.data.assigneeId : user.id;
+    const selfAssigned = assigneeId === user.id;
+
     const assignee = await db.employee.findUnique({
-      where: { id: parsed.data.assigneeId },
+      where: { id: assigneeId },
       select: { id: true, isActive: true, employeeCode: true },
     });
 
@@ -104,27 +113,32 @@ export async function createTaskAction(
     await db.$transaction(async (tx) => {
       const code = await nextTaskCode(tx);
       const task = await tx.task.create({
-        data: { ...parsed.data, code, createdById: admin.id },
+        data: { ...parsed.data, assigneeId, code, createdById: user.id },
       });
 
       await tx.taskEvent.create({
         data: {
           taskId: task.id,
-          actorId: admin.id,
-          actorLabel: actorLabel(admin),
+          actorId: user.id,
+          actorLabel: actorLabel(user),
           type: "CREATED",
           toStatus: task.status,
-          note: `มอบหมายให้ ${assignee.employeeCode}`,
+          note: selfAssigned ? "สร้างงานให้ตัวเอง" : `มอบหมายให้ ${assignee.employeeCode}`,
         },
       });
 
       await writeAudit(
         {
-          actor: admin,
+          actor: user,
           action: "task.created",
           entityType: "Task",
           entityId: task.id,
-          metadata: { code: task.code, title: task.title, assignee: assignee.employeeCode },
+          metadata: {
+            code: task.code,
+            title: task.title,
+            assignee: assignee.employeeCode,
+            selfAssigned,
+          },
         },
         tx,
       );
