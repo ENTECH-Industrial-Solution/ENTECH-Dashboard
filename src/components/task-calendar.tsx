@@ -336,6 +336,7 @@ export function TaskCalendar({
       */}
       <div className="calendar-sheet">
         <div className="calendar-board" aria-hidden />
+        <div className="calendar-side" aria-hidden />
         <div className="calendar-stack">
           <Rings />
           {preview && (
@@ -365,7 +366,11 @@ export function TaskCalendar({
           {cells.map((day, index) => {
             if (day === null) {
               return (
-                <div key={`blank-${index}`} style={{ background: "var(--surface)" }} />
+                <div
+                  key={`blank-${index}`}
+                  className="min-h-14"
+                  style={{ background: "var(--surface)" }}
+                />
               );
             }
 
@@ -991,7 +996,7 @@ function monthCells({
 function Rings() {
   return (
     <div className="calendar-rings" aria-hidden>
-      {Array.from({ length: 8 }, (_, i) => (
+      {Array.from({ length: 4 }, (_, i) => (
         <svg key={i} viewBox="0 0 16 30">
           <ellipse className="ring-hole" cx="5" cy="19" rx="3.4" ry="1.6" />
           <path className="ring-back" d="M12 19 V9" />
@@ -1043,7 +1048,13 @@ function PreviewPage({
       <div className="grid grid-cols-7 gap-px">
         {cells.map((day, index) => {
           if (day === null) {
-            return <div key={`blank-${index}`} style={{ background: "var(--surface)" }} />;
+            return (
+              <div
+                key={`blank-${index}`}
+                className="min-h-14"
+                style={{ background: "var(--surface)" }}
+              />
+            );
           }
           const isToday = dayKeyOf({ year, month }, day) === todayKey;
           return (

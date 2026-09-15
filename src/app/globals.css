@@ -560,7 +560,7 @@ button.pill:hover {
  */
 .calendar-sheet {
   position: relative;
-  padding: 0.85rem 0 0.55rem 0.8rem;
+  padding: 1.1rem 0 0.55rem 0.8rem;
 }
 .calendar-board {
   position: absolute;
@@ -571,6 +571,22 @@ button.pill:hover {
   box-shadow:
     inset 0 0 0 1px color-mix(in oklab, var(--text-muted) 30%, transparent),
     inset 0.35rem 0 0.5rem -0.35rem oklch(0 0 0 / 0.25);
+}
+/* The folded side of the stand, seen from the front-left: a wedge from the
+   base up to the page's edge, which is what says the thing is standing. */
+.calendar-side {
+  position: absolute;
+  left: 0;
+  bottom: 0.15rem;
+  z-index: 0;
+  width: 1.7rem;
+  height: 46%;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--text-muted) 34%, var(--surface)),
+    color-mix(in oklab, var(--text-muted) 58%, var(--surface))
+  );
 }
 .calendar-base {
   position: absolute;
@@ -589,18 +605,22 @@ button.pill:hover {
      children only, and a flat rotateX is a squash rather than a turn. */
   perspective: 1400px;
 }
+/* Four rings, close together in the middle, as a desk calendar's are. The
+   top offset puts the page's edge where the wire enters the hole (y=19 of
+   the 30-unit drawing, at this scale). */
 .calendar-rings {
   position: absolute;
-  inset-inline: 1.4rem;
-  top: -19px;
+  inset-inline: 0;
+  top: -26px;
   z-index: 4;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 1.6rem;
   pointer-events: none;
 }
 .calendar-rings svg {
-  width: 16px;
-  height: 30px;
+  width: 22px;
+  height: 41px;
   display: block;
   overflow: visible;
 }
@@ -627,6 +647,10 @@ button.pill:hover {
   opacity: 0.9;
 }
 .calendar-page {
+  /* Positioned, or the z-index below is ignored and the page coming down
+     over the old one paints underneath it instead — which is what an
+     absolutely positioned sibling does to static content. */
+  position: relative;
   display: grid;
   gap: 1px;
   background: var(--border);
