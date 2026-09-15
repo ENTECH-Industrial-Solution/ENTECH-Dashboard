@@ -209,8 +209,14 @@ export function ActiveTaskCard({
     return <TaskEditor task={task} assignees={assignees} setEditing={setEditing} />;
   }
 
+  // A flex column, not space-y: the grid stretches a card to its row's
+  // height, and the actions row takes `mt-auto` so two cards beside each
+  // other end on the same line *and* have their buttons on it.
   return (
-    <article id={`task-${task.id}`} className="card scroll-mt-24 p-4 space-y-3">
+    <article
+      id={`task-${task.id}`}
+      className="card flex scroll-mt-24 flex-col gap-3 p-4"
+    >
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
         <div className="min-w-0 flex-1">
           <div
@@ -282,7 +288,7 @@ export function ActiveTaskCard({
       )}
 
       {(canMutate || isAdmin) && !completing && !deleting && (
-        <div className="flex flex-wrap gap-2 pt-1">
+        <div className="mt-auto flex flex-wrap gap-2 pt-1">
           {canMutate && task.status === "TODO" && (
             <form action={statusAction}>
               <input type="hidden" name="taskId" value={task.id} />
@@ -432,7 +438,7 @@ export function CompletedTaskCard({
   return (
     <article
       id={`task-${task.id}`}
-      className="card scroll-mt-24 p-4 space-y-3"
+      className="card flex scroll-mt-24 flex-col gap-3 p-4"
       style={{ background: "var(--surface-muted)" }}
     >
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
@@ -549,7 +555,7 @@ export function CompletedTaskCard({
           </form>
           </Reveal>
         ) : (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="mt-auto flex flex-wrap items-center gap-2">
             <button
               type="button"
               className="btn btn-ghost"

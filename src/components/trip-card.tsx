@@ -529,7 +529,7 @@ export function TripCard({
   return (
     <article
       id={`trip-${trip.id}`}
-      className="card scroll-mt-24 space-y-3 p-4"
+      className="card flex scroll-mt-24 flex-col gap-3 p-4"
       style={cancelled ? { opacity: 0.7 } : undefined}
     >
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
@@ -615,15 +615,18 @@ export function TripCard({
 
       {/* The actions sit with the record they act on, not stranded under the
           footnote: what someone reads last on a finished trip is the report,
-          and the buttons belong next to it. */}
-      <TripActions
-        trip={trip}
-        canRun={canRun}
-        canDelete={canDelete}
-        isAdmin={isAdmin}
-        onEdit={onEdit}
-        cancelAction={cancelAction}
-      />
+          and the buttons belong next to it. `mt-auto` is what lines the row
+          up with the card beside it (see the task card). */}
+      <div className="mt-auto">
+        <TripActions
+          trip={trip}
+          canRun={canRun}
+          canDelete={canDelete}
+          isAdmin={isAdmin}
+          onEdit={onEdit}
+          cancelAction={cancelAction}
+        />
+      </div>
 
       {isAdmin && state === "COMPLETED" && (
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
