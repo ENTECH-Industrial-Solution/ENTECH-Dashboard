@@ -116,6 +116,7 @@ export const dictionary = {
   "tasks.completedAt": { th: "เสร็จเมื่อ", en: "Completed" },
   "tasks.createdAt": { th: "สร้างเมื่อ", en: "Created" },
   "tasks.overdue": { th: "เกินกำหนด", en: "Overdue" },
+  "tasks.dueToday": { th: "ครบกำหนดวันนี้", en: "Due today" },
   "tasks.historyLocked": {
     th: "งานที่เสร็จแล้วแก้ไขและเปิดใหม่ได้เฉพาะผู้ดูแลระบบ ทุกครั้งจะถูกบันทึกว่าใครทำ เมื่อไหร่ และเปลี่ยนอะไร",
     en: "Only an administrator can edit or reopen a completed task, and every change records who, when, and what it changed.",

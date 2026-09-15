@@ -5,6 +5,7 @@ import { useActionState, useEffect, useState, type ReactNode } from "react";
 import { TaskForm, type AssigneeOption } from "@/components/task-form";
 import { VideoPlayer } from "@/components/video-embed";
 import { Alert, PriorityBadge, StatusBadge, SubmitButton } from "@/components/ui";
+import { dueState } from "@/lib/calendar";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
 import { useSettings } from "@/lib/settings/client";
 import { idleState } from "@/server/actions/types";
@@ -197,8 +198,7 @@ export function ActiveTaskCard({
     idleState,
   );
 
-  const overdue =
-    task.dueDate !== null && new Date(task.dueDate) < new Date();
+  const due = task.dueDate === null ? null : dueState(new Date(task.dueDate));
 
   if (isAdmin && editing) {
     return <TaskEditor task={task} assignees={assignees} setEditing={setEditing} />;
@@ -254,10 +254,17 @@ export function ActiveTaskCard({
         {settings["task.showSchedule"] && task.dueDate && (
           <Meta
             label={t("tasks.dueDate")}
-            tone={overdue ? "var(--danger)" : undefined}
+            tone={
+              due === "overdue"
+                ? "var(--danger)"
+                : due === "today"
+                  ? "var(--warning)"
+                  : undefined
+            }
           >
             {format(task.dueDate)}
-            {overdue && ` · ${t("tasks.overdue")}`}
+            {due === "overdue" && ` · ${t("tasks.overdue")}`}
+            {due === "today" && ` · ${t("tasks.dueToday")}`}
           </Meta>
         )}
       </dl>

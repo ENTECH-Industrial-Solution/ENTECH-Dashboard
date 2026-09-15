@@ -52,6 +52,23 @@ export function dayStart(dayKey: string): Date {
   return new Date(Date.parse(`${dayKey}T00:00:00Z`) - BANGKOK_OFFSET_MS);
 }
 
+/**
+ * Where a deadline stands against today, by Bangkok calendar day.
+ *
+ * A `dueDate` is a *day*, not an instant — the form takes a date and stores
+ * midnight — so comparing it to `now()` called a task due today late from the
+ * moment the day started. "overdue" is a deadline whose day is behind us;
+ * "today" is the day itself, still open, and the one that earns amber rather
+ * than red. The query layer counts overdue with the same boundary
+ * (`dayStart(todayKey())`), so a card and the number above it cannot disagree.
+ */
+export type DueState = "overdue" | "today" | "open";
+
+export function dueState(dueDate: Date, today = todayKey()): DueState {
+  const key = bangkokDayKey(dueDate);
+  return key < today ? "overdue" : key === today ? "today" : "open";
+}
+
 /** The UTC instants bounding a Bangkok calendar month: [from, to). */
 export function monthBounds(year: number, month: number): { from: Date; to: Date } {
   return {
