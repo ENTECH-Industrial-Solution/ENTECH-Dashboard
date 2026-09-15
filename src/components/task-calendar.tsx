@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useActionState, useEffect, useState, type DragEvent } from "react";
 
 import { Reveal } from "@/components/motion";
-import { PriorityBadge, StatusBadge } from "@/components/ui";
+import { Alert, PriorityBadge, StatusBadge, SubmitButton } from "@/components/ui";
 import { dayKeyOf, monthGrid } from "@/lib/calendar";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
 import type { Locale, TranslationKey } from "@/lib/i18n/dictionaries";
+import { rescheduleTaskAction } from "@/server/actions/tasks";
+import { idleState } from "@/server/actions/types";
 
 /**
  * A month of deadlines and off-site days, wired to the lists on the same screen.
@@ -133,6 +135,7 @@ export function TaskCalendar({
   nextHref,
   todayHref,
   showAssignee,
+  canReschedule = false,
 }: {
   year: number;
   month: number;
@@ -145,9 +148,64 @@ export function TaskCalendar({
   nextHref: string;
   todayHref: string;
   showAssignee: boolean;
+  /**
+   * Whether a task in the day's note can be moved to another day — by
+   * dragging it onto the grid, or by pressing "ย้ายวัน" and tapping the day.
+   * Set by the server for admins; the action refuses anyone else regardless.
+   */
+  canReschedule?: boolean;
 }) {
   const t = useTranslations();
   const locale = useLocale();
+
+  // Moving a day happens in three steps that are each visible: pick up (a
+  // drag, or the button), point at a day (drop, or tap), then confirm. Nothing
+  // is written until the confirm — a drop that committed on release would
+  // make a slip of one column a deadline change nobody meant, which is the
+  // reason the map's marker asks before saving a drag too.
+  const [moving, setMoving] = useState<CalendarTask | null>(null);
+  const [dragOver, setDragOver] = useState<string | null>(null);
+  const [pendingMove, setPendingMove] = useState<{
+    task: CalendarTask;
+    toDay: string;
+  } | null>(null);
+  const [moveState, moveAction] = useActionState(rescheduleTaskAction, idleState);
+
+  useEffect(() => {
+    if (moveState.status === "success") setPendingMove(null);
+  }, [moveState]);
+
+  useEffect(() => {
+    if (!moving) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMoving(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [moving]);
+
+  const pointAt = (task: CalendarTask, toDay: string) => {
+    setMoving(null);
+    setDragOver(null);
+    if (toDay !== task.dayKey) setPendingMove({ task, toDay });
+  };
+
+  const dropHandlers = (key: string) =>
+    canReschedule && moving
+      ? {
+          onDragOver: (event: DragEvent) => {
+            event.preventDefault();
+            if (dragOver !== key) setDragOver(key);
+          },
+          onDragLeave: () => {
+            if (dragOver === key) setDragOver(null);
+          },
+          onDrop: (event: DragEvent) => {
+            event.preventDefault();
+            pointAt(moving, key);
+          },
+        }
+      : {};
   const { daysInMonth, startWeekday } = monthGrid({ year, month });
 
   const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
@@ -231,9 +289,14 @@ export function TaskCalendar({
               <button
                 key={key}
                 type="button"
-                onClick={() => setSelected(isSelected ? null : key)}
+                // While a task is being moved, a day is a destination rather
+                // than a selection.
+                onClick={() =>
+                  moving ? pointAt(moving, key) : setSelected(isSelected ? null : key)
+                }
                 aria-pressed={isSelected}
-                className="relative flex min-h-14 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs transition-colors"
+                data-target={moving ? (dragOver === key ? "over" : "open") : undefined}
+                className="day-cell relative flex min-h-14 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs transition-colors"
                 style={{
                   background: isSelected
                     ? "var(--brand)"
@@ -245,6 +308,7 @@ export function TaskCalendar({
                     isToday && !isSelected ? "var(--brand)" : "transparent"
                   }`,
                 }}
+                {...dropHandlers(key)}
               >
                 {isSelected && <Pushpin />}
                 <span className={isToday ? "font-semibold" : undefined}>
@@ -296,6 +360,34 @@ export function TaskCalendar({
              rather than swapping the text on the old one. */
           <div key={selected} className="pinned-note space-y-2">
             <Pushpin />
+
+            {pendingMove && (
+              <MoveConfirm
+                move={pendingMove}
+                locale={locale}
+                state={moveState}
+                action={moveAction}
+                onCancel={() => setPendingMove(null)}
+              />
+            )}
+
+            {moving && (
+              <div
+                className="flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-xs"
+                style={{ background: "var(--brand-soft)", color: "var(--brand)" }}
+                role="status"
+              >
+                <span className="font-mono">{moving.code}</span>
+                <span>{t("calendar.moveHint")}</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost ms-auto"
+                  onClick={() => setMoving(null)}
+                >
+                  {t("common.cancel")}
+                </button>
+              </div>
+            )}
             <div className="flex flex-wrap items-baseline gap-2">
               <span className="text-sm font-medium">
                 {formatDayKey(selected, locale)}
@@ -376,7 +468,34 @@ export function TaskCalendar({
                 })}
 
                 {selectedTasks.map((task) => (
-                  <li key={task.id}>
+                  <li
+                    key={task.id}
+                    className={canReschedule ? "flex items-stretch gap-1.5" : undefined}
+                    // HTML5 drag, desktop only in practice — a phone gets the
+                    // button beside it. The li is the draggable rather than the
+                    // link, so dragging does not start a navigation.
+                    draggable={canReschedule || undefined}
+                    onDragStart={
+                      canReschedule
+                        ? (event) => {
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("text/plain", task.code);
+                            setMoving(task);
+                          }
+                        : undefined
+                    }
+                    // A drop has already been handled by the time this fires;
+                    // what is left is a drag let go somewhere that was not a
+                    // day, which should not leave the grid waiting for a tap.
+                    onDragEnd={
+                      canReschedule
+                        ? () => {
+                            setDragOver(null);
+                            setMoving(null);
+                          }
+                        : undefined
+                    }
+                  >
                     {/*
                       The row is laid out on a wrapper *inside* the link, not on
                       the link itself, and that is the Conventions rule in
@@ -433,6 +552,18 @@ export function TaskCalendar({
                         <StatusBadge status={task.status} />
                       </div>
                     </Link>
+                    {canReschedule && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary shrink-0"
+                        aria-pressed={moving?.id === task.id}
+                        title={t("calendar.move")}
+                        onClick={() => setMoving(moving?.id === task.id ? null : task)}
+                      >
+                        <MoveIcon />
+                        <span className="sr-only">{t("calendar.move")}</span>
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -441,6 +572,83 @@ export function TaskCalendar({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * The question a drop asks before anything is written: which day of which
+ * task, from where to where. The answer goes through `rescheduleTaskAction`
+ * with the same accounting as any other edit.
+ */
+function MoveConfirm({
+  move,
+  locale,
+  state,
+  action,
+  onCancel,
+}: {
+  move: { task: CalendarTask; toDay: string };
+  locale: Locale;
+  state: { status: string; message?: string };
+  action: (formData: FormData) => void;
+  onCancel: () => void;
+}) {
+  const t = useTranslations();
+  const { task, toDay } = move;
+
+  return (
+    <form
+      action={action}
+      className="space-y-2 rounded-lg border p-3"
+      style={{ borderColor: "var(--brand)", background: "var(--surface)" }}
+    >
+      {state.status === "error" && <Alert tone="error">{state.message}</Alert>}
+
+      <input type="hidden" name="taskId" value={task.id} />
+      <input type="hidden" name="field" value={task.kind} />
+      <input type="hidden" name="day" value={toDay} />
+
+      <div className="text-sm">
+        <span className="font-medium">
+          {task.kind === "due" ? t("calendar.moveDue") : t("calendar.moveStart")}
+        </span>{" "}
+        <span className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+          {task.code}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span style={{ color: "var(--text-muted)" }}>
+          {formatDayKey(task.dayKey, locale, "medium")}
+        </span>
+        <span aria-hidden>→</span>
+        <span className="font-medium">{formatDayKey(toDay, locale, "medium")}</span>
+      </div>
+
+      <div className="flex gap-2">
+        <SubmitButton>{t("common.confirm")}</SubmitButton>
+        <button type="button" className="btn btn-secondary" onClick={onCancel}>
+          {t("common.cancel")}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function MoveIcon() {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20" />
+    </svg>
   );
 }
 
@@ -461,9 +669,13 @@ function Pushpin() {
 }
 
 /** The key is a plain calendar day, so it is read back in UTC to stay that day. */
-function formatDayKey(dayKey: string, locale: Locale): string {
+function formatDayKey(
+  dayKey: string,
+  locale: Locale,
+  dateStyle: "full" | "medium" = "full",
+): string {
   return new Intl.DateTimeFormat(locale === "th" ? "th-TH" : "en-GB", {
-    dateStyle: "full",
+    dateStyle,
     timeZone: "UTC",
   }).format(new Date(`${dayKey}T00:00:00Z`));
 }

@@ -420,6 +420,24 @@ export const settingKeySchema = z.object({
   key: z.string().refine(isSettingKey, "ไม่รู้จักการตั้งค่านี้ / Unknown setting"),
 });
 
+/**
+ * Moving one of a task's planned days from the calendar. A day rather than a
+ * date: the calendar deals in Bangkok calendar days, and the value is read
+ * back exactly as a date input's would be, so a day dropped on the grid lands
+ * on the same midnight the form would have written.
+ */
+export const rescheduleTaskSchema = z.object({
+  taskId: z.string().cuid(),
+  field: z.enum(["start", "due"]),
+  day: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "วันที่ไม่ถูกต้อง / Invalid date")
+    .transform((v) => new Date(v))
+    .refine((d) => !Number.isNaN(d.getTime()), {
+      message: "วันที่ไม่ถูกต้อง / Invalid date",
+    }),
+});
+
 export const updateTaskStatusSchema = z.object({
   taskId: z.string().cuid(),
   status: z.enum(["TODO", "IN_PROGRESS", "BLOCKED"]),

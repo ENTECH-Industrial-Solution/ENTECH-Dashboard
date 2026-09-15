@@ -535,6 +535,19 @@ button.pill:hover {
   }
 }
 
+/* While a task is being moved, every day is somewhere it could land: a
+   dashed ring says so, and the one under the pointer fills in. */
+.day-cell[data-target="open"] {
+  box-shadow: inset 0 0 0 1px var(--brand);
+  outline: 1px dashed var(--ring);
+  outline-offset: 1px;
+}
+.day-cell[data-target="over"] {
+  background: var(--brand-soft) !important;
+  box-shadow: 0 0 0 3px var(--ring);
+  scale: 1.06;
+}
+
 .pinned-note {
   position: relative;
   transform-origin: 50% 0;

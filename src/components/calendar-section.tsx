@@ -199,6 +199,9 @@ export async function CalendarSection({
         nextHref={monthHref(1)}
         todayHref={`${basePath}?cal=${monthParam(monthOf(today))}`}
         showAssignee={user.role === "ADMIN"}
+        // Moving a day is assigning work, so it is offered on the same terms
+        // as editing: the action refuses anyone else regardless.
+        canReschedule={user.role === "ADMIN"}
       />
     </section>
   );
