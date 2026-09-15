@@ -1,3 +1,4 @@
+import { CountUp } from "@/components/count-up";
 import { WorkloadPills, type WorkloadPillRow } from "@/components/workload-pills";
 import { getTranslations } from "@/lib/i18n/server";
 import type { EmployeeWorkload, WorkloadMetric } from "@/server/queries";
@@ -120,7 +121,7 @@ function SummaryTile({
           className="mt-1 text-2xl font-semibold tabular-nums"
           style={{ color: value > 0 ? color : "var(--text)" }}
         >
-          {value}
+          <CountUp value={value} />
         </div>
       </div>
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { Reveal } from "@/components/motion";
 import { PriorityBadge, StatusBadge } from "@/components/ui";
 import { dayKeyOf, monthGrid } from "@/lib/calendar";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
@@ -208,7 +209,9 @@ export function TaskCalendar({
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1">
+        {/* Remounted per month by the parent's key, so this entrance is the
+            cross-fade between one month and the next. */}
+        <Reveal className="grid grid-cols-7 gap-1">
           {cells.map((day, index) => {
             if (day === null) return <div key={`blank-${index}`} />;
 
@@ -277,7 +280,7 @@ export function TaskCalendar({
               </button>
             );
           })}
-        </div>
+        </Reveal>
       </div>
 
       <div className="space-y-2 border-t pt-3">
@@ -288,7 +291,9 @@ export function TaskCalendar({
               : t("calendar.pickDay")}
           </p>
         ) : (
-          <>
+          /* Keyed on the day, so picking another one plays the entrance
+             again rather than swapping the text in place. */
+          <Reveal key={selected} className="space-y-2">
             <div className="flex flex-wrap items-baseline gap-2">
               <span className="text-sm font-medium">
                 {formatDayKey(selected, locale)}
@@ -430,7 +435,7 @@ export function TaskCalendar({
                 ))}
               </ul>
             )}
-          </>
+          </Reveal>
         )}
       </div>
     </div>

@@ -1,8 +1,20 @@
 "use client";
 
-import { Children, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Children,
+  isValidElement,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
+import { Reveal } from "@/components/motion";
 import { useTranslations } from "@/lib/i18n/client";
+
+/** How many revealed cards take their turn before the rest arrive together. */
+const STAGGER_CAP = 12;
+const STAGGER_STEP = 0.035;
 
 /**
  * The grid every section of cards is drawn on: two columns from `lg`, one
@@ -83,7 +95,35 @@ export function CardGrid({
       {/* grid-cols-1 for the reason ScheduleRow states: an implicit track is
           `auto`, and `auto` lets a wide card inflate the whole page. */}
       <div ref={grid} className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        {collapsed ? items.slice(0, preview) : items}
+        {/* The first row arrived with the page and is not animated — it was
+            server-rendered, and an entrance on it would hold it invisible
+            until hydration. The cards the button reveals are the ones that
+            appear, and they take turns: a short stagger, capped so the tail
+            of a two-hundred-card archive is not a ten-second wait. Each is
+            wrapped in a one-cell grid so the card still stretches to the
+            row's height as it did as a direct grid item. A card that wants
+            both columns says `card-wide`, and the cell picks that up through
+            `:has` in globals.css — `lg:col-span-2` on the card itself would
+            now be asking a non-grid-item to span. */}
+        {(collapsed ? items.slice(0, preview) : items).map((item, index) => {
+          const key = (isValidElement(item) && item.key) || index;
+          if (index < preview) {
+            return (
+              <div key={key} className="card-cell grid min-w-0">
+                {item}
+              </div>
+            );
+          }
+          return (
+            <Reveal
+              key={key}
+              className="card-cell grid min-w-0"
+              delay={Math.min(index - preview, STAGGER_CAP) * STAGGER_STEP}
+            >
+              {item}
+            </Reveal>
+          );
+        })}
       </div>
 
       {rest > 0 && (

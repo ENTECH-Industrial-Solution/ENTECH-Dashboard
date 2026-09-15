@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 
+import { Reveal } from "@/components/motion";
 import { Alert } from "@/components/ui";
 import { TaskForm, type AssigneeOption } from "@/components/task-form";
 import { TripForm, type TripPinOption } from "@/components/trip-form";
@@ -77,7 +78,7 @@ export function SelfWorkCreator({
   }
 
   return (
-    <div className="card space-y-4 p-4">
+    <Reveal className="card space-y-4 p-4">
       <p className="text-sm" style={{ color: "var(--text-muted)" }}>
         {t("tasks.newSelfHint")}
       </p>
@@ -143,6 +144,6 @@ export function SelfWorkCreator({
           onCancel={() => setOpen(false)}
         />
       )}
-    </div>
+    </Reveal>
   );
 }

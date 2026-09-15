@@ -36,6 +36,16 @@
   --danger: light-dark(oklch(0.55 0.19 25), oklch(0.68 0.17 25));
   --danger-soft: light-dark(oklch(0.95 0.04 25), oklch(0.28 0.06 25));
   --ring: light-dark(oklch(0.52 0.16 250 / 0.45), oklch(0.68 0.14 250 / 0.5));
+
+  /*
+   * Motion. Three durations and one curve, shared with `components/motion.tsx`
+   * so a CSS hover and a React entrance read as the same hand. `--ease-out`
+   * decelerates hard at the end — things arrive, they do not drift in.
+   */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 300ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* An explicit choice pins the scheme and wins over the device setting. */
@@ -53,6 +63,19 @@
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;
+  }
+}
+
+/* The CSS half of honouring the OS setting; MotionConfig is the React half.
+   Near-zero rather than `none`, so `animationend` still fires for anything
+   that waits on it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
@@ -102,7 +125,8 @@ body {
   padding: 0.5rem 0.75rem;
   font-size: 0.9375rem;
   color: var(--text);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 .input:focus {
   outline: none;
@@ -133,8 +157,17 @@ body {
   font-weight: 500;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: background-color 120ms ease, opacity 120ms ease;
+  transition: background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
   white-space: nowrap;
+}
+/* The press. A small squeeze on the way down is the whole of the feedback a
+   button gives before the server answers, so it is on every variant. */
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 .btn:disabled {
   opacity: 0.55;
@@ -145,7 +178,8 @@ body {
   color: var(--brand-contrast);
 }
 .btn-primary:hover:not(:disabled) {
-  opacity: 0.9;
+  opacity: 0.92;
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--brand) 35%, transparent);
 }
 .btn-secondary {
   background: var(--surface);
@@ -289,14 +323,34 @@ body {
   scroll-snap-align: start;
 }
 
+/*
+ * A card that takes both columns of a CardGrid. The grid wraps every card in a
+ * cell of its own (see card-grid.tsx), so the span has to be asked of the cell
+ * rather than written on the card, and `:has` is how the cell hears it.
+ */
+@media (min-width: 1024px) {
+  .card-cell:has(> .card-wide) {
+    grid-column: 1 / -1;
+  }
+}
+
 /* A whole card that is one link — the per-person frames on the dashboard. */
 .card-link {
   display: block;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
 }
+/* Lifts two pixels and casts a little further; a whole card that is a link
+   should answer the pointer with more than a border. */
 .card-link:hover {
   border-color: var(--brand);
-  box-shadow: 0 1px 4px color-mix(in oklab, var(--brand) 22%, transparent);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px color-mix(in oklab, var(--brand) 18%, transparent);
+}
+.card-link:active {
+  transform: translateY(0);
+  transition-duration: var(--dur-fast);
 }
 
 /*
@@ -326,6 +380,32 @@ body {
   inset-block: 0;
   inset-inline-start: 0;
   border-radius: 999px;
+  /* The bar grows from the left when it first paints and whenever a value
+     moves. `pill-grow` is a one-shot; the transition covers the rest. */
+  transform-origin: 0 50%;
+  animation: pill-grow var(--dur-slow) var(--ease-out);
+  transition: width var(--dur-slow) var(--ease-out);
+}
+@keyframes pill-grow {
+  from {
+    scale: 0 1;
+  }
+  to {
+    scale: 1 1;
+  }
+}
+
+/* A placeholder line the shape of the text it stands in for. */
+.skeleton {
+  /* A step darker than the muted surface: on a white card the surface alone
+     is too close to the paper to read as a placeholder at all. */
+  background: color-mix(in oklab, var(--text-muted) 22%, var(--surface-muted));
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
 }
 .pill > .pill-label,
 .pill > .pill-value {
@@ -512,7 +592,7 @@ button.pill:hover {
   height: 100%;
   color: var(--pin, var(--brand));
   filter: drop-shadow(0 2px 3px oklch(0 0 0 / 0.35));
-  transition: transform 120ms ease;
+  transition: transform var(--dur-fast) var(--ease-out);
   transform-origin: 50% 100%;
 }
 
@@ -678,6 +758,19 @@ button.pill:hover {
      `max-block-size`, so `h-full` silently became `auto` and the form ran off
      the bottom of the map. */
   overflow: hidden;
+  /* The sheet rises from the bottom edge. `translate` rather than `transform`
+     so it composes with the positioning transform the desktop rule sets
+     below, instead of replacing it for the length of the animation. */
+  animation: sheet-up var(--dur-slow) var(--ease-out);
+}
+
+@keyframes sheet-up {
+  from {
+    translate: 0 100%;
+  }
+  to {
+    translate: 0 0;
+  }
 }
 
 @media (min-width: 1024px) {
@@ -699,10 +792,26 @@ button.pill:hover {
     border-radius: 0.9rem;
     border: 1px solid var(--border);
     box-shadow: 0 18px 40px oklch(0 0 0 / 0.28);
+    /* Grows out of its own tail. `scale` is the individual property for the
+       same reason `translate` is above: `transform` is spoken for. */
+    transform-origin: 50% calc(100% + 2.75rem);
+    animation: popup-in var(--dur-base) var(--ease-out);
   }
 
   .map-popup[data-flip="below"] {
     transform: translate(-50%, 0.5rem);
+    transform-origin: 50% -0.5rem;
+  }
+
+  @keyframes popup-in {
+    from {
+      opacity: 0;
+      scale: 0.92;
+    }
+    to {
+      opacity: 1;
+      scale: 1;
+    }
   }
 
   /* The pin has been panned off the map; the card goes with it. Hidden rather

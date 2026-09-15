@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AppNav } from "@/components/app-nav";
+import { MotionProvider } from "@/components/motion";
 import { requireUser } from "@/lib/auth/rbac";
 import { SettingsProvider } from "@/lib/settings/client";
 import { getSettings } from "@/lib/settings/server";
@@ -25,10 +26,15 @@ export default async function AppLayout({
   // while every other page renders a PageShell and looks exactly as before.
   return (
     <SettingsProvider settings={settings}>
-      <div className="flex min-h-dvh flex-col">
-        <AppNav user={user} />
-        {children}
-      </div>
+      {/* One motion feature bundle and one reduced-motion setting for every
+          page; the page-level entrance itself lives in template.tsx, which is
+          what remounts on navigation. */}
+      <MotionProvider>
+        <div className="flex min-h-dvh flex-col">
+          <AppNav user={user} />
+          {children}
+        </div>
+      </MotionProvider>
     </SettingsProvider>
   );
 }

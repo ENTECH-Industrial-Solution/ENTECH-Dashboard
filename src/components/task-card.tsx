@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState, type ReactNode } from "react";
 
+import { Reveal } from "@/components/motion";
 import { TaskForm, type AssigneeOption } from "@/components/task-form";
 import { VideoPlayer } from "@/components/video-embed";
 import { Alert, PriorityBadge, StatusBadge, SubmitButton } from "@/components/ui";
@@ -91,6 +92,7 @@ function TaskEditor({
   }, [state, setEditing]);
 
   return (
+    <Reveal as="section" className="grid min-w-0">
     <article id={`task-${task.id}`} className="card scroll-mt-24 space-y-3 p-4">
       <div className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
         {task.code} · {t("tasks.editTitle")}
@@ -108,6 +110,7 @@ function TaskEditor({
         onCancel={() => setEditing(false)}
       />
     </article>
+    </Reveal>
   );
 }
 
@@ -134,6 +137,7 @@ function TaskDeleter({
   const [state, formAction] = useActionState(deleteTaskAction, idleState);
 
   return (
+    <Reveal>
     <form action={formAction} className="space-y-2 pt-1">
       <Alert tone="warning">{t("tasks.deleteWarning")}</Alert>
       {state.status === "error" && <Alert tone="error">{state.message}</Alert>}
@@ -166,6 +170,7 @@ function TaskDeleter({
         </button>
       </div>
     </form>
+    </Reveal>
   );
 }
 
@@ -345,6 +350,7 @@ export function ActiveTaskCard({
       )}
 
       {canMutate && completing && (
+        <Reveal>
         <form action={completeAction} className="space-y-3 pt-1">
           <input type="hidden" name="taskId" value={task.id} />
           <div>
@@ -390,6 +396,7 @@ export function ActiveTaskCard({
             </button>
           </div>
         </form>
+        </Reveal>
       )}
     </article>
   );
@@ -512,6 +519,7 @@ export function CompletedTaskCard({
       ) : (
         isAdmin &&
         (reopening ? (
+          <Reveal>
           <form action={formAction} className="space-y-2">
             <input type="hidden" name="taskId" value={task.id} />
             <div>
@@ -539,6 +547,7 @@ export function CompletedTaskCard({
               </button>
             </div>
           </form>
+          </Reveal>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
             <button
