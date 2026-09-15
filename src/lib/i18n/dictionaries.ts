@@ -91,6 +91,11 @@ export const dictionary = {
   },
   "tasks.empty": { th: "ยังไม่มีงานในหมวดนี้", en: "No tasks in this section" },
   "tasks.new": { th: "สร้างงานใหม่", en: "New task" },
+  "tasks.newSelf": { th: "เพิ่มงานของฉัน", en: "Add my task" },
+  "tasks.newSelfHint": {
+    th: "งานหรือการออกนอกสถานที่ที่คุณเพิ่มเองจะอยู่ในชื่อคุณ และบันทึกไว้ว่าคุณเป็นคนสร้าง",
+    en: "Work you add here is yours alone, and recorded as created by you",
+  },
   "tasks.kind": { th: "ออกนอกสถานที่ไหม", en: "What kind of work?" },
   "tasks.kindTask": { th: "งานปกติ", en: "Task" },
   "tasks.kindTrip": { th: "ออกนอกสถานที่", en: "Field trip" },
@@ -116,6 +121,7 @@ export const dictionary = {
   "tasks.completedAt": { th: "เสร็จเมื่อ", en: "Completed" },
   "tasks.createdAt": { th: "สร้างเมื่อ", en: "Created" },
   "tasks.overdue": { th: "เกินกำหนด", en: "Overdue" },
+  "tasks.dueToday": { th: "ครบกำหนดวันนี้", en: "Due today" },
   "tasks.historyLocked": {
     th: "งานที่เสร็จแล้วแก้ไขและเปิดใหม่ได้เฉพาะผู้ดูแลระบบ ทุกครั้งจะถูกบันทึกว่าใครทำ เมื่อไหร่ และเปลี่ยนอะไร",
     en: "Only an administrator can edit or reopen a completed task, and every change records who, when, and what it changed.",
@@ -230,7 +236,7 @@ export const dictionary = {
   "trips.comingUp": { th: "กำลังจะไป", en: "Coming up" },
   "trips.allIn": { th: "ตอนนี้ทุกคนอยู่ในออฟฟิศ", en: "Everyone is in the office" },
   "trips.untilDate": { th: "ถึง", en: "until" },
-  "trips.tripCount": { th: "รายการ", en: "trips" },
+  "trips.peopleCount": { th: "คน", en: "people" },
 
   "trips.startTime": { th: "เวลาออก", en: "Leaves at" },
   "trips.endTime2": { th: "เวลากลับ", en: "Back at" },

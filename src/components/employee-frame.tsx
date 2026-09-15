@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { dueState } from "@/lib/calendar";
 import { formatDate, getLocale, getTranslations } from "@/lib/i18n/server";
 import type { EmployeeWorkload } from "@/server/queries";
 
@@ -47,6 +48,13 @@ export function Avatar({
     </span>
   );
 }
+
+/** The same three tones the task card gives a deadline. */
+const NEXT_DUE_COLOR = {
+  overdue: "var(--danger)",
+  today: "var(--warning)",
+  open: "var(--text)",
+} as const;
 
 export async function EmployeeFrame({
   workload,
@@ -157,10 +165,7 @@ export async function EmployeeFrame({
         <div className="text-xs" style={{ color: "var(--text-muted)" }}>
           {t("tasks.nextDue")}:{" "}
           <span
-            style={{
-              color:
-                workload.nextDueDate < new Date() ? "var(--danger)" : "var(--text)",
-            }}
+            style={{ color: NEXT_DUE_COLOR[dueState(workload.nextDueDate)] }}
           >
             {formatDate(workload.nextDueDate, locale)}
           </span>

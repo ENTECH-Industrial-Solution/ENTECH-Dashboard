@@ -6,6 +6,7 @@ import { CardGrid } from "@/components/card-grid";
 import { Avatar } from "@/components/employee-frame";
 import { PageShell } from "@/components/page-shell";
 import { ScheduleRow } from "@/components/schedule-row";
+import { SelfWorkCreator } from "@/components/self-work-creator";
 import { SummaryTiles } from "@/components/summary-tiles";
 import { ActiveTaskCard, CompletedTaskCard } from "@/components/task-card";
 import { TaskSection } from "@/components/task-section";
@@ -19,6 +20,7 @@ import {
   getActiveTasks,
   getAssignableEmployees,
   getCompletedTasks,
+  getCustomerPinOptions,
   getEmployeeProfile,
   getTaskSummary,
 } from "@/server/queries";
@@ -47,6 +49,7 @@ export default async function EmployeeTasksPage({
   if (!profile) notFound();
 
   const isAdmin = user.role === "ADMIN";
+  const isSelf = profile.id === user.id;
 
   const [t, locale] = await Promise.all([getTranslations(), getLocale()]);
   // The assignee list is only ever read by the edit form, which is admin-only.
@@ -54,13 +57,18 @@ export default async function EmployeeTasksPage({
   // needs it the extra query costs a connection, not a round trip.
   const settings = await getSettings();
 
-  const [active, completed, summary, assignees] = await Promise.all([
+  const tripsEnabled = settings["fieldTrip.enabled"];
+  // Only your own page carries the trip form, so only it pays for the pins.
+  const pinsEnabled = isSelf && tripsEnabled && settings["customer.enabled"];
+
+  const [active, completed, summary, assignees, pins] = await Promise.all([
     getActiveTasks(user, id),
     getCompletedTasks(user, { limit: 200, assigneeId: id }),
     settings["dashboard.showSummary"]
       ? getTaskSummary(user, id)
       : Promise.resolve(null),
     isAdmin ? getAssignableEmployees() : Promise.resolve([]),
+    pinsEnabled ? getCustomerPinOptions() : Promise.resolve([]),
   ]);
 
   const subtitle = [profile.department, profile.position].filter(Boolean).join(" · ");
@@ -154,6 +162,23 @@ export default async function EmployeeTasksPage({
       />
 
       <TaskSection title={t("tasks.active")} hint={t("tasks.activeHint")}>
+        {/* On your own page only — the same button the employee board has,
+            since for an admin this page *is* their personal board. Someone
+            else's page gets no button: assigning work to another person is
+            /admin/tasks' job, with the assignee chosen rather than pinned. */}
+        {isSelf && (
+          <SelfWorkCreator
+            self={{
+              id: user.id,
+              employeeCode: user.employeeCode,
+              fullName: user.fullName,
+              department: user.department,
+            }}
+            tripsEnabled={tripsEnabled}
+            pins={pins}
+          />
+        )}
+
         {active.length === 0 ? (
           <EmptyState label={t("tasks.empty")} />
         ) : (

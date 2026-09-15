@@ -172,7 +172,13 @@ export async function createFieldTripAction(
   formData: FormData,
 ): Promise<ActionState> {
   return runAction(async () => {
-    const admin = await assertAdmin();
+    // Scheduling for other people is an admin's job, and stays one. An
+    // employee may put *themselves* on the schedule, on the terms
+    // createTaskAction grants for a task: the traveller list is pinned to the
+    // caller here, on the server, and whatever list the form carried is
+    // discarded rather than checked. So a self-scheduled trip is always a
+    // one-person trip, and the audit row says it was self-scheduled.
+    const user = await assertUser();
     const parsed = createFieldTripSchema.safeParse(formDataToObject(formData));
 
     if (!parsed.success) {
@@ -183,7 +189,9 @@ export async function createFieldTripAction(
       };
     }
 
-    const { employeeIds, ...tripData } = parsed.data;
+    const { employeeIds: requested, ...tripData } = parsed.data;
+    const employeeIds = user.role === "ADMIN" ? requested : [user.id];
+    const selfScheduled = employeeIds.length === 1 && employeeIds[0] === user.id;
 
     // Sent together, so checking the pin costs no wall clock on top of
     // checking the travellers — one round trip's latency for both.
@@ -199,7 +207,7 @@ export async function createFieldTripAction(
       const trip = await tx.fieldTrip.create({
         data: {
           ...tripData,
-          createdById: admin.id,
+          createdById: user.id,
           // The schema validated the list is non-empty and deduplicated it, so
           // createMany cannot collide with the join table's composite key.
           travellers: {
@@ -210,7 +218,7 @@ export async function createFieldTripAction(
 
       await writeAudit(
         {
-          actor: admin,
+          actor: user,
           action: "fieldTrip.created",
           entityType: "FieldTrip",
           entityId: trip.id,
@@ -221,6 +229,7 @@ export async function createFieldTripAction(
             endDate: trip.endDate.toISOString(),
             pinId: trip.pinId,
             pinLabel: pin?.label ?? null,
+            selfScheduled,
           },
         },
         tx,

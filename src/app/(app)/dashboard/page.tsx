@@ -4,6 +4,7 @@ import { CardGrid } from "@/components/card-grid";
 import { EmployeeFrame } from "@/components/employee-frame";
 import { PageShell } from "@/components/page-shell";
 import { ScheduleRow } from "@/components/schedule-row";
+import { SelfWorkCreator } from "@/components/self-work-creator";
 import { SummaryTiles } from "@/components/summary-tiles";
 import { ActiveTaskCard, CompletedTaskCard } from "@/components/task-card";
 import { TaskSection } from "@/components/task-section";
@@ -17,6 +18,7 @@ import { serialiseTask } from "@/lib/serialise";
 import {
   getActiveTasks,
   getCompletedTasks,
+  getCustomerPinOptions,
   getEmployeeWorkloads,
   getTaskSummary,
 } from "@/server/queries";
@@ -107,11 +109,17 @@ async function PeopleOverview({ user, cal }: { user: SessionUser; cal?: string }
 async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string }) {
   const [t, settings] = await Promise.all([getTranslations(), getSettings()]);
 
-  const [active, completed, summary] = await Promise.all([
+  const tripsEnabled = settings["fieldTrip.enabled"];
+  // The pin picker on the trip form, and only then — the same gate the admin
+  // page keeps on this read, so `customer.enabled` still skips the query.
+  const pinsEnabled = tripsEnabled && settings["customer.enabled"];
+
+  const [active, completed, summary, pins] = await Promise.all([
     getActiveTasks(user),
     getCompletedTasks(user, { limit: 200 }),
     // Not fetched at all when the strip is off — see PeopleOverview.
     settings["dashboard.showSummary"] ? getTaskSummary(user) : Promise.resolve(null),
+    pinsEnabled ? getCustomerPinOptions() : Promise.resolve([]),
   ]);
 
   return (
@@ -121,6 +129,20 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
       <ScheduleRow user={user} cal={cal} basePath="/dashboard" linkTasksTo="anchor" />
 
       <TaskSection title={t("tasks.active")} hint={t("tasks.activeHint")}>
+        {/* The one place an employee creates work: for themselves, and only
+            that — both create actions pin the work to the caller. Above the
+            cards, where a new one will appear. */}
+        <SelfWorkCreator
+          self={{
+            id: user.id,
+            employeeCode: user.employeeCode,
+            fullName: user.fullName,
+            department: user.department,
+          }}
+          tripsEnabled={tripsEnabled}
+          pins={pins}
+        />
+
         {active.length === 0 ? (
           <EmptyState label={t("tasks.empty")} />
         ) : (

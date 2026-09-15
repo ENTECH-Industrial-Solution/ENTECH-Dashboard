@@ -114,12 +114,16 @@ const AUDIT_TABLE = Prisma.sql`app."AuditLog"`;
  * `now()`, because a trip's `endDate` is the *inclusive* last day: a trip
  * ending today is still running today, and `endDate < now()` would call it late
  * from one minute past midnight. That boundary is the same one `getFieldTrips`
- * splits upcoming from past on.
+ * splits upcoming from past on — and the same one a task's `dueDate` is held
+ * to (`taskOverdue`), since a due date is a day as well and `dueState()` in
+ * `lib/calendar.ts` colours the card by it.
  */
 const TRIP_ACTIVE = Prisma.sql`"cancelledAt" IS NULL AND "completedAt" IS NULL`;
 const TRIP_COMPLETED = Prisma.sql`"completedAt" IS NOT NULL`;
 const tripOverdue = (boundary: Date) =>
   Prisma.sql`${TRIP_ACTIVE} AND "endDate" < ${boundary}`;
+const taskOverdue = (boundary: Date) =>
+  Prisma.sql`status <> 'COMPLETED' AND "dueDate" < ${boundary}`;
 
 /** count() returns bigint, which does not survive the client boundary. */
 function total(rows: Record<string, bigint>[], column: string): number {
@@ -456,7 +460,7 @@ export async function getTaskSummary(user: SessionUser, assigneeId?: string) {
     SELECT
       count(*) FILTER (WHERE status <> 'COMPLETED')                       AS active,
       count(*) FILTER (WHERE status =  'COMPLETED')                       AS completed,
-      count(*) FILTER (WHERE status <> 'COMPLETED' AND "dueDate" < now()) AS overdue
+      count(*) FILTER (WHERE ${taskOverdue(boundary)})                   AS overdue
     FROM ${TASK_TABLE}
     ${taskScope}
     UNION ALL
@@ -572,7 +576,7 @@ export async function getEmployeeWorkloads(
         count(*) FILTER (WHERE status = 'IN_PROGRESS')                       AS "inProgress",
         count(*) FILTER (WHERE status = 'BLOCKED')                           AS "blocked",
         count(*) FILTER (WHERE status = 'COMPLETED')                         AS "completed",
-        count(*) FILTER (WHERE status <> 'COMPLETED' AND "dueDate" < now())  AS "overdue",
+        count(*) FILTER (WHERE ${taskOverdue(boundary)})                     AS "overdue",
         min("dueDate") FILTER (WHERE status <> 'COMPLETED')                  AS "nextDueDate"
       FROM ${TASK_TABLE}
       WHERE "assigneeId" = ANY(${ids})
@@ -688,14 +692,14 @@ export async function getWorkloadTasks(
     limit = 5,
   }: { assigneeId: string; metric: WorkloadMetric; limit?: number },
 ): Promise<WorkloadEntry[]> {
+  const boundary = dayStart(todayKey());
   const taskPredicate =
     metric === "completed"
       ? { status: "COMPLETED" as const }
       : metric === "overdue"
-        ? { status: { not: "COMPLETED" as const }, dueDate: { lt: new Date() } }
+        ? { status: { not: "COMPLETED" as const }, dueDate: { lt: boundary } }
         : { status: { not: "COMPLETED" as const } };
 
-  const boundary = dayStart(todayKey());
   const tripPredicate =
     metric === "completed"
       ? { completedAt: { not: null } }

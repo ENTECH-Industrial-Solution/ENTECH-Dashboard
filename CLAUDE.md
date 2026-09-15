@@ -159,6 +159,16 @@ calls one:
 - `assertUser()` / `assertAdmin()` — action guards, throw on failure.
 - `canMutateTask(user, task)` — admins may touch any task; employees only their own.
 
+`createTaskAction` and `createFieldTripAction` are the two writes an
+employee may make that *create* work, and both are narrowed the way reads
+are: a non-admin's `assigneeId` is replaced with their own id on the server,
+and a non-admin's traveller list with `[their own id]`, never validated
+against the request. So an employee can add a task for themselves, or put
+themselves on a one-person trip, from their own dashboard
+(`SelfWorkCreator`) — and for nobody else. The audit rows carry
+`selfAssigned` / `selfScheduled` so the trail tells self-made work from an
+assignment. Editing, cancelling, and every delete stay admin-only.
+
 Adding a page under `src/app/(app)/` does **not** protect it by itself. Call a
 guard in the page component.
 
@@ -370,9 +380,11 @@ it wants exactly one row per (trip, person): a trip three people are on is three
 people's work and belongs in all three frames. Keep them opposite.
 
 Writing splits in two (`src/server/actions/field-trips.ts`). **Scheduling** —
-create, update, cancel — is admin-only, because the schedule is something an
-admin plans and other people arrange their week around. **Running** a trip is
-not: `startFieldTripAction` and `completeFieldTripAction` are the traveller
+update and cancel — is admin-only, because the schedule is something an
+admin plans and other people arrange their week around. Creating is the one
+exception, on the terms `createTaskAction` set: an employee may schedule a
+trip whose only traveller is themselves, the list pinned on the server (see
+"The security boundary"). **Running** a trip is not admin-only either: `startFieldTripAction` and `completeFieldTripAction` are the traveller
 reporting from the field, so they go through `assertUser()` +
 `canRunFieldTrip()` (admin, or *anyone* on the trip — the person who happens to
 have signal when the job finishes is the one who should be able to close it out)
@@ -480,25 +492,35 @@ also leaves the two columns ending on different lines, which reads as a broken
 row rather than an empty one. The two boxes matching is worth more than the
 space they sometimes waste — ask before trading it back.
 
-Inside each group, **one box is one person, not one trip**, and the boxes run
-left to right. The panel is a third of the dashboard wide and no taller than
-the calendar beside it, so a column of full-width cards buried everyone past
-the second name; laid sideways, one box is exactly what the panel is sized for
-and the rest wait beside it. Someone with two trips on the same day gets one
-box holding both — the question this panel answers is about people. The count
-on the group heading still counts *trips*, because that is the number the
+Inside each group, **one box is one trip, wearing everyone on it**, and the
+boxes run left to right. The panel is a third of the dashboard wide and no
+taller than the calendar beside it, so a column of full-width cards buried
+everyone past the second name; laid sideways, one box is exactly what the panel
+is sized for and the rest wait beside it. The header stacks the travellers'
+faces (up to four, then "+n") over the full list of names and a head count, and
+the rest of the box is where they are going and when. The count on the group
+heading counts the same trips as the boxes, which is also the number the
 calendar and the summary strip put on the same group.
 
-The corollary of a trip having several travellers is that **one trip appears in
-several boxes**, once under each person on it. That is the right answer to "who
-is out right now": drawing a shared trip once, under whoever sorted first, would
-leave the others looking like they were at their desks. It is also why `canRun`
-on those buttons is asked of the *trip's* traveller list and not of the person
-whose box it is — otherwise the same trip would offer the viewer a button in
-their own box and withhold it in a colleague's.
+It was one box *per person* for a while, on the grounds that the panel asks
+about people, and a shared trip was drawn once under each of them. In use that
+put the same job on the screen three times with a different name on each, and
+learning that three colleagues went to Rayong *together* meant reading three
+boxes. A team going somewhere is one thing to see, so the box is the trip, and
+someone on two trips the same day is in two boxes — they have two places to
+be. `canRun` on the buttons is still asked of the trip's traveller list, since
+anyone on it may run it.
 
-`SlideRow` is that row, and it draws no bar (`scroll-bare`, as the panel's own
-scroll already does). Two things replace it. `.slide-card` sizes a box at 85%
+`SlideRow` is that row, and it is a **grid with `subgrid` rows, not a flex
+row**: each box's five parts (faces, purpose, location, evidence, buttons) are
+tracks the whole row shares, so the same part sits at the same height in
+every box — a flex row only matched their outer edges, and a two-line address
+put one box's buttons halfway down and the next box's at the bottom. Each
+part names its row (`row-start-N`) so one that renders nothing leaves its
+track empty rather than pulling the buttons up, and spacing is each part's
+own `pt-3` rather than a row gap so an empty track takes no room. The rail
+draws no bar (`scroll-bare`, as the panel's own scroll already does). Two
+things replace it. `.slide-rail` sizes a box at 85%
 of the row, so the next one shows past the edge — the cue that costs no chrome
 and works on a phone. And the arrows in the heading, which appear only when
 there is somewhere to go: a trackpad swipes sideways but a mouse wheel does
@@ -507,8 +529,8 @@ The 17.5rem floor on a box is not arbitrary — below it the location block
 inside gives up putting its map beside the address, and every box grows half
 again as tall.
 
-One consequence to keep in mind: `#trip-<id>` now lands on a block *inside* a
-box rather than on the box itself, so `.trip-anchor:target` is what rings it.
+`#trip-<id>` lands on the box itself, and `.trip-anchor:target` is what rings
+it — the same anchor `TripCard` carries on `/admin/tasks`.
 
 ### The customer map
 
