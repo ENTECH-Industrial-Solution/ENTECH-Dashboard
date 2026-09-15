@@ -14,7 +14,7 @@ import { createPortal } from "react-dom";
 
 import { SlideRow } from "@/components/slide-row";
 import { Alert, PriorityBadge, StatusBadge, SubmitButton } from "@/components/ui";
-import { dayKeyOf, monthGrid } from "@/lib/calendar";
+import { dayKeyOf, monthGrid, monthOf, monthParam, shiftMonth, type YearMonth } from "@/lib/calendar";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
 import type { Locale, TranslationKey } from "@/lib/i18n/dictionaries";
 import { rescheduleTaskAction } from "@/server/actions/tasks";
@@ -225,14 +225,28 @@ export function TaskCalendar({
   const tasksByDay = groupByDay(tasks);
   const tripsByDay = groupByDay(trips);
 
-  // The page turn. A month arrives by remount, so the new page plays its own
-  // entrance — down from the top when going forward, up from the bottom when
-  // going back, a plain fade the first time — and the old page is sent on its
-  // way by the arrow that was pressed, which has a whole round trip to finish
-  // leaving in. Decided in a layout effect so the server-rendered page carries
-  // no turn and there is nothing for hydration to disagree with.
-  const [turn, setTurn] = useState<"in-next" | "in-prev" | "in-first" | null>(null);
-  const [leaving, setLeaving] = useState<"out-next" | "out-prev" | null>(null);
+  // The page turn, on a ring-bound calendar: every page hinges at the rings
+  // along the top. Going forward, the current page flips up and over them and
+  // the next month is already underneath; going back, the previous month
+  // comes down over the current one. Both start the moment the arrow is
+  // pressed, before the server has answered: the page underneath is drawn
+  // from the calendar alone — which days the month has is arithmetic — and
+  // the marks arrive when the data does. That is what `preview` holds.
+  //
+  // The new month arrives by remount. If it is the month that was previewed,
+  // it settles in without a turn and only its marks appear; otherwise (a
+  // browser back, a link) it turns itself in. Decided in a layout effect so
+  // the server-rendered page carries no turn and hydration has nothing to
+  // disagree with; `lastMonthShown` and `previewedMonth` live at module
+  // scope because the instance that decided them is gone.
+  const [turn, setTurn] = useState<"in-first" | "in" | "settle" | null>(null);
+  const [preview, setPreview] = useState<{
+    year: number;
+    month: number;
+    dir: "next" | "prev";
+    /** The old page has finished leaving and need not be drawn any more. */
+    done: boolean;
+  } | null>(null);
 
   useLayoutEffect(() => {
     const from = lastMonthShown;
@@ -241,8 +255,34 @@ export function TaskCalendar({
     // way.
     if (from === monthPrefix) return;
     lastMonthShown = monthPrefix;
-    setTurn(from === null ? "in-first" : monthPrefix > from ? "in-next" : "in-prev");
+    if (previewedMonth === monthPrefix) {
+      previewedMonth = null;
+      setTurn("settle");
+    } else {
+      setTurn(from === null ? "in-first" : "in");
+    }
   }, [monthPrefix]);
+
+  // The old page is gone once its turn is over; the preview is what remains
+  // until the real month replaces this whole instance.
+  useEffect(() => {
+    if (!preview || preview.done) return;
+    const id = window.setTimeout(
+      () => setPreview((p) => (p ? { ...p, done: true } : p)),
+      PAGE_TURN_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, [preview]);
+
+  /** Start turning toward a month; the link's own navigation fetches it. */
+  const beginTurn = (target: YearMonth) => {
+    const key = monthParam(target);
+    if (key === monthPrefix) return;
+    previewedMonth = key;
+    setPreview({ ...target, dir: key > monthPrefix ? "next" : "prev", done: false });
+  };
+
+  const shownLabel = preview ? formatMonth(preview, locale) : monthLabel;
 
   const cells: (number | null)[] = [
     ...Array.from({ length: startWeekday }, () => null),
@@ -260,9 +300,14 @@ export function TaskCalendar({
     <div className="card space-y-4 p-4">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="me-auto text-base font-semibold tracking-tight">
-          {monthLabel}
+          {shownLabel}
         </h3>
-        <Link href={todayHref} scroll={false} className="btn btn-ghost">
+        <Link
+          href={todayHref}
+          scroll={false}
+          className="btn btn-ghost"
+          onClick={() => beginTurn(monthOf(todayKey))}
+        >
           {t("calendar.today")}
         </Link>
         <Link
@@ -271,7 +316,7 @@ export function TaskCalendar({
           className="btn btn-secondary"
           aria-label={t("calendar.prevMonth")}
           title={t("calendar.prevMonth")}
-          onClick={() => setLeaving("out-prev")}
+          onClick={() => beginTurn(shiftMonth({ year, month }, -1))}
         >
           <Chevron direction="prev" />
         </Link>
@@ -281,7 +326,7 @@ export function TaskCalendar({
           className="btn btn-secondary"
           aria-label={t("calendar.nextMonth")}
           title={t("calendar.nextMonth")}
-          onClick={() => setLeaving("out-next")}
+          onClick={() => beginTurn(shiftMonth({ year, month }, 1))}
         >
           <Chevron direction="next" />
         </Link>
@@ -294,15 +339,30 @@ export function TaskCalendar({
         thing that turns; the sheet around it only lends the perspective.
       */}
       <div className="calendar-sheet">
-        <div className="calendar-page" data-turn={leaving ?? turn ?? undefined}>
-          <div
-            className="grid grid-cols-7 gap-px py-1.5 text-center text-xs font-medium"
-            style={{ background: "var(--surface-muted)", color: "var(--text-muted)" }}
-          >
-            {WEEKDAYS[locale].map((label) => (
-              <div key={label}>{label}</div>
-            ))}
-          </div>
+        <Rings />
+        <div className="calendar-stack">
+          {preview && (
+            <PreviewPage
+              year={preview.year}
+              month={preview.month}
+              todayKey={todayKey}
+              locale={locale}
+              turn={preview.dir === "prev" ? "in" : "under"}
+            />
+          )}
+
+          {/* The month that is here: the live page, or — once a turn has
+              begun — the old page on its way out, drawn over or under the
+              preview and inert. */}
+          {!(preview?.done) && (
+            <div
+              className={preview ? "calendar-page calendar-page--leaving" : "calendar-page"}
+              data-turn={
+                preview ? (preview.dir === "next" ? "out" : "beneath") : (turn ?? undefined)
+              }
+              aria-hidden={preview ? true : undefined}
+            >
+          <WeekdayRow locale={locale} />
 
           <div className="grid grid-cols-7 gap-px">
           {cells.map((day, index) => {
@@ -356,7 +416,7 @@ export function TaskCalendar({
                 </span>
 
                 {dots.length > 0 && (
-                  <span className="flex flex-wrap items-center justify-center gap-0.5">
+                  <span className="day-marks flex flex-wrap items-center justify-center gap-0.5">
                     {dots.slice(0, 3).map((color, dotIndex) => (
                       <span
                         key={dotIndex}
@@ -386,11 +446,15 @@ export function TaskCalendar({
             );
           })}
           </div>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="space-y-2 border-t pt-3">
-        {selected === null ? (
+        {/* A turn in progress: the notes belong to the month leaving, and a
+            day of October under a heading that says November is a lie. */}
+        {selected === null || preview ? (
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
             {nothingThisMonth
               ? t("calendar.emptyMonth")
@@ -885,6 +949,98 @@ function Pushpin() {
  * renders every month as the first, which is also what hydration expects.
  */
 let lastMonthShown: string | null = null;
+
+/** The month a turn was started toward, so its arrival settles rather than turns. */
+let previewedMonth: string | null = null;
+
+/** How long a page takes to turn — matches `.calendar-page` in globals.css. */
+const PAGE_TURN_MS = 600;
+
+function formatMonth({ year, month }: YearMonth, locale: Locale): string {
+  return new Intl.DateTimeFormat(locale === "th" ? "th-TH" : "en-GB", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, 1)));
+}
+
+/** The binding along the top edge that every page hangs from. */
+function Rings() {
+  return (
+    <div className="calendar-rings" aria-hidden>
+      {Array.from({ length: 8 }, (_, i) => (
+        <span key={i} />
+      ))}
+    </div>
+  );
+}
+
+function WeekdayRow({ locale }: { locale: Locale }) {
+  return (
+    <div
+      className="grid grid-cols-7 gap-px py-1.5 text-center text-xs font-medium"
+      style={{ background: "var(--surface-muted)", color: "var(--text-muted)" }}
+    >
+      {WEEKDAYS[locale].map((label) => (
+        <div key={label}>{label}</div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The page under the one being turned: the month's days, laid out from the
+ * calendar alone, with a placeholder where each day's marks will go. It is
+ * what the reader sees while the server is asked for the month — and the
+ * real page then settles in over it with the marks filled in.
+ */
+function PreviewPage({
+  year,
+  month,
+  todayKey,
+  locale,
+  turn,
+}: {
+  year: number;
+  month: number;
+  todayKey: string;
+  locale: Locale;
+  turn: "in" | "under";
+}) {
+  const { daysInMonth, startWeekday } = monthGrid({ year, month });
+  const cells: (number | null)[] = [
+    ...Array.from({ length: startWeekday }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  return (
+    <div className="calendar-page" data-turn={turn} aria-busy>
+      <WeekdayRow locale={locale} />
+      <div className="grid grid-cols-7 gap-px">
+        {cells.map((day, index) => {
+          if (day === null) {
+            return <div key={`blank-${index}`} style={{ background: "var(--surface)" }} />;
+          }
+          const isToday = dayKeyOf({ year, month }, day) === todayKey;
+          return (
+            <div
+              key={day}
+              className="flex min-h-14 flex-col items-center gap-1 px-1 py-1.5 text-xs"
+              style={{
+                background: "var(--surface)",
+                border: `1px solid ${isToday ? "var(--brand)" : "transparent"}`,
+              }}
+            >
+              <span className={isToday ? "font-semibold" : undefined}>{day}</span>
+              <span className="skeleton h-1.5 w-5 rounded-full" />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 /** The key is a plain calendar day, so it is read back in UTC to stay that day. */
 function formatDayKey(

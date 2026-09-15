@@ -1193,6 +1193,33 @@ a fact, not a problem, and colouring it as overdue would make the calendar cry
 wolf. A task with neither planned date appears nowhere on it, which is why an
 edit that empties `dueDate` silently drops the task off the calendar.
 
+### The calendar is a ring-bound page
+
+`TaskCalendar` draws the month as a framed page hanging from a row of rings,
+and changing month **turns the page before the server answers**. The arrow
+computes the target month, `beginTurn()` sets a `preview`, and the component
+draws that month's days from arithmetic alone (`PreviewPage`, a skeleton
+where each day's marks will go) while the link's own navigation fetches it.
+Forward, the current page flips up over the rings with the preview already
+underneath; back, the preview comes down over it.
+
+The real month arrives by **remount** — `CalendarSection` keys the component
+per month — so the instance that started the turn is gone by then. Two
+module-scope variables carry what it knew: `lastMonthShown`, so a month that
+arrives without a preview (browser back, a pasted link) knows to turn itself
+in, and `previewedMonth`, so the one that *was* previewed settles in with no
+second turn and only its marks popping in. Both are decided in a
+`useLayoutEffect`, never during render: the server renders every page
+unturned and hydration has nothing to disagree with. StrictMode runs that
+effect twice, which is why it ignores a month it has already recorded.
+
+The day's entries under it are one pinned note each on a `SlideRow`. An
+admin can carry a note to another day — the browser's drag for a mouse,
+press-and-hold for a finger (`StickyNote`, with a fixed-position copy because
+the rail clips) — and nothing is written on the drop: `MoveConfirm` asks
+first, then `rescheduleTaskAction` makes the same audited edit
+`updateTaskAction` would have made to that one field.
+
 ### Employees are deactivated, and deleted only when empty
 
 `deactivateEmployeeAction` is the normal end of an account: it sets

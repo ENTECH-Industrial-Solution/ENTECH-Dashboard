@@ -541,15 +541,47 @@ button.pill:hover {
  * pixel apart. `overflow: hidden` keeps the selected day's fill inside the
  * rounded corners.
  *
- * The turn is a rotation about the top or bottom edge with perspective from
- * the sheet, so the page swings like one on a wall calendar rather than
- * sliding. Going forward the new month comes down from the top; going back
- * it comes up from the bottom; the first month simply fades. The old page
- * leaves the same way it came, the moment the arrow is pressed — it has the
- * whole round trip to do it in.
+ * It is ring-bound: a row of rings along the top edge, and every turn hinges
+ * there. Going forward the current page flips up over the rings (`out`) with
+ * the next month already underneath (`under`); going back the previous month
+ * comes down over the current one (`in`), which stays put beneath it
+ * (`beneath`). A month that was previewed settles in with no turn and only
+ * its marks appearing (`settle`); the first month simply fades.
+ *
+ * The stack holds one page in flow and, during a turn, the other one
+ * absolutely over or under it. Which is on top is the turn's business.
  */
 .calendar-sheet {
+  position: relative;
   perspective: 1400px;
+  padding-top: 0.55rem;
+}
+.calendar-rings {
+  position: absolute;
+  inset-inline: 1.5rem;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.calendar-rings span {
+  width: 0.5rem;
+  height: 1.4rem;
+  border-radius: 0.3rem;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--text-muted) 60%, var(--surface)),
+    var(--surface) 45%,
+    color-mix(in oklab, var(--text-muted) 70%, var(--surface))
+  );
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.35),
+    inset 0 0 0 1px color-mix(in oklab, var(--text-muted) 40%, transparent);
+}
+.calendar-stack {
+  position: relative;
+  transform-style: preserve-3d;
 }
 .calendar-page {
   display: grid;
@@ -560,78 +592,83 @@ button.pill:hover {
   overflow: hidden;
   transform-origin: 50% 0;
   backface-visibility: hidden;
-  animation-duration: 0.55s;
+  animation-duration: 0.6s;
   animation-timing-function: var(--ease-out);
   animation-fill-mode: both;
+}
+.calendar-page--leaving {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 .calendar-page[data-turn="in-first"] {
   animation-name: page-fade;
   animation-duration: var(--dur-slow);
 }
-.calendar-page[data-turn="in-next"] {
-  animation-name: page-in-top;
+.calendar-page[data-turn="in"] {
+  z-index: 2;
+  animation-name: page-down;
 }
-.calendar-page[data-turn="in-prev"] {
-  transform-origin: 50% 100%;
-  animation-name: page-in-bottom;
+.calendar-page[data-turn="out"] {
+  z-index: 2;
+  animation-name: page-up;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.7, 1);
 }
-.calendar-page[data-turn="out-next"] {
-  transform-origin: 50% 100%;
-  animation-name: page-out-bottom;
-  animation-duration: 0.45s;
-  animation-timing-function: ease-in;
+.calendar-page[data-turn="under"] {
+  z-index: 1;
+  animation-name: page-fade;
+  animation-duration: var(--dur-base);
 }
-.calendar-page[data-turn="out-prev"] {
-  animation-name: page-out-top;
-  animation-duration: 0.45s;
-  animation-timing-function: ease-in;
+.calendar-page[data-turn="beneath"] {
+  z-index: 1;
+}
+.calendar-page[data-turn="settle"] .day-marks {
+  animation: marks-in var(--dur-slow) var(--ease-out) both;
 }
 @keyframes page-fade {
   from {
     opacity: 0;
-    translate: 0 6px;
   }
   to {
     opacity: 1;
-    translate: 0 0;
   }
 }
-@keyframes page-in-top {
+/* Positive rotateX about the top edge lifts the bottom edge toward the
+   viewer and up — a page turning over its rings. */
+@keyframes page-up {
   from {
-    opacity: 0;
-    transform: rotateX(-75deg);
+    transform: rotateX(0);
+    opacity: 1;
   }
-  45% {
+  55% {
+    opacity: 1;
+  }
+  to {
+    transform: rotateX(112deg);
+    opacity: 0;
+  }
+}
+@keyframes page-down {
+  from {
+    transform: rotateX(112deg);
+    opacity: 0;
+  }
+  35% {
     opacity: 1;
   }
   to {
     transform: rotateX(0);
-  }
-}
-@keyframes page-in-bottom {
-  from {
-    opacity: 0;
-    transform: rotateX(75deg);
-  }
-  45% {
     opacity: 1;
   }
-  to {
-    transform: rotateX(0);
-  }
 }
-/* Lifted and held, not gone: the next month is a round trip away, and a
-   blank frame for that long reads as broken rather than as turning. */
-@keyframes page-out-bottom {
-  to {
-    opacity: 0.3;
-    transform: rotateX(-62deg);
+@keyframes marks-in {
+  from {
+    opacity: 0;
+    scale: 0.4;
   }
-}
-@keyframes page-out-top {
   to {
-    opacity: 0.3;
-    transform: rotateX(62deg);
+    opacity: 1;
+    scale: 1;
   }
 }
 
