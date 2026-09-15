@@ -536,158 +536,46 @@ button.pill:hover {
 }
 
 /*
- * The calendar's page. The frame and the hairlines between the cells come
- * from one trick: the page is the border colour and the cells sit on it a
- * pixel apart. `overflow: hidden` keeps the selected day's fill inside the
- * rounded corners.
- *
- * It is ring-bound: a row of rings along the top edge, and every turn hinges
- * there. Going forward the current page flips up over the rings (`out`) with
- * the next month already underneath (`under`); going back the previous month
- * comes down over the current one (`in`), which stays put beneath it
- * (`beneath`). A month that was previewed settles in with no turn and only
- * its marks appearing (`settle`); the first month simply fades.
- *
- * The stack holds one page in flow and, during a turn, the other one
- * absolutely over or under it. Which is on top is the turn's business.
+ * Changing month slides the page. The stack holds one page in flow and,
+ * while a month changes, the old one on top of it, absolutely positioned
+ * and on its way out. Forward: out to the left, in from the right; back:
+ * the other way. A month that was previewed settles in with no slide and
+ * only its marks appearing; the first month simply fades. The stack clips,
+ * so a page half out is half gone rather than across the sidebar; the
+ * padding keeps the selected day's ring inside the clip.
  */
-/*
- * The desk calendar: a page standing on a base, with the board it leans on
- * showing along its left edge and under it, and the wire rings over the top.
- * The board and the base are plain boxes behind the page; the rings sit in
- * front, positioned against the stack so the page's top edge is where the
- * wire goes into the hole.
- */
-.calendar-sheet {
-  position: relative;
-  padding: 1.1rem 0 0.55rem 0.8rem;
-}
-.calendar-board {
-  position: absolute;
-  inset: 0.95rem 0.3rem 0.2rem 0;
-  z-index: 0;
-  border-radius: 0.9rem;
-  background: color-mix(in oklab, var(--text-muted) 24%, var(--surface));
-  box-shadow:
-    inset 0 0 0 1px color-mix(in oklab, var(--text-muted) 30%, transparent),
-    inset 0.35rem 0 0.5rem -0.35rem oklch(0 0 0 / 0.25);
-}
-/* The folded side of the stand, seen from the front-left: a wedge from the
-   base up to the page's edge, which is what says the thing is standing. */
-.calendar-side {
-  position: absolute;
-  left: 0;
-  bottom: 0.15rem;
-  z-index: 0;
-  width: 1.7rem;
-  height: 46%;
-  clip-path: polygon(100% 0, 100% 100%, 0 100%);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklab, var(--text-muted) 34%, var(--surface)),
-    color-mix(in oklab, var(--text-muted) 58%, var(--surface))
-  );
-}
-.calendar-base {
-  position: absolute;
-  inset-inline: -0.3rem;
-  bottom: -0.05rem;
-  z-index: 0;
-  height: 0.65rem;
-  border-radius: 0.3rem;
-  background: color-mix(in oklab, var(--text-muted) 42%, var(--surface));
-  box-shadow: 0 2px 5px oklch(0 0 0 / 0.25);
-}
 .calendar-stack {
   position: relative;
-  z-index: 1;
-  /* The perspective lives here, on the pages' parent — it reaches direct
-     children only, and a flat rotateX is a squash rather than a turn. */
-  perspective: 1400px;
-}
-/* Four rings, close together in the middle, as a desk calendar's are. The
-   top offset puts the page's edge where the wire enters the hole (y=19 of
-   the 30-unit drawing, at this scale). */
-.calendar-rings {
-  position: absolute;
-  inset-inline: 0;
-  top: -26px;
-  z-index: 4;
-  display: flex;
-  justify-content: center;
-  gap: 1.6rem;
-  pointer-events: none;
-}
-.calendar-rings svg {
-  width: 22px;
-  height: 41px;
-  display: block;
-  overflow: visible;
-}
-.calendar-rings .ring-hole {
-  fill: color-mix(in oklab, var(--text) 55%, var(--surface));
-}
-.calendar-rings .ring-back {
-  fill: none;
-  stroke: color-mix(in oklab, var(--text-muted) 45%, var(--surface));
-  stroke-width: 2.4;
-  stroke-linecap: round;
-}
-.calendar-rings .ring-wire {
-  fill: none;
-  stroke: color-mix(in oklab, var(--text-muted) 85%, var(--text));
-  stroke-width: 2.8;
-  stroke-linecap: round;
-}
-.calendar-rings .ring-shine {
-  fill: none;
-  stroke: var(--surface);
-  stroke-width: 0.9;
-  stroke-linecap: round;
-  opacity: 0.9;
+  overflow: hidden;
+  padding: 4px;
+  margin: -4px;
 }
 .calendar-page {
-  /* Positioned, or the z-index below is ignored and the page coming down
-     over the old one paints underneath it instead — which is what an
-     absolutely positioned sibling does to static content. */
   position: relative;
-  display: grid;
-  gap: 1px;
-  background: var(--border);
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  overflow: hidden;
-  transform-origin: 50% 0;
-  backface-visibility: hidden;
-  animation-duration: 0.6s;
+  animation-duration: 0.4s;
   animation-timing-function: var(--ease-out);
   animation-fill-mode: both;
 }
 .calendar-page--leaving {
   position: absolute;
-  inset: 0;
+  inset: 4px;
   pointer-events: none;
 }
 .calendar-page[data-turn="in-first"] {
   animation-name: page-fade;
   animation-duration: var(--dur-slow);
 }
-.calendar-page[data-turn="in"] {
-  z-index: 2;
-  animation-name: page-down;
+.calendar-page[data-turn="in-right"] {
+  animation-name: page-in-right;
 }
-.calendar-page[data-turn="out"] {
-  z-index: 2;
-  animation-name: page-up;
-  animation-timing-function: cubic-bezier(0.4, 0, 0.7, 1);
+.calendar-page[data-turn="in-left"] {
+  animation-name: page-in-left;
 }
-.calendar-page[data-turn="under"] {
-  z-index: 1;
-  animation-name: page-fade;
-  animation-duration: var(--dur-base);
+.calendar-page[data-turn="out-left"] {
+  animation-name: page-out-left;
 }
-.calendar-page[data-turn="beneath"] {
-  z-index: 1;
+.calendar-page[data-turn="out-right"] {
+  animation-name: page-out-right;
 }
 .calendar-page[data-turn="settle"] .day-marks {
   animation: marks-in var(--dur-slow) var(--ease-out) both;
@@ -695,37 +583,43 @@ button.pill:hover {
 @keyframes page-fade {
   from {
     opacity: 0;
+    translate: 0 6px;
   }
   to {
     opacity: 1;
+    translate: 0 0;
   }
 }
-/* Positive rotateX about the top edge lifts the bottom edge toward the
-   viewer and up — a page turning over its rings. */
-@keyframes page-up {
+@keyframes page-in-right {
   from {
-    transform: rotateX(0);
-    opacity: 1;
-  }
-  55% {
-    opacity: 1;
+    opacity: 0;
+    translate: 40px 0;
   }
   to {
-    transform: rotateX(112deg);
-    opacity: 0;
+    opacity: 1;
+    translate: 0 0;
   }
 }
-@keyframes page-down {
+@keyframes page-in-left {
   from {
-    transform: rotateX(112deg);
     opacity: 0;
-  }
-  35% {
-    opacity: 1;
+    translate: -40px 0;
   }
   to {
-    transform: rotateX(0);
     opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes page-out-left {
+  to {
+    opacity: 0;
+    translate: -40px 0;
+  }
+}
+@keyframes page-out-right {
+  to {
+    opacity: 0;
+    translate: 40px 0;
   }
 }
 @keyframes marks-in {

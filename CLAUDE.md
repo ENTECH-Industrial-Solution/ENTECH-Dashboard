@@ -1193,24 +1193,25 @@ a fact, not a problem, and colouring it as overdue would make the calendar cry
 wolf. A task with neither planned date appears nowhere on it, which is why an
 edit that empties `dueDate` silently drops the task off the calendar.
 
-### The calendar is a ring-bound page
+### The calendar changes month before the server answers
 
-`TaskCalendar` draws the month as a framed page hanging from a row of rings,
-and changing month **turns the page before the server answers**. The arrow
-computes the target month, `beginTurn()` sets a `preview`, and the component
-draws that month's days from arithmetic alone (`PreviewPage`, a skeleton
-where each day's marks will go) while the link's own navigation fetches it.
-Forward, the current page flips up over the rings with the preview already
-underneath; back, the preview comes down over it.
+`TaskCalendar` draws the month as a plain grid, and changing month **slides
+the page before the server answers**. The arrow computes the target month,
+`beginTurn()` sets a `preview`, and the component draws that month's days
+from arithmetic alone (`PreviewPage`, a skeleton where each day's marks will
+go) while the link's own navigation fetches it. Forward, the current page
+slides out to the left and the preview in from the right; back, the other
+way. Every page is six weeks tall (`monthCells`) so the height never changes
+between months.
 
 The real month arrives by **remount** — `CalendarSection` keys the component
 per month — so the instance that started the turn is gone by then. Two
 module-scope variables carry what it knew: `lastMonthShown`, so a month that
-arrives without a preview (browser back, a pasted link) knows to turn itself
+arrives without a preview (browser back, a pasted link) knows to slide itself
 in, and `previewedMonth`, so the one that *was* previewed settles in with no
-second turn and only its marks popping in. Both are decided in a
+second slide and only its marks popping in. Both are decided in a
 `useLayoutEffect`, never during render: the server renders every page
-unturned and hydration has nothing to disagree with. StrictMode runs that
+without motion and hydration has nothing to disagree with. StrictMode runs that
 effect twice, which is why it ignores a month it has already recorded.
 
 The day's entries under it are one pinned note each on a `SlideRow`. An
