@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   useActionState,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type DragEvent,
@@ -11,7 +12,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { Reveal } from "@/components/motion";
 import { SlideRow } from "@/components/slide-row";
 import { Alert, PriorityBadge, StatusBadge, SubmitButton } from "@/components/ui";
 import { dayKeyOf, monthGrid } from "@/lib/calendar";
@@ -225,6 +225,25 @@ export function TaskCalendar({
   const tasksByDay = groupByDay(tasks);
   const tripsByDay = groupByDay(trips);
 
+  // The page turn. A month arrives by remount, so the new page plays its own
+  // entrance — down from the top when going forward, up from the bottom when
+  // going back, a plain fade the first time — and the old page is sent on its
+  // way by the arrow that was pressed, which has a whole round trip to finish
+  // leaving in. Decided in a layout effect so the server-rendered page carries
+  // no turn and there is nothing for hydration to disagree with.
+  const [turn, setTurn] = useState<"in-next" | "in-prev" | "in-first" | null>(null);
+  const [leaving, setLeaving] = useState<"out-next" | "out-prev" | null>(null);
+
+  useLayoutEffect(() => {
+    const from = lastMonthShown;
+    // Seen already: development runs effects twice, and the second pass must
+    // not read the month it just recorded as "no change" and turn the wrong
+    // way.
+    if (from === monthPrefix) return;
+    lastMonthShown = monthPrefix;
+    setTurn(from === null ? "in-first" : monthPrefix > from ? "in-next" : "in-prev");
+  }, [monthPrefix]);
+
   const cells: (number | null)[] = [
     ...Array.from({ length: startWeekday }, () => null),
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
@@ -252,6 +271,7 @@ export function TaskCalendar({
           className="btn btn-secondary"
           aria-label={t("calendar.prevMonth")}
           title={t("calendar.prevMonth")}
+          onClick={() => setLeaving("out-prev")}
         >
           <Chevron direction="prev" />
         </Link>
@@ -261,26 +281,36 @@ export function TaskCalendar({
           className="btn btn-secondary"
           aria-label={t("calendar.nextMonth")}
           title={t("calendar.nextMonth")}
+          onClick={() => setLeaving("out-next")}
         >
           <Chevron direction="next" />
         </Link>
       </div>
 
-      <div>
-        <div
-          className="grid grid-cols-7 gap-1 pb-1 text-center text-xs"
-          style={{ color: "var(--text-muted)" }}
-        >
-          {WEEKDAYS[locale].map((label) => (
-            <div key={label}>{label}</div>
-          ))}
-        </div>
+      {/*
+        The sheet: a framed page with the weekday row as its header and a
+        hairline between every cell, which is what makes seven columns of
+        numbers read as a calendar rather than a table. The frame is the
+        thing that turns; the sheet around it only lends the perspective.
+      */}
+      <div className="calendar-sheet">
+        <div className="calendar-page" data-turn={leaving ?? turn ?? undefined}>
+          <div
+            className="grid grid-cols-7 gap-px py-1.5 text-center text-xs font-medium"
+            style={{ background: "var(--surface-muted)", color: "var(--text-muted)" }}
+          >
+            {WEEKDAYS[locale].map((label) => (
+              <div key={label}>{label}</div>
+            ))}
+          </div>
 
-        {/* Remounted per month by the parent's key, so this entrance is the
-            cross-fade between one month and the next. */}
-        <Reveal className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-px">
           {cells.map((day, index) => {
-            if (day === null) return <div key={`blank-${index}`} />;
+            if (day === null) {
+              return (
+                <div key={`blank-${index}`} style={{ background: "var(--surface)" }} />
+              );
+            }
 
             const key = dayKeyOf({ year, month }, day);
             const dayTasks = tasksByDay.get(key) ?? [];
@@ -306,13 +336,13 @@ export function TaskCalendar({
                 aria-pressed={isSelected}
                 data-day={key}
                 data-target={moving ? (dragOver === key ? "over" : "open") : undefined}
-                className="day-cell relative flex min-h-14 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs transition-colors"
+                className="day-cell relative flex min-h-14 flex-col items-center gap-1 px-1 py-1.5 text-xs transition-colors"
                 style={{
                   background: isSelected
                     ? "var(--brand)"
                     : dots.length > 0
                       ? "var(--surface-muted)"
-                      : "transparent",
+                      : "var(--surface)",
                   color: isSelected ? "var(--brand-contrast)" : "var(--text)",
                   border: `1px solid ${
                     isToday && !isSelected ? "var(--brand)" : "transparent"
@@ -355,7 +385,8 @@ export function TaskCalendar({
               </button>
             );
           })}
-        </Reveal>
+          </div>
+        </div>
       </div>
 
       <div className="space-y-2 border-t pt-3">
@@ -845,6 +876,15 @@ function Pushpin() {
     </span>
   );
 }
+
+/**
+ * The month the calendar showed last, kept across remounts so the next one
+ * knows which way to turn. Module scope on purpose: the component is keyed
+ * on the month and so is a fresh instance each time, and this is the only
+ * thing that outlives it. Read and written only on the client — the server
+ * renders every month as the first, which is also what hydration expects.
+ */
+let lastMonthShown: string | null = null;
 
 /** The key is a plain calendar day, so it is read back in UTC to stay that day. */
 function formatDayKey(
