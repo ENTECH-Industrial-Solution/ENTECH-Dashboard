@@ -284,11 +284,7 @@ export function TaskCalendar({
 
   const shownLabel = preview ? formatMonth(preview, locale) : monthLabel;
 
-  const cells: (number | null)[] = [
-    ...Array.from({ length: startWeekday }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
+  const cells = monthCells({ daysInMonth, startWeekday });
 
   const selectedTasks = selected ? (tasksByDay.get(selected) ?? []) : [];
   const dueCount = selectedTasks.filter((task) => task.kind === "due").length;
@@ -339,8 +335,9 @@ export function TaskCalendar({
         thing that turns; the sheet around it only lends the perspective.
       */}
       <div className="calendar-sheet">
-        <Rings />
+        <div className="calendar-board" aria-hidden />
         <div className="calendar-stack">
+          <Rings />
           {preview && (
             <PreviewPage
               year={preview.year}
@@ -449,6 +446,7 @@ export function TaskCalendar({
             </div>
           )}
         </div>
+        <div className="calendar-base" aria-hidden />
       </div>
 
       <div className="space-y-2 border-t pt-3">
@@ -964,12 +962,42 @@ function formatMonth({ year, month }: YearMonth, locale: Locale): string {
   }).format(new Date(Date.UTC(year, month - 1, 1)));
 }
 
-/** The binding along the top edge that every page hangs from. */
+/**
+ * Six weeks of cells, always. A month is five rows or six, and a page that
+ * grew a row every other month would make the calendar change height as it
+ * turned — the blank sixth row is what keeps every page the same size.
+ */
+function monthCells({
+  daysInMonth,
+  startWeekday,
+}: {
+  daysInMonth: number;
+  startWeekday: number;
+}): (number | null)[] {
+  const cells: (number | null)[] = [
+    ...Array.from({ length: startWeekday }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length < 42) cells.push(null);
+  return cells;
+}
+
+/**
+ * The wire binding along the top edge that every page hangs from: each ring
+ * comes up out of a hole in the page, arches over the edge and goes back
+ * down behind it. Drawn as one path stroked twice — a dark wire and a thin
+ * bright line along it — which is all it takes to read as metal.
+ */
 function Rings() {
   return (
     <div className="calendar-rings" aria-hidden>
       {Array.from({ length: 8 }, (_, i) => (
-        <span key={i} />
+        <svg key={i} viewBox="0 0 16 30">
+          <ellipse className="ring-hole" cx="5" cy="19" rx="3.4" ry="1.6" />
+          <path className="ring-back" d="M12 19 V9" />
+          <path className="ring-wire" d="M5 19 V9 a3.5 3.5 0 0 1 7 0 V12" />
+          <path className="ring-shine" d="M5 19 V9 a3.5 3.5 0 0 1 7 0 V12" />
+        </svg>
       ))}
     </div>
   );
@@ -1007,12 +1035,7 @@ function PreviewPage({
   locale: Locale;
   turn: "in" | "under";
 }) {
-  const { daysInMonth, startWeekday } = monthGrid({ year, month });
-  const cells: (number | null)[] = [
-    ...Array.from({ length: startWeekday }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
+  const cells = monthCells(monthGrid({ year, month }));
 
   return (
     <div className="calendar-page" data-turn={turn} aria-busy>
