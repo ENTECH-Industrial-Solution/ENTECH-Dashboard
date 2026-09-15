@@ -233,7 +233,7 @@ export function TaskCalendar({
                 type="button"
                 onClick={() => setSelected(isSelected ? null : key)}
                 aria-pressed={isSelected}
-                className="flex min-h-14 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs transition-colors"
+                className="relative flex min-h-14 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs transition-colors"
                 style={{
                   background: isSelected
                     ? "var(--brand)"
@@ -246,6 +246,7 @@ export function TaskCalendar({
                   }`,
                 }}
               >
+                {isSelected && <Pushpin />}
                 <span className={isToday ? "font-semibold" : undefined}>
                   {day}
                 </span>
@@ -291,9 +292,10 @@ export function TaskCalendar({
               : t("calendar.pickDay")}
           </p>
         ) : (
-          /* Keyed on the day, so picking another one plays the entrance
-             again rather than swapping the text in place. */
-          <Reveal key={selected} className="space-y-2">
+          /* Keyed on the day, so picking another one hangs a fresh note
+             rather than swapping the text on the old one. */
+          <div key={selected} className="pinned-note space-y-2">
+            <Pushpin />
             <div className="flex flex-wrap items-baseline gap-2">
               <span className="text-sm font-medium">
                 {formatDayKey(selected, locale)}
@@ -435,10 +437,26 @@ export function TaskCalendar({
                 ))}
               </ul>
             )}
-          </Reveal>
+          </div>
         )}
       </div>
     </div>
+  );
+}
+
+/** The pin the selected day and its note both wear; `.day-pin` places it. */
+function Pushpin() {
+  return (
+    <span className="day-pin" aria-hidden>
+      <svg viewBox="0 0 24 24" fill="none">
+        {/* needle */}
+        <path d="M12 13v9" stroke="oklch(0.45 0.01 260)" strokeWidth="1.6" strokeLinecap="round" />
+        {/* collar and head */}
+        <path d="M8 13h8l-1.2-3H9.2L8 13Z" fill="currentColor" opacity="0.85" />
+        <circle cx="12" cy="6.5" r="4.5" fill="currentColor" />
+        <circle cx="10.5" cy="5" r="1.2" fill="oklch(1 0 0 / 0.55)" />
+      </svg>
+    </span>
   );
 }
 

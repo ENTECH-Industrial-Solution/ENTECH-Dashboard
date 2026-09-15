@@ -485,6 +485,89 @@ button.pill:hover {
   background: var(--success);
 }
 
+/* --- pinned note ---------------------------------------------------------- */
+
+/*
+ * The calendar's pushpin. The selected day wears one, and so does the note
+ * under the calendar that lists what happens on it — the one image the whole
+ * calendar borrows from a corkboard, kept this small on purpose: the grid
+ * itself stays a grid, because a month with fifteen jobs on it drawn as
+ * fifteen sheets of paper is a pile, not a plan.
+ *
+ * The pin drops in a little too big and settles; the note swings on it once
+ * and hangs a fraction off square. Both are keyframes rather than motion
+ * variants because they are pure decoration on elements that are already
+ * keyed on the day — remounting is what replays them.
+ */
+.day-pin {
+  position: absolute;
+  inset-inline-start: 50%;
+  inset-block-start: -0.55rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  translate: -50% 0;
+  /* A pushpin is red; this is the red the palette has. */
+  color: var(--danger);
+  filter: drop-shadow(0 1px 1px oklch(0 0 0 / 0.35));
+  pointer-events: none;
+  animation: pin-drop var(--dur-slow) var(--ease-out) both;
+}
+.day-pin svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+@keyframes pin-drop {
+  from {
+    opacity: 0;
+    translate: -50% -0.6rem;
+    scale: 1.5;
+  }
+  65% {
+    opacity: 1;
+    translate: -50% 0.06rem;
+    scale: 0.94;
+  }
+  to {
+    opacity: 1;
+    translate: -50% 0;
+    scale: 1;
+  }
+}
+
+.pinned-note {
+  position: relative;
+  transform-origin: 50% 0;
+  rotate: -0.6deg;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.875rem 1rem;
+  box-shadow:
+    0 10px 24px -10px oklch(0 0 0 / 0.3),
+    0 1px 2px oklch(0 0 0 / 0.06);
+  animation: note-hang 0.7s var(--ease-out) both;
+}
+@keyframes note-hang {
+  from {
+    opacity: 0;
+    rotate: -3deg;
+    translate: 0 -0.25rem;
+  }
+  40% {
+    opacity: 1;
+    rotate: 0.7deg;
+  }
+  70% {
+    rotate: -1.1deg;
+  }
+  to {
+    opacity: 1;
+    rotate: -0.6deg;
+    translate: 0 0;
+  }
+}
+
 /* --- theme switch --------------------------------------------------------- */
 
 /*
