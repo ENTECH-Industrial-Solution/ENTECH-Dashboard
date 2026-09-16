@@ -15,6 +15,15 @@ import type { SessionUser } from "@/lib/auth/session";
 
 export type TaskListItem = Awaited<ReturnType<typeof getActiveTasks>>[number];
 
+/**
+ * The people on a task, in the order they were added — `TaskAssignee` has no
+ * position column, and the join table's natural order is insertion order for
+ * the small lists this holds. The first is the one a calendar entry links to.
+ */
+const ASSIGNEE_SELECT = {
+  select: { employee: { select: { id: true, employeeCode: true, fullName: true } } },
+} as const;
+
 const taskSelect = {
   id: true,
   code: true,
@@ -29,7 +38,7 @@ const taskSelect = {
   completionNote: true,
   proofUrl: true,
   createdAt: true,
-  assignee: { select: { id: true, employeeCode: true, fullName: true } },
+  assignees: ASSIGNEE_SELECT,
   createdBy: { select: { employeeCode: true, fullName: true } },
 } as const;
 
@@ -49,9 +58,13 @@ function scopedAssigneeId(
   return assigneeId;
 }
 
+/**
+ * A task's assignees live in a join table, so "this person's tasks" is a
+ * `some` over it — the Prisma spelling of the EXISTS below.
+ */
 function assigneeScope(user: SessionUser, assigneeId?: string) {
   const id = scopedAssigneeId(user, assigneeId);
-  return id ? { assigneeId: id } : {};
+  return id ? { assignees: { some: { employeeId: id } } } : {};
 }
 
 /**
@@ -60,10 +73,19 @@ function assigneeScope(user: SessionUser, assigneeId?: string) {
  * Derived from scopedAssigneeId rather than restating the rule, so the "an
  * employee is pinned to their own id" invariant still lives in exactly one
  * place. The id is a bound parameter, never interpolated.
+ *
+ * `EXISTS`, and not a join, for the reason travellerScopeSql gives: joining
+ * would multiply a task by the number of people on it and a three-person
+ * task would count three times in the company-wide "active" number.
  */
 function assigneeScopeSql(user: SessionUser, assigneeId?: string): Prisma.Sql {
   const id = scopedAssigneeId(user, assigneeId);
-  return id ? Prisma.sql`WHERE "assigneeId" = ${id}` : Prisma.empty;
+  return id
+    ? Prisma.sql`WHERE EXISTS (
+        SELECT 1 FROM ${TASK_ASSIGNEE_TABLE} ta
+        WHERE ta."taskId" = ${TASK_TABLE}."id" AND ta."employeeId" = ${id}
+      )`
+    : Prisma.empty;
 }
 
 /**
@@ -104,6 +126,7 @@ function travellerScopeSql(user: SessionUser, assigneeId?: string): Prisma.Sql {
 const TASK_TABLE = Prisma.sql`app."Task"`;
 const TRIP_TABLE = Prisma.sql`app."FieldTrip"`;
 const TRIP_TRAVELLER_TABLE = Prisma.sql`app."FieldTripTraveller"`;
+const TASK_ASSIGNEE_TABLE = Prisma.sql`app."TaskAssignee"`;
 const AUDIT_TABLE = Prisma.sql`app."AuditLog"`;
 
 /**
@@ -165,7 +188,7 @@ export async function getCompletedTasks(
   const settings = await getSettings();
   const scope = settings["dashboard.sharedHistory"]
     ? assigneeId
-      ? { assigneeId }
+      ? { assignees: { some: { employeeId: assigneeId } } }
       : {}
     : assigneeScope(user, assigneeId);
 
@@ -214,7 +237,7 @@ export async function getTasksInMonth(
       priority: true,
       startDate: true,
       dueDate: true,
-      assignee: { select: { id: true, employeeCode: true, fullName: true } },
+      assignees: ASSIGNEE_SELECT,
     },
     orderBy: [{ dueDate: "asc" }, { priority: "desc" }, { code: "asc" }],
   });
@@ -420,8 +443,9 @@ export async function getEmployeesWithCounts() {
       isActive: true,
       lastLoginAt: true,
       createdAt: true,
+      // Open work through the join table: one row per task this person is on.
       _count: {
-        select: { assignedTasks: { where: { status: { not: "COMPLETED" } } } },
+        select: { taskAssignments: { where: { task: { status: { not: "COMPLETED" } } } } },
       },
     },
     orderBy: [{ isActive: "desc" }, { employeeCode: "asc" }],
@@ -561,7 +585,7 @@ export async function getEmployeeWorkloads(
   const [taskRows, tripRows] = await Promise.all([
     db.$queryRaw<
       {
-        assigneeId: string;
+        employeeId: string;
         todo: bigint;
         inProgress: bigint;
         blocked: bigint;
@@ -571,16 +595,17 @@ export async function getEmployeeWorkloads(
       }[]
     >`
       SELECT
-        "assigneeId",
+        ta."employeeId",
         count(*) FILTER (WHERE status = 'TODO')                              AS "todo",
         count(*) FILTER (WHERE status = 'IN_PROGRESS')                       AS "inProgress",
         count(*) FILTER (WHERE status = 'BLOCKED')                           AS "blocked",
         count(*) FILTER (WHERE status = 'COMPLETED')                         AS "completed",
         count(*) FILTER (WHERE ${taskOverdue(boundary)})                     AS "overdue",
         min("dueDate") FILTER (WHERE status <> 'COMPLETED')                  AS "nextDueDate"
-      FROM ${TASK_TABLE}
-      WHERE "assigneeId" = ANY(${ids})
-      GROUP BY "assigneeId"
+      FROM ${TASK_ASSIGNEE_TABLE} ta
+      JOIN ${TASK_TABLE} t ON t."id" = ta."taskId"
+      WHERE ta."employeeId" = ANY(${ids})
+      GROUP BY ta."employeeId"
     `,
     db.$queryRaw<
       {
@@ -605,7 +630,7 @@ export async function getEmployeeWorkloads(
   // min() already ignores NULLs, so the old `dueDate: { not: null }` filter on
   // the next-due pass was redundant — a person with no dated work gets NULL
   // either way.
-  const workloadBy = new Map(taskRows.map((row) => [row.assigneeId, row]));
+  const workloadBy = new Map(taskRows.map((row) => [row.employeeId, row]));
   const tripsBy = new Map(tripRows.map((row) => [row.employeeId, row]));
 
   return employees.map((e) => {

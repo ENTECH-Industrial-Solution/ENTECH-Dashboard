@@ -248,7 +248,9 @@ export async function deactivateEmployeeAction(
     const employee = await db.employee.findUnique({
       where: { id: employeeId },
       include: {
-        _count: { select: { assignedTasks: { where: { status: { not: "COMPLETED" } } } } },
+        _count: {
+          select: { taskAssignments: { where: { task: { status: { not: "COMPLETED" } } } } },
+        },
       },
     });
 
@@ -256,10 +258,10 @@ export async function deactivateEmployeeAction(
       return { status: "error", message: "ไม่พบพนักงาน / Employee not found" };
     }
 
-    if (employee._count.assignedTasks > 0) {
+    if (employee._count.taskAssignments > 0) {
       return {
         status: "error",
-        message: `พนักงานคนนี้ยังมีงานค้างอยู่ ${employee._count.assignedTasks} งาน กรุณาย้ายงานก่อน / ${employee._count.assignedTasks} open task(s) must be reassigned first`,
+        message: `พนักงานคนนี้ยังมีงานค้างอยู่ ${employee._count.taskAssignments} งาน กรุณาย้ายงานก่อน / ${employee._count.taskAssignments} open task(s) must be reassigned first`,
       };
     }
 
@@ -361,7 +363,7 @@ export async function deleteEmployeeAction(
       include: {
         _count: {
           select: {
-            assignedTasks: true,
+            taskAssignments: true,
             createdTasks: true,
             tripsTravelled: true,
             createdFieldTrips: true,
@@ -391,7 +393,9 @@ export async function deleteEmployeeAction(
     // evidence, and evidence whose author has been deleted is worth less than
     // an inactive row in a list.
     const held =
-      employee._count.assignedTasks +
+      // One row per task this person is on — a shared task pins every one of
+      // its assignees' accounts, exactly as a shared trip does below.
+      employee._count.taskAssignments +
       employee._count.createdTasks +
       // One row per trip this person is on. A shared trip pins every one of its
       // travellers' accounts, which is the same rule as before — the trip is

@@ -18,6 +18,9 @@ import type {
 export function serialiseTask(task: TaskListItem): TaskCardData {
   return {
     ...task,
+    // The join rows are flattened to the people on them: the card has no use
+    // for the pairing itself, only for who is in it.
+    assignees: task.assignees.map((row) => row.employee),
     startDate: task.startDate?.toISOString() ?? null,
     dueDate: task.dueDate?.toISOString() ?? null,
     completedAt: task.completedAt?.toISOString() ?? null,

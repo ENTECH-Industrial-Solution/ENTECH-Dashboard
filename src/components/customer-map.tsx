@@ -53,7 +53,7 @@ import {
   dominantStatus,
 } from "@/lib/customers";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
-import { travellerSummary } from "@/lib/trips";
+import { peopleSummary } from "@/lib/trips";
 import { createCustomerPinAction } from "@/server/actions/customers";
 import { searchPlacesAction, type PlaceResult } from "@/server/actions/places";
 import { idleState } from "@/server/actions/types";
@@ -331,7 +331,7 @@ export function CustomerMap({
           longitude: trip.longitude,
           tone: TRIP_TONE[state].color,
           count: 1,
-          title: `${travellerSummary(trip.travellers)} — ${trip.locationName}`,
+          title: `${peopleSummary(trip.travellers)} — ${trip.locationName}`,
           label: {
             place: trip.locationName,
             /* Still one row, even with four people on the trip. A pin's rows
@@ -342,7 +342,7 @@ export function CustomerMap({
                "+2" that says this is a team, and the popup below lists them. */
             rows: [
               {
-                name: travellerSummary(trip.travellers),
+                name: peopleSummary(trip.travellers),
                 status: t(TRIP_LABEL[state]),
                 tone: TRIP_TONE[state].color,
               },
@@ -1227,7 +1227,7 @@ function TripPanel({
           {/* The popup has the room the label does not, so the codes below are
               the whole list rather than a summary of it. */}
           <h2 className="truncate text-sm font-semibold">
-            {travellerSummary(trip.travellers)}
+            {peopleSummary(trip.travellers)}
           </h2>
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>
             {trip.travellers.map((person) => person.employeeCode).join(", ")}

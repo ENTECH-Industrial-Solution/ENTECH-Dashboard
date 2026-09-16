@@ -147,10 +147,46 @@ const optionalDate = z
     message: "วันที่ไม่ถูกต้อง / Invalid date",
   });
 
+/**
+ * A list of people, arriving as one comma-separated field of ids.
+ *
+ * A single key holding a list, rather than the same key repeated once per
+ * person, and that is not a style choice: `formDataToObject` below builds its
+ * object with `obj[key] = value` in a loop, so a repeated name collapses to
+ * whichever entry came last. A three-person trip would save as one person with
+ * no error raised anywhere. Keeping the list in one string keeps that helper's
+ * "one key, one string" contract, which every other action depends on.
+ *
+ * Deduplicated on the way in: the join tables' composite primary keys would
+ * refuse a repeat with a database error rather than a sentence, and the same
+ * person picked twice is a slip to absorb rather than a mistake to report.
+ *
+ * There is no upper bound, because the actions check every id against the
+ * active-employee list — the real ceiling is the headcount, and a second,
+ * smaller number here could only ever be wrong later.
+ *
+ * "At least one" is the rule the database cannot state (see TaskAssignee and
+ * FieldTripTraveller in schema.prisma); the message names which list.
+ */
+const peopleIds = (atLeastOne: string) =>
+  z
+    .string()
+    .transform((raw) => [
+      ...new Set(
+        raw
+          .split(",")
+          .map((id) => id.trim())
+          .filter((id) => id !== ""),
+      ),
+    ])
+    .pipe(z.array(z.string().cuid()).min(1, atLeastOne));
+
 const taskFields = z.object({
   title: z.string().trim().min(1, "กรุณากรอกชื่องาน / Title is required").max(200),
   description: optionalText(5000),
-  assigneeId: z.string().cuid(),
+  assigneeIds: peopleIds(
+    "กรุณาเลือกผู้รับผิดชอบอย่างน้อยหนึ่งคน / Choose at least one assignee",
+  ),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
   /// Planned schedule. Both ends are optional, but if both are given the
   /// start cannot fall after the end.
@@ -247,39 +283,10 @@ const googleMapsUrl = z
     { message: "ต้องเป็นลิงก์ Google Maps เท่านั้น / Must be a Google Maps link" },
   );
 
-/**
- * Everyone going on a trip, arriving as one comma-separated field.
- *
- * A single key holding a list, rather than the same key repeated once per
- * person, and that is not a style choice: `formDataToObject` below builds its
- * object with `obj[key] = value` in a loop, so a repeated name collapses to
- * whichever entry came last. A three-person trip would save as one person with
- * no error raised anywhere. Keeping the list in one string keeps that helper's
- * "one key, one string" contract, which every other action depends on.
- *
- * Deduplicated on the way in: the join table's composite primary key would
- * refuse a repeat with a database error rather than a sentence, and the same
- * person picked twice is a slip to absorb rather than a mistake to report.
- *
- * There is no upper bound, because the trip actions check every id against the
- * active-employee list — the real ceiling is the headcount, and a second,
- * smaller number here could only ever be wrong later.
- */
-const travellerIds = z
-  .string()
-  .transform((raw) => [
-    ...new Set(
-      raw
-        .split(",")
-        .map((id) => id.trim())
-        .filter((id) => id !== ""),
-    ),
-  ])
-  .pipe(
-    z
-      .array(z.string().cuid())
-      .min(1, "กรุณาเลือกผู้เดินทางอย่างน้อยหนึ่งคน / Choose at least one traveller"),
-  );
+/** Everyone going on a trip — see peopleIds for why it is one field. */
+const travellerIds = peopleIds(
+  "กรุณาเลือกผู้เดินทางอย่างน้อยหนึ่งคน / Choose at least one traveller",
+);
 
 const fieldTripFields = z.object({
   employeeIds: travellerIds,

@@ -19,6 +19,7 @@ import {
 } from "@/lib/validation";
 
 import { diffFields } from "./diff";
+import { checkPeople, peopleDelta } from "./people";
 import { fieldErrorsFrom, runAction, type ActionState } from "./types";
 
 /**
@@ -64,7 +65,6 @@ function actorLabel(user: SessionUser): string {
 const EDITABLE_FIELDS = [
   "title",
   "description",
-  "assigneeId",
   "priority",
   "startDate",
   "dueDate",
@@ -77,13 +77,14 @@ export async function createTaskAction(
   formData: FormData,
 ): Promise<ActionState> {
   return runAction(async () => {
-    // Admins assign work to anyone. An employee may create a task too, but
-    // only for themselves: the assignee is pinned to the caller here, on the
-    // server, and whatever id the form carried is discarded outright rather
-    // than checked — the same rule `assigneeScope()` applies to reads, so an
-    // id typed into the request can never widen what a person may do. The
-    // row still records who created it, so a self-assigned task is one the
-    // trail can tell apart from an assignment.
+    // Admins assign work to anyone, and to any number of people. An employee
+    // may create a task too, but only for themselves: the assignee list is
+    // pinned to the caller here, on the server, and whatever list the form
+    // carried is discarded outright rather than checked — the same rule
+    // `assigneeScope()` applies to reads, so an id typed into the request can
+    // never widen what a person may do. The row still records who created it,
+    // so a self-assigned task is one the trail can tell apart from an
+    // assignment.
     const user = await assertUser();
     const parsed = createTaskSchema.safeParse(formDataToObject(formData));
 
@@ -95,26 +96,29 @@ export async function createTaskAction(
       };
     }
 
-    const assigneeId = user.role === "ADMIN" ? parsed.data.assigneeId : user.id;
-    const selfAssigned = assigneeId === user.id;
+    const { assigneeIds: requested, ...taskData } = parsed.data;
+    const assigneeIds = user.role === "ADMIN" ? requested : [user.id];
+    const selfAssigned = assigneeIds.length === 1 && assigneeIds[0] === user.id;
 
-    const assignee = await db.employee.findUnique({
-      where: { id: assigneeId },
-      select: { id: true, isActive: true, employeeCode: true },
+    const people = await checkPeople(assigneeIds, {
+      field: "assigneeIds",
+      message: "ไม่สามารถมอบหมายงานให้บัญชีที่ถูกระงับหรือไม่มีอยู่ / Cannot assign to a missing or inactive account",
     });
-
-    if (!assignee || !assignee.isActive) {
-      return {
-        status: "error",
-        message: "ไม่สามารถมอบหมายงานให้บัญชีที่ถูกระงับ / Cannot assign to an inactive account",
-        fieldErrors: { assigneeId: "ไม่พร้อมใช้งาน / Unavailable" },
-      };
-    }
+    if (!people.ok) return people.error;
 
     await db.$transaction(async (tx) => {
       const code = await nextTaskCode(tx);
       const task = await tx.task.create({
-        data: { ...parsed.data, assigneeId, code, createdById: user.id },
+        data: {
+          ...taskData,
+          code,
+          createdById: user.id,
+          // The schema validated the list is non-empty and deduplicated it, so
+          // createMany cannot collide with the join table's composite key.
+          assignees: {
+            createMany: { data: assigneeIds.map((employeeId) => ({ employeeId })) },
+          },
+        },
       });
 
       await tx.taskEvent.create({
@@ -124,7 +128,7 @@ export async function createTaskAction(
           actorLabel: actorLabel(user),
           type: "CREATED",
           toStatus: task.status,
-          note: selfAssigned ? "สร้างงานให้ตัวเอง" : `มอบหมายให้ ${assignee.employeeCode}`,
+          note: selfAssigned ? "สร้างงานให้ตัวเอง" : `มอบหมายให้ ${people.codes.join(", ")}`,
         },
       });
 
@@ -137,7 +141,7 @@ export async function createTaskAction(
           metadata: {
             code: task.code,
             title: task.title,
-            assignee: assignee.employeeCode,
+            assignees: people.codes,
             selfAssigned,
           },
         },
@@ -171,31 +175,65 @@ export async function updateTaskAction(
       };
     }
 
-    const { taskId, ...data } = parsed.data;
+    const { taskId, assigneeIds, ...data } = parsed.data;
 
-    const before = await db.task.findUnique({ where: { id: taskId } });
-    if (!before) return { status: "error", message: "ไม่พบงาน / Task not found" };
-
-    const assignee = await db.employee.findUnique({
-      where: { id: data.assigneeId },
-      select: { isActive: true, employeeCode: true },
+    const before = await db.task.findUnique({
+      where: { id: taskId },
+      include: {
+        assignees: {
+          select: { employeeId: true, employee: { select: { employeeCode: true } } },
+        },
+      },
     });
+    if (!before) return { status: "error", message: "ไม่พบงาน / Task not found" };
 
     // Reassigning onto a suspended account would strand the work somewhere
     // nobody can sign in to reach, exactly as it would at creation.
-    if (!assignee || !assignee.isActive) {
-      return {
-        status: "error",
-        message:
-          "ไม่สามารถมอบหมายงานให้บัญชีที่ถูกระงับ / Cannot assign to an inactive account",
-        fieldErrors: { assigneeId: "ไม่พร้อมใช้งาน / Unavailable" },
-      };
-    }
+    const people = await checkPeople(assigneeIds, {
+      field: "assigneeIds",
+      message: "ไม่สามารถมอบหมายงานให้บัญชีที่ถูกระงับหรือไม่มีอยู่ / Cannot assign to a missing or inactive account",
+    });
+    if (!people.ok) return people.error;
+
+    /*
+     * The assignee list is absent from EDITABLE_FIELDS on purpose: diffFields
+     * compares single values and a list is not one. It is diffed here by hand,
+     * as a set, and written into the same `changes` object under `assignees`
+     * as joined staff codes — the copy of what updateFieldTripAction does for
+     * travellers, because an edit nobody can see in the trail is the one
+     * outcome this design cannot have.
+     */
+    const beforeIds = before.assignees.map((a) => a.employeeId);
+    const delta = peopleDelta(beforeIds, assigneeIds);
 
     const changes = diffFields(EDITABLE_FIELDS, before, data);
+    if (delta.changed) {
+      changes.assignees = {
+        from: before.assignees.map((a) => a.employee.employeeCode).sort().join(", "),
+        to: people.codes.join(", "),
+      };
+    }
     if (Object.keys(changes).length === 0) return { status: "success" };
 
-    await commitTaskEdit({ admin, before, data, changes });
+    await commitTaskEdit({
+      admin,
+      before,
+      data: {
+        ...data,
+        // Only the difference is written: a person who stayed on the task
+        // keeps their row rather than being deleted and recreated on every
+        // unrelated edit.
+        ...(delta.changed
+          ? {
+              assignees: {
+                deleteMany: { employeeId: { in: delta.removed } },
+                createMany: { data: delta.added.map((employeeId) => ({ employeeId })) },
+              },
+            }
+          : {}),
+      },
+      changes,
+    });
     return { status: "success", message: "บันทึกแล้ว / Saved" };
   });
 }
@@ -308,10 +346,13 @@ export async function updateTaskStatusAction(
       return { status: "error", message: "ข้อมูลไม่ถูกต้อง / Invalid input" };
     }
 
-    const task = await db.task.findUnique({ where: { id: parsed.data.taskId } });
+    const task = await db.task.findUnique({
+      where: { id: parsed.data.taskId },
+      include: { assignees: { select: { employeeId: true } } },
+    });
     if (!task) return { status: "error", message: "ไม่พบงาน / Task not found" };
 
-    if (!canMutateTask(user, task)) {
+    if (!canMutateTask(user, { assigneeIds: task.assignees.map((a) => a.employeeId) })) {
       return { status: "error", message: "ไม่มีสิทธิ์แก้ไขงานนี้ / Not authorized for this task" };
     }
 
@@ -384,10 +425,13 @@ export async function completeTaskAction(
       };
     }
 
-    const task = await db.task.findUnique({ where: { id: parsed.data.taskId } });
+    const task = await db.task.findUnique({
+      where: { id: parsed.data.taskId },
+      include: { assignees: { select: { employeeId: true } } },
+    });
     if (!task) return { status: "error", message: "ไม่พบงาน / Task not found" };
 
-    if (!canMutateTask(user, task)) {
+    if (!canMutateTask(user, { assigneeIds: task.assignees.map((a) => a.employeeId) })) {
       return { status: "error", message: "ไม่มีสิทธิ์แก้ไขงานนี้ / Not authorized for this task" };
     }
 
@@ -548,7 +592,7 @@ export async function deleteTaskAction(
     const task = await db.task.findUnique({
       where: { id: taskId },
       include: {
-        assignee: { select: { employeeCode: true, fullName: true } },
+        assignees: { select: { employee: { select: { employeeCode: true, fullName: true } } } },
         createdBy: { select: { employeeCode: true, fullName: true } },
         events: { orderBy: { createdAt: "asc" } },
       },
@@ -572,7 +616,11 @@ export async function deleteTaskAction(
             description: task.description,
             status: task.status,
             priority: task.priority,
-            assignee: `${task.assignee.employeeCode} — ${task.assignee.fullName}`,
+            // TaskAssignee.taskId cascades too, so the people go into the
+            // snapshot with everything else.
+            assignees: task.assignees.map(
+              (a) => `${a.employee.employeeCode} — ${a.employee.fullName}`,
+            ),
             createdBy: `${task.createdBy.employeeCode} — ${task.createdBy.fullName}`,
             startDate: task.startDate?.toISOString() ?? null,
             dueDate: task.dueDate?.toISOString() ?? null,

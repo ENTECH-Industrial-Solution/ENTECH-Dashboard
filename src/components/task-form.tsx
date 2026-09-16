@@ -1,12 +1,12 @@
 "use client";
 
+import { PeoplePicker, type Person } from "@/components/people-picker";
 import { Alert, FieldError, SubmitButton } from "@/components/ui";
 import type { TaskCardData } from "@/components/task-card";
-import type { TripPerson } from "@/components/trip-form";
 import { useTranslations } from "@/lib/i18n/client";
 
 /** Same shape a trip's traveller list has — one query feeds both forms. */
-export type AssigneeOption = TripPerson;
+export type AssigneeOption = Person;
 
 /** "2026-08-26T00:00:00.000Z" -> "2026-08-26", the value an <input type=date> wants. */
 function dateInputValue(iso: string | null): string {
@@ -28,7 +28,7 @@ export function TaskForm({
   errors,
   formError,
   assignees,
-  lockedAssignee,
+  lockedAssignees,
   task,
   submitLabel,
   onCancel,
@@ -38,13 +38,13 @@ export function TaskForm({
   formError?: string;
   assignees: AssigneeOption[];
   /**
-   * When set, the assignee is stated rather than chosen: the select becomes a
-   * line of text and the id rides in a hidden field. This is the employee
-   * creating a task for themselves — the server pins the assignee to the
-   * caller regardless, so this is the form agreeing with the rule, not
-   * enforcing it.
+   * When set, the assignees are stated rather than chosen: the picker and
+   * the × on each chip go, and the list rides in the hidden field as it
+   * always does. This is the employee creating a task for themselves — the
+   * server pins the list to the caller regardless, so this is the form
+   * agreeing with the rule, not enforcing it.
    */
-  lockedAssignee?: AssigneeOption;
+  lockedAssignees?: AssigneeOption[];
   task?: TaskCardData;
   submitLabel: string;
   onCancel: () => void;
@@ -103,40 +103,24 @@ export function TaskForm({
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="label" htmlFor={`assigneeId-${id}`}>
-            {t("tasks.assignee")}
-          </label>
-          {lockedAssignee ? (
-            <>
-              <input type="hidden" name="assigneeId" value={lockedAssignee.id} />
-              <div id={`assigneeId-${id}`} className="input" aria-readonly>
-                {lockedAssignee.employeeCode} — {lockedAssignee.fullName}
-              </div>
-            </>
-          ) : (
-            <select
-              id={`assigneeId-${id}`}
-              name="assigneeId"
-              className="input"
-              required
-              defaultValue={task?.assignee.id ?? ""}
-            >
-              <option value="" disabled>
-                —
-              </option>
-              {assignees.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.employeeCode} — {a.fullName}
-                  {a.department ? ` (${a.department})` : ""}
-                </option>
-              ))}
-            </select>
-          )}
-          <FieldError message={errors.assigneeId} />
-        </div>
+      {/* Spans the row: the chips wrap onto their own lines, and a half-width
+          box would leave the list crushed against the priority beside it. */}
+      <PeoplePicker
+        id={`task-${id}`}
+        name="assigneeIds"
+        people={assignees}
+        initial={lockedAssignees ?? task?.assignees ?? []}
+        locked={lockedAssignees !== undefined}
+        error={errors.assigneeIds}
+        labels={{
+          field: "tasks.assignee",
+          add: "tasks.addAssignee",
+          full: "tasks.everyoneAssigned",
+          remove: "tasks.removeAssignee",
+        }}
+      />
 
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="label" htmlFor={`priority-${id}`}>
             {t("tasks.priority")}

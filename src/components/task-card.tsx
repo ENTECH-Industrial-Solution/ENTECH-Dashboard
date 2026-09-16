@@ -32,7 +32,8 @@ export type TaskCardData = {
   completionNote: string | null;
   proofUrl: string | null;
   createdAt: string;
-  assignee: { id: string; employeeCode: string; fullName: string };
+  /** Everyone the work belongs to, equals, in the order they were added. */
+  assignees: { id: string; employeeCode: string; fullName: string }[];
   /** The admin who created and assigned the task. */
   createdBy: { employeeCode: string; fullName: string };
 };
@@ -248,8 +249,13 @@ export function ActiveTaskCard({
         className="flex flex-wrap gap-x-4 gap-y-1 text-xs"
         style={{ color: "var(--text-muted)" }}
       >
+        {/* The full list, wrapping — the card is the view with room for it,
+            and "who else is on this" is what somebody opens a task to find
+            out. The calendar and the capsules summarise instead. */}
         <Meta label={t("tasks.assignee")}>
-          {task.assignee.employeeCode} — {task.assignee.fullName}
+          {task.assignees
+            .map((person) => `${person.employeeCode} — ${person.fullName}`)
+            .join(", ")}
         </Meta>
 
         {settings["task.showAssigner"] && (
@@ -457,8 +463,13 @@ export function CompletedTaskCard({
         className="flex flex-wrap gap-x-4 gap-y-1 text-xs"
         style={{ color: "var(--text-muted)" }}
       >
+        {/* The full list, wrapping — the card is the view with room for it,
+            and "who else is on this" is what somebody opens a task to find
+            out. The calendar and the capsules summarise instead. */}
         <Meta label={t("tasks.assignee")}>
-          {task.assignee.employeeCode} — {task.assignee.fullName}
+          {task.assignees
+            .map((person) => `${person.employeeCode} — ${person.fullName}`)
+            .join(", ")}
         </Meta>
 
         {settings["task.showAssigner"] && (

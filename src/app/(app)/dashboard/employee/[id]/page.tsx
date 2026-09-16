@@ -187,7 +187,7 @@ export default async function EmployeeTasksPage({
               <ActiveTaskCard
                 key={task.id}
                 task={serialiseTask(task)}
-                canMutate={isAdmin || task.assignee.id === user.id}
+                canMutate={isAdmin || task.assignees.some((a) => a.employee.id === user.id)}
                 isAdmin={isAdmin}
                 assignees={assignees}
               />

@@ -16,6 +16,7 @@ import {
 } from "@/lib/validation";
 
 import { diffFields } from "./diff";
+import { checkPeople, peopleDelta } from "./people";
 import { fieldErrorsFrom, runAction, type ActionState } from "./types";
 
 /**
@@ -94,56 +95,13 @@ const PIN_NOT_FOUND = {
   fieldErrors: { pinId: "ไม่พบหมุด / Not found" },
 } as const;
 
-/**
- * The people a trip is being given to, checked in one query for the whole list.
- *
- * One round trip rather than one per person — the same reason everything else
- * here batches (see CLAUDE.md, "Round trips are the performance budget") — and
- * it answers both questions at once: is every id real, and is every one of them
- * still an active account.
- *
- * The failure *names the codes*. "Somebody on this list is deactivated" leaves
- * an admin to work out which by removing people one at a time, and the list is
- * exactly the thing that can now be long.
- *
- * The codes come back sorted, and every audit row below uses them in that
- * order, so two trips with the same people read the same in the trail.
- */
-async function checkTravellers(
-  employeeIds: string[],
-): Promise<
-  { ok: true; codes: string[] } | { ok: false; error: ActionState }
-> {
-  const found = await db.employee.findMany({
-    where: { id: { in: employeeIds } },
-    select: { isActive: true, employeeCode: true },
+/** Every traveller must be an active account — see checkPeople. */
+function checkTravellers(employeeIds: string[]) {
+  return checkPeople(employeeIds, {
+    field: "employeeIds",
+    message:
+      "ไม่สามารถบันทึกให้บัญชีที่ถูกระงับหรือไม่มีอยู่ / Cannot schedule for a missing or inactive account",
   });
-
-  const inactive = found
-    .filter((employee) => !employee.isActive)
-    .map((employee) => employee.employeeCode)
-    .sort();
-
-  // Short by any amount means an id matched nothing at all. There is no code to
-  // name for those, so the count is what the message can offer.
-  const missing = employeeIds.length - found.length;
-
-  if (inactive.length > 0 || missing > 0) {
-    const named = inactive.length > 0 ? `: ${inactive.join(", ")}` : "";
-    return {
-      ok: false,
-      error: {
-        status: "error",
-        message: `ไม่สามารถบันทึกให้บัญชีที่ถูกระงับหรือไม่มีอยู่${named} / Cannot schedule for a missing or inactive account${named}`,
-        fieldErrors: { employeeIds: "ไม่พร้อมใช้งาน / Unavailable" },
-      },
-    };
-  }
-
-  return {
-    ok: true,
-    codes: found.map((employee) => employee.employeeCode).sort(),
-  };
 }
 
 /** The staff codes already on a trip, sorted, as every audit row below wants them. */
@@ -297,8 +255,7 @@ export async function updateFieldTripAction(
      * same three people is not an edit.
      */
     const beforeIds = before.travellers.map((t) => t.employeeId);
-    const added = employeeIds.filter((id) => !beforeIds.includes(id));
-    const removed = beforeIds.filter((id) => !employeeIds.includes(id));
+    const { added, removed } = peopleDelta(beforeIds, employeeIds);
 
     const changes = diffFields(EDITABLE_FIELDS, before, data);
     if (added.length > 0 || removed.length > 0) {

@@ -151,7 +151,10 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
               <ActiveTaskCard
                 key={task.id}
                 task={serialiseTask(task)}
-                canMutate={user.role === "ADMIN" || task.assignee.id === user.id}
+                canMutate={
+                  user.role === "ADMIN" ||
+                  task.assignees.some((a) => a.employee.id === user.id)
+                }
               />
             ))}
           </CardGrid>

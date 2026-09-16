@@ -18,7 +18,7 @@ import {
 import { getLocale, getTranslations } from "@/lib/i18n/server";
 import { mapsHref } from "@/lib/maps";
 import { getSettings } from "@/lib/settings/server";
-import { travellerSummary } from "@/lib/trips";
+import { peopleSummary } from "@/lib/trips";
 import { getFieldTripsInMonth, getTasksInMonth } from "@/server/queries";
 
 /**
@@ -85,7 +85,10 @@ export async function CalendarSection({
   const taskHref = (task: (typeof tasks)[number]) =>
     linkTasksTo === "anchor"
       ? `#task-${task.id}`
-      : `/dashboard/employee/${task.assignee.id}#task-${task.id}`;
+      : // The first assignee's page. The task is on every assignee's page, so
+        // any of them is a true destination; the first is stable across
+        // renders and costs nothing to pick.
+        `/dashboard/employee/${task.assignees[0]?.employee.id}#task-${task.id}`;
 
   const taskEntry = (
     task: (typeof tasks)[number],
@@ -102,8 +105,7 @@ export async function CalendarSection({
     status: task.status,
     priority: task.priority,
     dayKey,
-    assigneeCode: task.assignee.employeeCode,
-    assigneeName: task.assignee.fullName,
+    assigneeNames: peopleSummary(task.assignees.map((a) => a.employee)),
     href: taskHref(task),
   });
 
@@ -165,7 +167,7 @@ export async function CalendarSection({
         // "สมชาย +2" where a cell has room for one name. Every view of a trip
         // must still say who is on it; the card and the map popup carry the
         // full list.
-        personName: travellerSummary(trip.travellers),
+        personName: peopleSummary(trip.travellers),
         locationName: trip.locationName,
         state: trip.completedAt
           ? "COMPLETED"

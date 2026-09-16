@@ -51,8 +51,8 @@ export type CalendarTask = {
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   /** "YYYY-MM-DD" in Asia/Bangkok, bucketed server-side. */
   dayKey: string;
-  assigneeCode: string;
-  assigneeName: string;
+  /** Who it belongs to, summarised — see peopleSummary in lib/trips.ts. */
+  assigneeNames: string;
   href: string;
 };
 
@@ -64,7 +64,7 @@ export type CalendarTrip = {
   id: string;
   purpose: string;
   dayKey: string;
-  /** Who is going, summarised — see travellerSummary in trip-card.tsx. */
+  /** Who is going, summarised — see peopleSummary in lib/trips.ts. */
   personName: string;
   locationName: string;
   /**
@@ -600,7 +600,7 @@ export function TaskCalendar({
                         className="truncate text-xs"
                         style={{ color: "var(--text-muted)" }}
                       >
-                        {task.assigneeName}
+                        {task.assigneeNames}
                       </span>
                     )}
 
