@@ -24,7 +24,7 @@ export default async function EmployeesPage() {
     role: e.role,
     isActive: e.isActive,
     lastLoginAt: e.lastLoginAt?.toISOString() ?? null,
-    openTasks: e._count.assignedTasks,
+    openTasks: e._count.taskAssignments,
   }));
 
   return (

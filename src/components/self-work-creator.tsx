@@ -139,7 +139,7 @@ export function SelfWorkCreator({
               : undefined
           }
           assignees={[self]}
-          lockedAssignee={self}
+          lockedAssignees={[self]}
           submitLabel={t("common.create")}
           onCancel={() => setOpen(false)}
         />

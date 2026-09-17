@@ -96,9 +96,14 @@ model Employee {
   createdBy        Employee?  @relation("EmployeeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdEmployees Employee[] @relation("EmployeeCreatedBy")
 
-  sessions      Session[]
-  assignedTasks Task[]     @relation("TaskAssignee")
-  createdTasks  Task[]     @relation("TaskCreator")
+  sessions     Session[]
+  createdTasks Task[]    @relation("TaskCreator")
+
+  /// Tasks this person is on, through the join table — a task carries any
+  /// number of assignees and none of them outranks another, exactly as a trip
+  /// carries its travellers. Restrict on that side: an account with a task
+  /// still on it cannot be deleted, and deactivation counts the open ones.
+  taskAssignments TaskAssignee[] @relation("TaskAssignee")
 
   /// Trips this person is going on, through the join table — a trip carries any
   /// number of travellers and none of them outranks another. Restrict on that
@@ -157,8 +162,10 @@ model Task {
   status      TaskStatus   @default(TODO)
   priority    TaskPriority @default(MEDIUM)
 
-  assigneeId String
-  assignee   Employee @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: Restrict)
+  /// Who the work belongs to. Any number, and they are equals — see
+  /// TaskAssignee. "At least one" is a rule the database cannot state, so it
+  /// lives in createTaskSchema / updateTaskSchema.
+  assignees TaskAssignee[]
 
   createdById String
   createdBy   Employee @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
@@ -181,9 +188,28 @@ model Task {
 
   events TaskEvent[]
 
-  @@index([assigneeId, status])
   @@index([status, dueDate])
   @@index([completedAt])
+}
+
+/// Who a task is assigned to. The whole model is its primary key, on the same
+/// terms as FieldTripTraveller: a person is on the task or they are not.
+///
+/// Cascade towards the task, which owns the row — deleteTaskAction snapshots
+/// the assignees into its audit entry and the rows go with it. Restrict
+/// towards the employee, because the row is that person's work: it is what
+/// makes an account with a task behind it undeletable.
+model TaskAssignee {
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  employeeId String
+  employee   Employee @relation("TaskAssignee", fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@id([taskId, employeeId])
+  /// "Which tasks is this person on" — the per-person dashboard, the workload
+  /// aggregate, and the EXISTS in assigneeScopeSql all enter from this side.
+  @@index([employeeId])
 }
 
 /// Append-only history for a single task. Written inside the same transaction

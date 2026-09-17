@@ -41,9 +41,16 @@ export async function assertAdmin(): Promise<SessionUser> {
   return user;
 }
 
-/** An employee may touch a task only if they own it; admins may touch any task. */
-export function canMutateTask(user: SessionUser, task: { assigneeId: string }): boolean {
-  return user.role === "ADMIN" || task.assigneeId === user.id;
+/**
+ * An employee may touch a task only if they are on it; admins may touch any
+ * task. Any assignee, not a first one — a task's assignees are equals, exactly
+ * as a trip's travellers are (see canRunFieldTrip).
+ */
+export function canMutateTask(
+  user: SessionUser,
+  task: { assigneeIds: readonly string[] },
+): boolean {
+  return user.role === "ADMIN" || task.assigneeIds.includes(user.id);
 }
 
 /**

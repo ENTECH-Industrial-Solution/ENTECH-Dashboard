@@ -157,17 +157,19 @@ calls one:
 
 - `requireUser()` / `requireAdmin()` — page guards, redirect on failure.
 - `assertUser()` / `assertAdmin()` — action guards, throw on failure.
-- `canMutateTask(user, task)` — admins may touch any task; employees only their own.
+- `canMutateTask(user, { assigneeIds })` — admins may touch any task;
+  employees only one they are on. Any assignee, not a first one: a task's
+  assignees are equals, exactly as a trip's travellers are.
 
 `createTaskAction` and `createFieldTripAction` are the two writes an
 employee may make that *create* work, and both are narrowed the way reads
-are: a non-admin's `assigneeId` is replaced with their own id on the server,
-and a non-admin's traveller list with `[their own id]`, never validated
-against the request. So an employee can add a task for themselves, or put
-themselves on a one-person trip, from their own dashboard
-(`SelfWorkCreator`) — and for nobody else. The audit rows carry
-`selfAssigned` / `selfScheduled` so the trail tells self-made work from an
-assignment. Editing, cancelling, and every delete stay admin-only.
+are: a non-admin's assignee list is replaced with `[their own id]` on the
+server, as is a non-admin's traveller list, never validated against the
+request. So an employee can add a task for themselves, or put themselves on
+a one-person trip, from their own dashboard (`SelfWorkCreator`) — and for
+nobody else. The audit rows carry `selfAssigned` / `selfScheduled` so the
+trail tells self-made work from an assignment. Editing, cancelling, and every
+delete stay admin-only.
 
 Adding a page under `src/app/(app)/` does **not** protect it by itself. Call a
 guard in the page component.
@@ -201,7 +203,9 @@ in this file and follow the same shape.
 `assigneeScope()` is the one place that narrowing is expressed. An optional
 `assigneeId` argument can only ever narrow further: for a non-admin the scope is
 pinned to their own id and the argument is discarded outright, never merged over
-the scope, so a person id typed into a URL cannot widen anything.
+the scope, so a person id typed into a URL cannot widen anything. Its shape is
+`{ assignees: { some: { employeeId } } }` and its SQL twin `assigneeScopeSql`
+is an `EXISTS` — see "A task carries any number of assignees" below.
 
 The single deliberate exception is `getCompletedTasks()`, which is **not**
 narrowed to the caller — see "The two-section model" below.
@@ -348,6 +352,36 @@ the diff — an edit nobody can see is the one outcome this design cannot have.
 updates or deletes them, and the admin audit page exposes no such affordance.
 Write the audit row inside the same `$transaction` as the mutation it describes
 (pass `tx` to `writeAudit`) so state and evidence cannot drift apart.
+
+### A task carries any number of assignees
+
+`Task.assigneeId` is gone; the people on a task live in `TaskAssignee`, a
+pure pairing table on exactly the terms `FieldTripTraveller` sets — whole row
+is the primary key, `Cascade` towards the task, `Restrict` towards the
+employee, no lead and no order. "At least one" is a rule the database cannot
+state, so `peopleIds` in `validation.ts` says it for both lists, and both
+arrive as **one comma-separated field** (`assigneeIds` / `employeeIds`) for
+the `formDataToObject` reason given under "Field trips".
+
+Everything that was true of a trip's travellers is true here, and the code is
+shared rather than mirrored where it can be: `PeoplePicker` is the one chip
+picker both forms draw, `checkPeople` / `peopleDelta` in
+`src/server/actions/people.ts` are the one active-account check and the one
+set diff, and `peopleSummary()` in `lib/trips.ts` is the one "สมชาย +2".
+
+The two aggregate reads keep the opposite shapes the trip ones have, for the
+same reason: `assigneeScopeSql` is an `EXISTS` so a three-person task counts
+once in the company-wide number, and `getEmployeeWorkloads()` joins so it
+counts once *per person* in the frames. `assigneeIds` is absent from
+`EDITABLE_FIELDS` on purpose — `updateTaskAction` diffs the list by hand as a
+set and writes it into `changes.assignees` as joined staff codes, so the trail
+still shows every reassignment. On the admin dashboard a calendar entry links
+to the **first** assignee's page; the task is on every assignee's page, so any
+of them is a true destination.
+
+The migration (`20260916090000_task_assignees`) backfills every existing task
+to a list of one before dropping the column, in one file — split in two there
+would be a deploy window with tasks nobody is on.
 
 ### Field trips
 

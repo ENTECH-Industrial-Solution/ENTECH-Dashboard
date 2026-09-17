@@ -11,22 +11,23 @@
  */
 
 /**
- * A trip's travellers as one short line: the first name, and how many more.
+ * A list of people as one short line: the first name, and how many more.
  *
- * The views that draw a trip small — a calendar cell, a map marker's label and
- * the title on it — have room for one name. A list truncated mid-name says less
- * than a count does, and "+2" is the part that tells you this is a team going
- * somewhere rather than a person. The full list belongs on the card and in the
- * map popup, which have the room to draw it.
+ * The views that draw a record small — a calendar cell, a sticky note, a map
+ * marker's label and the title on it — have room for one name. A list
+ * truncated mid-name says less than a count does, and "+2" is the part that
+ * tells you this is a team rather than a person. The full list belongs on the
+ * card and in the map popup, which have the room to draw it.
  *
- * One copy, for the reason `tripState` has one: three views summarising the
- * same list three slightly different ways is three chances to disagree about
- * who is on a trip.
+ * Trips' travellers first, and tasks' assignees since they became a list
+ * too. One copy, for the reason `tripState` has one: three views summarising
+ * the same list three slightly different ways is three chances to disagree
+ * about who is on something.
  *
  * Takes the least it can — anything with a `fullName` — so a caller passes
- * whatever shape of traveller it happens to be holding.
+ * whatever shape of person it happens to be holding.
  */
-export function travellerSummary(
+export function peopleSummary(
   travellers: readonly { fullName: string }[],
 ): string {
   const [first, ...rest] = travellers;
