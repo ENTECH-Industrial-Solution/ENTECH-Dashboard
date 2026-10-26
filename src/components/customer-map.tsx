@@ -20,6 +20,7 @@ import {
   type CustomerPerson,
   type CustomerPinRow,
   type MapTripRow,
+  type UnplacedTrip,
 } from "@/components/customer-form";
 import { CustomerPanel } from "@/components/customer-panel";
 import {
@@ -104,6 +105,7 @@ export function CustomerMap({
   pins,
   people,
   trips,
+  unplacedTrips,
   isAdmin,
   initialPinId,
 }: {
@@ -111,6 +113,8 @@ export function CustomerMap({
   people: CustomerPerson[];
   /** Empty when field trips are switched off, which hides the layer entirely. */
   trips: MapTripRow[];
+  /** Trips with no coordinates and no pin, which the map can only list. */
+  unplacedTrips: UnplacedTrip[];
   isAdmin: boolean;
   /** From `?pin=` — the place a link elsewhere in the app is pointing at. */
   initialPinId?: string;
@@ -156,6 +160,10 @@ export function CustomerMap({
    * the whole board is already here, so hiding markers costs no round trip.
    */
   const [showTrips, setShowTrips] = useState(true);
+  // The past half of the same layer, on its own switch: it only grows, and a
+  // busy history should be something you can put away without losing who is
+  // out this week.
+  const [showVisited, setShowVisited] = useState(true);
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   /*
    * Whether the toolbar shows more than its search row.
@@ -259,21 +267,19 @@ export function CustomerMap({
   /*
    * The trips worth drawing.
    *
-   * Two exclusions, and both come from rules the rest of the app already
-   * follows. **Cancelled trips are dropped** — they did not happen, which is
-   * why the calendar drops them too. **A trip with no coordinates is dropped**
-   * — a trip may legitimately be known only by the name of a place
-   * (`FieldTrip`'s latitude is nullable, unlike `CustomerPin`'s), and there is
-   * nowhere on a map to put one.
+   * The server has already dropped cancelled trips — they did not happen,
+   * which is why the calendar drops them too — and trips with nowhere to stand
+   * (see getMapTrips). What is left splits by date into the two chips.
    *
    * What is *not* excluded is a completed trip. It happened, and the marker
    * says so: CLAUDE.md's rule is that every view of a trip shows its state, and
    * the calendar earned that rule by announcing somebody was off-site on the
    * day they had already reported back.
    */
+  const pastCount = useMemo(() => trips.filter((trip) => trip.past).length, [trips]);
   const visibleTrips = useMemo(
-    () => (showTrips ? trips.filter((trip) => trip.cancelledAt === null) : []),
-    [trips, showTrips],
+    () => trips.filter((trip) => (trip.past ? showVisited : showTrips)),
+    [trips, showTrips, showVisited],
   );
 
   const selectedTrip =
@@ -290,6 +296,11 @@ export function CustomerMap({
       visible.map((pin) => {
         const status = dominantStatus(pin.customers);
         const ordered = [...pin.customers].sort(byStatusRank);
+        // shortcut: reads only the five newest visits the panel already has, so
+        // a completed visit behind five newer open ones goes unmarked; widen
+        // getCustomerPins' nested read if that ever matters.
+        const visited = pin.fieldTrips.some((trip) => trip.completedAt !== null);
+        const name = pin.label ?? pin.customers[0]?.name ?? "";
 
         return {
           id: pin.id,
@@ -297,7 +308,8 @@ export function CustomerMap({
           longitude: pin.longitude,
           tone: CUSTOMER_STATUS_META[status].tone,
           count: pin.customers.length,
-          title: pin.label ?? pin.customers[0]?.name ?? "",
+          visited,
+          title: visited ? `${name} — ${t("customers.visited")}` : name,
           label: {
             place: pin.label,
             rows: ordered.slice(0, LABEL_ROWS).map((customer) => ({
@@ -897,20 +909,67 @@ export function CustomerMap({
             nothing whichever way it is thrown.
           */}
           {trips.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowTrips((on) => !on)}
-              aria-pressed={showTrips}
-              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] leading-none"
-              style={
-                showTrips
-                  ? { background: "var(--brand)", color: "var(--brand-contrast)" }
-                  : { background: "var(--surface-muted)", color: "var(--text-muted)" }
-              }
-            >
-              <PersonIcon />
-              {t("customers.showTrips")} ({trips.length})
-            </button>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  [showTrips, setShowTrips, "customers.showTrips", trips.length - pastCount],
+                  [showVisited, setShowVisited, "customers.showVisited", pastCount],
+                ] as const
+              ).map(([on, setOn, label, count]) =>
+                count === 0 ? null : (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setOn((value) => !value)}
+                    aria-pressed={on}
+                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] leading-none"
+                    style={
+                      on
+                        ? { background: "var(--brand)", color: "var(--brand-contrast)" }
+                        : { background: "var(--surface-muted)", color: "var(--text-muted)" }
+                    }
+                  >
+                    <PersonIcon />
+                    {t(label)} ({count})
+                  </button>
+                ),
+              )}
+            </div>
+          )}
+
+          {/* Trips with nowhere to stand: no coordinates and no pin. Listed
+              here so they are visibly missing rather than silently absent, and
+              each links to the card where an admin can give it a place. */}
+          {unplacedTrips.length > 0 && (
+            <details className="text-[11px]">
+              <summary
+                className="cursor-pointer"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {t("customers.unplacedTrips")} ({unplacedTrips.length})
+              </summary>
+              <ul className="map-scroll mt-1.5 max-h-40 space-y-1.5 pe-2">
+                {unplacedTrips.map((trip) => (
+                  <li key={trip.id} className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{trip.purpose}</p>
+                      <p className="truncate" style={{ color: "var(--text-muted)" }}>
+                        {trip.locationName}
+                      </p>
+                    </div>
+                    {trip.href && (
+                      <Link
+                        href={trip.href}
+                        className="shrink-0 underline"
+                        style={{ color: "var(--brand)" }}
+                      >
+                        {t(isAdmin ? "customers.addLocation" : "customers.openTrip")}
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
 
           {/* A select, not a seventh row of chips. Seven more of those would
@@ -1258,14 +1317,13 @@ function TripPanel({
           {` · ${trip.hours.start}–${trip.hours.end}`}
         </p>
 
-        {/* The trip's own record, and the controls that go with it, live on the
-            dashboard. `#trip-<id>` is the anchor AwayPanel puts on each one. */}
-        <Link
-          href={`/dashboard#trip-${trip.id}`}
-          className="btn btn-secondary w-full"
-        >
-          {t("customers.openTrip")}
-        </Link>
+        {/* The trip's own record, and the controls that go with it, live on its
+            card. The page decided where that card is for this viewer. */}
+        {trip.href && (
+          <Link href={trip.href} className="btn btn-secondary w-full">
+            {t("customers.openTrip")}
+          </Link>
+        )}
       </div>
     </div>
   );

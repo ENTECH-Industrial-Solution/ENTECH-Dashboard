@@ -3,8 +3,9 @@
 import { assertUser } from "@/lib/auth/rbac";
 import { AuthorizationError } from "@/lib/errors";
 import { getLocale } from "@/lib/i18n/server";
+import { coordinatesFromMapUrl } from "@/lib/maps";
 import { rateLimit } from "@/lib/rate-limit";
-import { placeSearchSchema } from "@/lib/validation";
+import { mapLinkSchema, placeSearchSchema } from "@/lib/validation";
 
 /**
  * Finding a place on the basemap by name.
@@ -183,6 +184,69 @@ export async function searchPlacesAction(
     return {
       status: "error",
       message: "ค้นหาสถานที่ไม่สำเร็จ / Place search failed",
+    };
+  }
+}
+
+export type MapLinkResult =
+  | { status: "ok"; latitude: number; longitude: number }
+  | { status: "none" }
+  | { status: "error"; message: string };
+
+/**
+ * Where a short `maps.app.goo.gl` share link points.
+ *
+ * The link itself carries no coordinates; the long URL it redirects to usually
+ * does. Following it has to happen here — the browser cannot read a
+ * cross-origin redirect, and `connect-src` stays `'self'` — and it is
+ * deliberately **one hop with `redirect: "manual"`**: only the `Location`
+ * header is read, nothing is downloaded, and the schema has already pinned the
+ * host, so the form cannot point the server anywhere else.
+ *
+ * A read action in the same shape as `searchPlacesAction`, sharing its budget.
+ */
+export async function resolveMapLinkAction(
+  input: unknown,
+): Promise<MapLinkResult> {
+  try {
+    const user = await assertUser();
+    const parsed = mapLinkSchema.safeParse(input);
+
+    if (!parsed.success) {
+      return {
+        status: "error",
+        message:
+          parsed.error.issues[0]?.message ?? "ข้อมูลไม่ถูกต้อง / Invalid input",
+      };
+    }
+
+    const limit = rateLimit(`places:${user.id}`, SEARCHES_PER_MINUTE, 60_000);
+    if (!limit.allowed) {
+      return {
+        status: "error",
+        message: "ค้นหาบ่อยเกินไป กรุณารอสักครู่ / Too many searches, please wait",
+      };
+    }
+
+    const response = await fetch(parsed.data.url, {
+      redirect: "manual",
+      headers: { "User-Agent": USER_AGENT },
+      cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
+    });
+    const location = response.headers.get("location");
+    const point = location ? coordinatesFromMapUrl(location) : null;
+
+    return point ? { status: "ok", ...point } : { status: "none" };
+  } catch (error) {
+    if (error instanceof AuthorizationError) {
+      return { status: "error", message: error.message };
+    }
+
+    console.error("[action] resolveMapLink failed", error);
+    return {
+      status: "error",
+      message: "อ่านลิงก์ไม่สำเร็จ / Could not read the link",
     };
   }
 }

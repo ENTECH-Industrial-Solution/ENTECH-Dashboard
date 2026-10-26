@@ -92,6 +92,27 @@ export type MapTripRow = {
   hours: { start: string; end: string };
   /** Everyone on the trip. The marker's label summarises it, the popup lists it. */
   travellers: { employeeCode: string; fullName: string }[];
+  /**
+   * Its days are over — the same date-only split as everywhere else, decided on
+   * the server against the start of today in Bangkok. Puts the trip in the
+   * "เคยไปแล้ว" layer rather than the off-site one.
+   */
+  past: boolean;
+  /** Where the trip's own card is, or null when this viewer has none to see. */
+  href: string | null;
+};
+
+/**
+ * A trip the map cannot draw: no coordinates and no pin. Listed instead, so it
+ * is visibly missing rather than silently absent.
+ */
+export type UnplacedTrip = {
+  id: string;
+  purpose: string;
+  locationName: string;
+  startDate: string;
+  /** For an admin, the card with the edit button; null when there is none. */
+  href: string | null;
 };
 
 export type CustomerPinRow = {

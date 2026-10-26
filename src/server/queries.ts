@@ -358,6 +358,30 @@ export async function getFieldTrips({
 }
 
 /**
+ * Every trip the customer map can draw: upcoming and past together, because
+ * the map answers "where have we been" as well as "who is out".
+ *
+ * One query in place of a `window` read, so the page still pays one round
+ * trip. Cancelled trips are left out — they did not happen. A trip with no
+ * coordinates of its own borrows its pin's, which is why they ride along; one
+ * with neither still comes back, so the map can say it exists rather than
+ * losing it in silence.
+ */
+export async function getMapTrips(limit = 500) {
+  const trips = await db.fieldTrip.findMany({
+    where: { cancelledAt: null },
+    select: {
+      ...fieldTripSelect,
+      pin: { select: { id: true, label: true, latitude: true, longitude: true } },
+    },
+    orderBy: { startDate: "desc" },
+    take: limit,
+  });
+
+  return trips.map(flattenTravellers);
+}
+
+/**
  * Trips that touch a Bangkok calendar month, for the calendar. A trip counts if
  * any of its days fall inside the month, not only its first — a trip spanning a
  * month boundary belongs to both.

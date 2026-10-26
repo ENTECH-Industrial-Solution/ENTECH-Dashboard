@@ -232,6 +232,15 @@ export const dictionary = {
     th: "วางลิงก์จาก Google Maps ถ้ามี ระบบจะใช้ลิงก์นี้ก่อนพิกัด",
     en: "Paste a Google Maps link if you have one — it takes precedence over the coordinates",
   },
+  "trips.mapUrlReading": { th: "กำลังอ่านพิกัดจากลิงก์…", en: "Reading the link's coordinates…" },
+  "trips.mapUrlFilled": {
+    th: "ใส่ละติจูด/ลองจิจูดจากลิงก์ให้แล้ว",
+    en: "Latitude and longitude filled in from the link",
+  },
+  "trips.mapUrlNoPoint": {
+    th: "ลิงก์นี้ไม่มีพิกัด ทริปจะไม่ขึ้นบนแผนที่ลูกค้า จนกว่าจะใส่พิกัดหรือเลือกหมุด",
+    en: "This link has no coordinates; the trip stays off the customer map until it has coordinates or a pin",
+  },
   "trips.coordHint": {
     th: "เปิด Google Maps คลิกขวาที่จุดนั้น แล้วกดที่ตัวเลขพิกัดเพื่อคัดลอก",
     en: "In Google Maps, right-click the spot and click the coordinates to copy them",
@@ -677,6 +686,10 @@ export const dictionary = {
   },
   "customers.toggleTools": { th: "เครื่องมือแผนที่", en: "Map tools" },
   "customers.showTrips": { th: "คนออกนอกสถานที่", en: "People off-site" },
+  "customers.showVisited": { th: "เคยไปแล้ว", en: "Visited" },
+  "customers.visited": { th: "เคยไปแล้ว", en: "Visited" },
+  "customers.unplacedTrips": { th: "ทริปที่ยังไม่มีตำแหน่ง", en: "Trips with no location yet" },
+  "customers.addLocation": { th: "ใส่ตำแหน่ง", en: "Add location" },
   "customers.openTrip": { th: "ดูรายละเอียดภารกิจ", en: "Open the trip" },
   "customers.filterStatus": { th: "กรองตามสถานะ", en: "Filter by status" },
   "customers.legend": { th: "สีของหมุด", en: "Pin colours" },

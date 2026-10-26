@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { passwordSchema } from "@/lib/auth/password";
+import { isShortMapUrl } from "@/lib/maps";
 import { isSettingKey } from "@/lib/settings/settings";
 
 /**
@@ -673,6 +674,19 @@ export const placeSearchSchema = z.object({
     .trim()
     .min(2, "พิมพ์อย่างน้อย 2 ตัวอักษร / Type at least 2 characters")
     .max(200),
+});
+
+/**
+ * A short Google Maps share link the server is asked to follow. Only those two
+ * hosts, over https: the server fetches this, so anything wider would let the
+ * form point it at an arbitrary address.
+ */
+export const mapLinkSchema = z.object({
+  url: z
+    .string()
+    .trim()
+    .max(512)
+    .refine(isShortMapUrl, "ต้องเป็นลิงก์ย่อของ Google Maps / Must be a short Google Maps link"),
 });
 
 /** Narrow FormData to a plain object before Zod sees it. */

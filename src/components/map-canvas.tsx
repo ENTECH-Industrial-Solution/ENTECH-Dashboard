@@ -67,6 +67,8 @@ export type MapPin = {
   tone: string;
   /** How many customers stand here; the badge appears from two upwards. */
   count: number;
+  /** Somebody has completed a trip here. Drawn as a check opposite the count. */
+  visited?: boolean;
   /** Read out by a screen reader, and shown as the native tooltip. */
   title: string;
   /** The little always-on window above the pin. Text only — see `labelHtml`. */
@@ -225,13 +227,17 @@ function pinHtml(pin: MapPin): string {
       </svg>${badge}</span>`;
   }
 
+  // Ink, not green: the lead statuses are the only colours on this map, and a
+  // green check would read as WON.
+  const visited = pin.visited ? `<b class="map-pin-visited">✓</b>` : "";
+
   return `<span class="map-pin" style="--pin:${pin.tone}">
     <svg viewBox="0 0 24 32" aria-hidden="true">
       <path d="M12 31s11-11.5 11-19a11 11 0 1 0-22 0c0 7.5 11 19 11 19Z"
             fill="currentColor" stroke="var(--surface)" stroke-width="1.6"
             stroke-linejoin="round" />
       <circle cx="12" cy="12" r="4.2" fill="var(--surface)" />
-    </svg>${badge}</span>`;
+    </svg>${badge}${visited}</span>`;
 }
 
 export function MapCanvas({
@@ -525,7 +531,9 @@ export function MapCanvas({
         html: pinHtml(pin),
         iconSize: trip ? [26, 26] : [30, 40],
         iconAnchor: trip ? [13, 13] : [15, 40],
-        tooltipAnchor: trip ? [0, -13] : [0, -40],
+        // A trip's label hangs *below* its disc. A trip linked to a pin stands
+        // on that pin, and a label above would cover the pin's own label.
+        tooltipAnchor: trip ? [0, 13] : [0, -40],
       });
 
       const existing = markers.current.get(pin.id);
@@ -559,8 +567,8 @@ export function MapCanvas({
 
       marker.bindTooltip(labelHtml(pin.id, pin.label), {
         permanent: true,
-        direction: "top",
-        offset: [0, -6],
+        direction: pin.kind === "trip" ? "bottom" : "top",
+        offset: pin.kind === "trip" ? [0, 6] : [0, -6],
         opacity: 1,
         className: "map-label",
         // A far bigger tap target than a 30px pin, and it opens the same thing.
