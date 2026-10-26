@@ -84,6 +84,8 @@ const SPAN_LANES = 3;
  */
 const SPAN_TOP = 26;
 const SPAN_STEP = 8;
+/** The day grid's `gap-1`, in px, which a bar's half-tile margin subtracts. */
+const GRID_GAP = 4;
 
 /**
  * A lane for every span, so a task keeps one height across every week it
@@ -591,21 +593,32 @@ export function TaskCalendar({
               className="pointer-events-none absolute inset-0 grid grid-cols-7 gap-1"
               style={{ gridTemplateRows: "repeat(6, minmax(0, 1fr))" }}
             >
-              {bars.map((bar) => (
+              {bars.map((bar) => {
+                // A real end starts at the middle of its day's tile. A
+                // percentage margin is of the whole grid area the bar spans,
+                // so half a tile is that area less its gaps, over 2 × length.
+                const halfTile = `calc(${50 / bar.length}% - ${
+                  ((bar.length - 1) * GRID_GAP) / (2 * bar.length)
+                }px)`;
+
+                return (
                 <span
                   key={`${bar.span.id}-${bar.row}`}
-                  className={`h-1.5 self-start ${bar.opens ? "ms-1.5 rounded-s-full" : ""} ${
-                    bar.closes ? "me-1.5 rounded-e-full" : ""
+                  className={`h-1.5 self-start ${bar.opens ? "rounded-s-full" : ""} ${
+                    bar.closes ? "rounded-e-full" : ""
                   }`}
                   style={{
                     gridRow: bar.row + 1,
                     gridColumn: `${bar.col + 1} / span ${bar.length}`,
+                    marginInlineStart: bar.opens ? halfTile : undefined,
+                    marginInlineEnd: bar.closes ? halfTile : undefined,
                     marginTop: `${SPAN_TOP + bar.lane * SPAN_STEP}px`,
                     background: TONE_COLOR[spanTone(bar.span, todayKey)],
                     opacity: 0.75,
                   }}
                 />
-              ))}
+                );
+              })}
             </div>
           )}
           </div>
