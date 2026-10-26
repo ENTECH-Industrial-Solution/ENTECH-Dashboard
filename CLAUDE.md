@@ -226,6 +226,21 @@ another read action; do not let one skip the guard because "it only reads".
 person is in view — a capsule per person under each. The tile is a server
 component; only the capsules are client-side, because only they hold state.
 
+The strip lives in `PageShell`'s **`aside`**, not at the top of the content. From
+90rem the shell grows a 16rem column into the gutter left of the content, which
+keeps exactly the 69rem it had, so the calendar loses nothing. The column is
+sticky (`top-24`, the offset every `scroll-mt-24` anchor uses), capped to the
+viewport, and scrolls inside with no bar. Below 90rem there is no gutter, so it
+stacks on top. Because the strip is as wide as a phone in both places, its
+three tiles go side by side on a **container** query (`@xl:`) rather than a
+viewport one.
+
+`StaleTasks` sits under it in the same column. It lists tasks that are in
+progress or blocked and have had no `TaskEvent` for `STALE_TASK_DAYS` (14). The
+read, `getStaleTasks()`, is one raw query that narrows through
+`assigneeScopeSql` and takes the total from a window `count(*) OVER ()`, so it
+costs a single round trip.
+
 Each capsule opens **in place** onto the tasks behind it. Not a dialog: the list
 is a few lines of context for the number directly above it.
 
@@ -519,6 +534,13 @@ exactly that, and the groups scroll inside it under a pinned heading
 shrink below its content). Both the absolute positioning and the two-column
 grid start at `lg`, so they switch together — stacked below it, each takes its
 natural height and there is nothing to align to.
+
+`below` is drawn under the panel, in the same absolute column. On the
+dashboard that is `LeadSummary`, the lead count per status, gated on
+`customer.enabled`. It keeps its natural height and the panel takes what is
+left (`min-h-0 flex-1`), so the calendar still decides how tall the row is.
+`getLeadStatusCounts()` is a single `groupBy` over the board, which everyone
+may read, so it takes no `SessionUser`.
 
 `h-full` and not `max-h-full`, and this has been decided once already: sizing
 the panel to its trips does remove the empty space under a quiet week, but it
@@ -1061,6 +1083,36 @@ width of the scrollbar. Every ordinary page now renders exactly one
 page that renders neither has no landmark element and no padding, which is a
 bug rather than a style.
 
+`PageShell` also takes an optional `aside` (see "The summary strip"). Without
+one, its markup is exactly what it was.
+
+### The organisation's GitHub band
+
+`GithubSection` opens the dashboard with the public profile and repositories of
+`ENTECH-Industrial-Solution`. It is gated on `github.enabled`, a `reads` switch.
+`src/lib/github.ts` is the only file that talks to GitHub, and every one of its
+choices answers a constraint stated elsewhere in this file:
+
+- **Fetched on the server, with no token.** `connect-src` stays `'self'`, and
+  the app holds no API key for anything. Unauthenticated, GitHub allows 60
+  requests an hour per IP.
+- **`unstable_cache` for an hour, not the fetch cache.** The fetch carries a
+  3-second `AbortSignal` so a slow GitHub cannot hold the page, and Next's data
+  cache silently refuses to store a fetch that has a signal. The loader throws
+  on failure, so a failure is never cached; `getGithubOverview()` turns it into
+  `null`, and the band then says GitHub is unavailable.
+- **No Suspense boundary around it.** `SlideRow` measures itself after every
+  render, and inside a streamed boundary that measurement re-rendered forever
+  ("Maximum update depth exceeded"). The timeout is what bounds the wait.
+- **The logo is an inline SVG.** It adds no `img-src` host, and neither do
+  avatars, which the band deliberately leaves out.
+
+Hiding a repo reuses `AppSetting` rather than adding a table: a row keyed
+`github.repo.<name>` with `enabled = false` means hidden, and showing it again
+deletes the row, as `resetSettingAction` does. `readAppSettings()` reads both
+kinds of row in one query and separates them, and `setRepoVisibilityAction` is
+admin-only and audited.
+
 ### Brand assets
 
 `public/brand/` holds the artwork as supplied — `entech-logo.png` (the full
@@ -1169,7 +1221,7 @@ overridden one — so a fresh database behaves exactly like an untouched install
 and adding a toggle is a code change, not a migration.
 
 `getSettings()` is cached twice over: `unstable_cache` across requests, and
-React `cache()` within one. Thirteen booleans that change a few times a year do
+React `cache()` within one. Fifteen booleans that change a few times a year do
 not deserve a round trip per request. The app layout publishes the result through
 `SettingsProvider`, so the task cards (client components) read it with
 `useSettings()` instead of it being drilled through every page.
@@ -1186,8 +1238,8 @@ every new one has to declare which of the three it is:
 
 - `display` — draws less, and nothing else changes.
 - `reads` — *also skips a query*. `dashboard.showCalendar`, `showSummary`,
-  `showPeople`, `fieldTrip.enabled`, `fieldTrip.showHistory` and
-  `customer.enabled` return before fetching rather than hiding what they
+  `showPeople`, `fieldTrip.enabled`, `fieldTrip.showHistory`,
+  `customer.enabled` and `github.enabled` return before fetching rather than hiding what they
   fetched. A switch that claims this on the page and then fetches anyway is a
   lie the admin cannot see through. `customer.enabled` also takes the nav link
   with it, but the link is not what protects the page — `/customers` calls
