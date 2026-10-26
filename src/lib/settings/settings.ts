@@ -37,6 +37,7 @@ export const SETTING_KEYS = [
   "fieldTrip.showMap",
   "fieldTrip.showHistory",
   "customer.enabled",
+  "github.enabled",
 ] as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[number];
@@ -62,6 +63,7 @@ export const DEFAULT_SETTINGS: Settings = {
   "fieldTrip.showMap": true,
   "fieldTrip.showHistory": true,
   "customer.enabled": true,
+  "github.enabled": true,
 };
 
 /** Label and explanation shown on the settings page, in both languages. */
@@ -125,6 +127,10 @@ export const SETTING_LABELS: Record<
     label: "settings.customerMap",
     hint: "settings.customerMapHint",
   },
+  "github.enabled": {
+    label: "settings.github",
+    hint: "settings.githubHint",
+  },
 };
 
 /**
@@ -152,6 +158,8 @@ export const SETTING_IMPACT: Record<SettingKey, SettingImpact> = {
   // and the nav link goes with it. What it does *not* do is narrow anyone's
   // view — while the map is on, everybody sees every pin.
   "customer.enabled": "reads",
+  // Skips the GitHub request rather than hiding what it returned.
+  "github.enabled": "reads",
 };
 
 /**
@@ -206,7 +214,21 @@ export const SETTING_GROUPS: readonly {
     hint: "settings.groupCustomerHint",
     keys: ["customer.enabled"],
   },
+  {
+    id: "github",
+    title: "settings.groupGithub",
+    hint: "settings.groupGithubHint",
+    keys: ["github.enabled"],
+  },
 ];
+
+/**
+ * A repository hidden from the dashboard is an AppSetting row keyed by this
+ * prefix plus the repo's name, with `enabled: false`. Shown is the default, so
+ * showing one again deletes its row — the same "a row exists only where an
+ * admin overrode something" rule the switches above keep.
+ */
+export const GITHUB_REPO_KEY_PREFIX = "github.repo.";
 
 export function isSettingKey(value: string): value is SettingKey {
   return (SETTING_KEYS as readonly string[]).includes(value);

@@ -428,6 +428,15 @@ export const settingKeySchema = z.object({
 });
 
 /**
+ * Hiding or showing one GitHub repository on the dashboard. The name is held
+ * to GitHub's own alphabet, since it becomes part of an AppSetting key.
+ */
+export const repoVisibilitySchema = z.object({
+  repo: z.string().regex(/^[A-Za-z0-9._-]{1,100}$/, "ชื่อ repo ไม่ถูกต้อง / Invalid repository name"),
+  visible: z.enum(["true", "false"]).transform((v) => v === "true"),
+});
+
+/**
  * Moving one of a task's planned days from the calendar. A day rather than a
  * date: the calendar deals in Bangkok calendar days, and the value is read
  * back exactly as a date input's would be, so a day dropped on the grid lands

@@ -5,9 +5,14 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { assertAdmin } from "@/lib/auth/rbac";
 import { writeAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
-import { DEFAULT_SETTINGS } from "@/lib/settings/settings";
+import { DEFAULT_SETTINGS, GITHUB_REPO_KEY_PREFIX } from "@/lib/settings/settings";
 import { SETTINGS_CACHE_TAG } from "@/lib/settings/server";
-import { formDataToObject, settingKeySchema, settingSchema } from "@/lib/validation";
+import {
+  formDataToObject,
+  repoVisibilitySchema,
+  settingKeySchema,
+  settingSchema,
+} from "@/lib/validation";
 
 import { fieldErrorsFrom, runAction, type ActionState } from "./types";
 
@@ -122,5 +127,59 @@ export async function resetSettingAction(
     revalidatePath("/", "layout");
 
     return { status: "success", message: "คืนค่าเริ่มต้นแล้ว / Reset to the default" };
+  });
+}
+
+/**
+ * Hide one GitHub repository from the dashboard, or show it again.
+ *
+ * Shown is the default, so showing deletes the row rather than writing `true`
+ * — the same rule resetSettingAction keeps. Audited like any other switch.
+ */
+export async function setRepoVisibilityAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAction(async () => {
+    const admin = await assertAdmin();
+    const parsed = repoVisibilitySchema.safeParse(formDataToObject(formData));
+
+    if (!parsed.success) {
+      return {
+        status: "error",
+        message: "ข้อมูลไม่ถูกต้อง / Invalid input",
+        fieldErrors: fieldErrorsFrom(parsed.error),
+      };
+    }
+
+    const { repo, visible } = parsed.data;
+    const key = `${GITHUB_REPO_KEY_PREFIX}${repo}`;
+
+    await db.$transaction(async (tx) => {
+      if (visible) {
+        await tx.appSetting.deleteMany({ where: { key } });
+      } else {
+        await tx.appSetting.upsert({
+          where: { key },
+          create: { key, enabled: false },
+          update: { enabled: false },
+        });
+      }
+
+      await writeAudit(
+        {
+          actor: admin,
+          action: "settings.changed",
+          entityType: "AppSetting",
+          entityId: key,
+          metadata: { repo, visible },
+        },
+        tx,
+      );
+    });
+
+    revalidateTag(SETTINGS_CACHE_TAG);
+    revalidatePath("/", "layout");
+    return { status: "success", message: "บันทึกการตั้งค่าแล้ว / Settings saved" };
   });
 }

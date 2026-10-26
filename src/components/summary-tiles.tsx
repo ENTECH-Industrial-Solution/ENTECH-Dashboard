@@ -50,34 +50,39 @@ export async function SummaryTiles({
   };
 
   return (
-    <section className="grid gap-3 sm:grid-cols-3">
-      <SummaryTile
-        label={t("tasks.active")}
-        value={summary.active}
-        metric="active"
-        rows={breakdown("active")}
-        morePeople={morePeople}
-        moreTasks={moreTasks}
-      />
-      <SummaryTile
-        label={t("tasks.overdue")}
-        value={summary.overdue}
-        tone={summary.overdue > 0 ? "danger" : undefined}
-        metric="overdue"
-        rows={breakdown("overdue")}
-        morePeople={morePeople}
-        moreTasks={moreTasks}
-      />
-      <SummaryTile
-        label={t("status.COMPLETED")}
-        value={summary.completed}
-        tone="success"
-        metric="completed"
-        rows={breakdown("completed")}
-        morePeople={morePeople}
-        moreTasks={moreTasks}
-      />
-    </section>
+    // A container query rather than a viewport one: the same strip runs across
+    // a person's page and stands as a column in the dashboard's gutter, and
+    // only the strip knows which.
+    <div className="@container">
+      <section className="grid grid-cols-1 gap-3 @xl:grid-cols-3">
+        <SummaryTile
+          label={t("tasks.active")}
+          value={summary.active}
+          metric="active"
+          rows={breakdown("active")}
+          morePeople={morePeople}
+          moreTasks={moreTasks}
+        />
+        <SummaryTile
+          label={t("tasks.overdue")}
+          value={summary.overdue}
+          tone={summary.overdue > 0 ? "danger" : undefined}
+          metric="overdue"
+          rows={breakdown("overdue")}
+          morePeople={morePeople}
+          moreTasks={moreTasks}
+        />
+        <SummaryTile
+          label={t("status.COMPLETED")}
+          value={summary.completed}
+          tone="success"
+          metric="completed"
+          rows={breakdown("completed")}
+          morePeople={morePeople}
+          moreTasks={moreTasks}
+        />
+      </section>
+    </div>
   );
 }
 

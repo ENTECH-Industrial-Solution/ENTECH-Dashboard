@@ -190,6 +190,15 @@ export const dictionary = {
   "dashboard.back": { th: "กลับหน้าหลัก", en: "Back to dashboard" },
   "dashboard.morePeople": { th: "คนอื่น", en: "others" },
   "dashboard.moreTasks": { th: "งานอื่น", en: "more" },
+  "dashboard.stale": { th: "งานที่ค้างนาน", en: "Stalled work" },
+  "dashboard.staleHint": {
+    th: "กำลังทำหรือติดปัญหา และไม่มีความเคลื่อนไหวเกิน",
+    en: "In progress or blocked, with no activity for over",
+  },
+  "dashboard.staleNone": { th: "ไม่มีงานค้างนาน", en: "Nothing has stalled" },
+  "dashboard.staleDays": { th: "เงียบมา", en: "Quiet for" },
+  "dashboard.leads": { th: "ลีดลูกค้าตามสถานะ", en: "Leads by status" },
+  "dashboard.leadsAll": { th: "ทั้งหมด", en: "All" },
   "dashboard.personTasks": { th: "งานของพนักงานคนนี้", en: "This employee's work" },
 
   "trips.title": { th: "ตารางออกนอกสถานที่", en: "Field trip schedule" },
@@ -692,6 +701,41 @@ export const dictionary = {
     th: "ปิดแล้วเมนูแผนที่ลูกค้าจะหายไปและหน้านั้นเข้าไม่ได้ ระบบจะไม่ดึงข้อมูลหมุดเลย ข้อมูลที่ปักไว้ยังอยู่ครบและกลับมาเมื่อเปิดใหม่",
     en: "Off, the nav link disappears, the page is unreachable, and no pins are fetched. Everything already pinned stays and returns when it is switched back on.",
   },
+  "settings.github": { th: "แสดง GitHub ขององค์กร", en: "Show the organisation's GitHub" },
+  "settings.githubHint": {
+    th: "แสดงข้อมูลองค์กรและ repo สาธารณะบนหน้าหลัก ดึงจาก GitHub ชั่วโมงละครั้ง ปิดแล้วระบบจะไม่เรียก GitHub เลย",
+    en: "Shows the organisation and its public repositories on the dashboard, fetched from GitHub once an hour. Off, GitHub is not called at all.",
+  },
+  "settings.groupGithub": { th: "GitHub", en: "GitHub" },
+  "settings.groupGithubHint": {
+    th: "ข้อมูลองค์กรและ repo สาธารณะที่แสดงบนหน้าหลัก",
+    en: "The organisation and public repositories shown on the dashboard",
+  },
+  "settings.repos": { th: "repo ที่แสดงบนหน้าหลัก", en: "Repositories on the dashboard" },
+  "settings.reposHint": {
+    th: "repo ใหม่จะแสดงโดยอัตโนมัติ ซ่อนอันที่ไม่ต้องการให้เห็นได้ที่นี่",
+    en: "New repositories appear automatically. Hide the ones that should not be shown.",
+  },
+  "settings.reposOff": {
+    th: "เปิดการแสดง GitHub ก่อน จึงจะเลือก repo ได้",
+    en: "Switch the GitHub section on to choose repositories",
+  },
+  "settings.hide": { th: "ซ่อน", en: "Hide" },
+  "settings.show": { th: "แสดง", en: "Show" },
+  "settings.hidden": { th: "ซ่อนอยู่", en: "Hidden" },
+
+  "github.title": { th: "GitHub ขององค์กร", en: "Organisation on GitHub" },
+  "github.repos": { th: "repo สาธารณะ", en: "public repositories" },
+  "github.unavailable": {
+    th: "ดึงข้อมูลจาก GitHub ไม่ได้ในตอนนี้ ลองใหม่ภายหลัง",
+    en: "GitHub could not be reached right now. Try again later.",
+  },
+  "github.empty": { th: "ยังไม่มี repo ที่แสดง", en: "No repositories to show" },
+  "github.noDescription": { th: "ไม่มีคำอธิบาย", en: "No description" },
+  "github.archived": { th: "เก็บถาวร", en: "Archived" },
+  "github.fork": { th: "fork", en: "Fork" },
+  "github.pushed": { th: "อัปเดต", en: "Updated" },
+  "github.viewOnGithub": { th: "ดูบน GitHub", en: "View on GitHub" },
   "settings.groupCustomer": { th: "แผนที่ลูกค้า", en: "Customer map" },
   "settings.groupCustomerHint": {
     th: "หน้าแผนที่สำหรับติดตามสถานะลูกค้าตามจุด",

@@ -1,7 +1,8 @@
 import "server-only";
 
-import { Prisma } from "@prisma/client";
+import { Prisma, type CustomerStatus } from "@prisma/client";
 
+import { CUSTOMER_STATUSES } from "@/lib/customers";
 import { db } from "@/lib/db";
 import { dayStart, monthBounds, todayKey, type YearMonth } from "@/lib/calendar";
 import { getSettings } from "@/lib/settings/server";
@@ -128,6 +129,8 @@ const TRIP_TABLE = Prisma.sql`app."FieldTrip"`;
 const TRIP_TRAVELLER_TABLE = Prisma.sql`app."FieldTripTraveller"`;
 const TASK_ASSIGNEE_TABLE = Prisma.sql`app."TaskAssignee"`;
 const AUDIT_TABLE = Prisma.sql`app."AuditLog"`;
+const TASK_EVENT_TABLE = Prisma.sql`app."TaskEvent"`;
+const EMPLOYEE_TABLE = Prisma.sql`app."Employee"`;
 
 /**
  * A trip's three states, as SQL, matching what the cards and the actions mean
@@ -501,6 +504,94 @@ export async function getTaskSummary(user: SessionUser, assigneeId?: string) {
     completed: total(rows, "completed"),
     overdue: total(rows, "overdue"),
   };
+}
+
+/** How long a running task may go without a TaskEvent before it reads as stale. */
+export const STALE_TASK_DAYS = 14;
+
+export type StaleTask = {
+  id: string;
+  code: string;
+  title: string;
+  status: "IN_PROGRESS" | "BLOCKED";
+  /** The latest TaskEvent, or the task's creation when it has none. */
+  lastActivity: Date;
+  assignees: { id: string; fullName: string }[];
+};
+
+/**
+ * Started or blocked tasks nobody has moved for STALE_TASK_DAYS — the ones the
+ * overdue count cannot see, because they have no due date or it is still
+ * ahead. "Moved" means a TaskEvent: every status change, edit and reopen
+ * writes one, so its absence is exactly "nobody has touched this".
+ *
+ * One round trip: the total rides on each row through a window function
+ * rather than costing a second count query. Narrowed by assigneeScopeSql like
+ * every other task read.
+ */
+export async function getStaleTasks(
+  user: SessionUser,
+  limit = 5,
+): Promise<{ tasks: StaleTask[]; total: number }> {
+  const scope = assigneeScopeSql(user);
+  const cutoff = new Date(Date.now() - STALE_TASK_DAYS * 24 * 60 * 60 * 1000);
+
+  const rows = await db.$queryRaw<
+    (Omit<StaleTask, "assignees"> & {
+      assignees: { id: string; fullName: string }[] | null;
+      total: bigint;
+    })[]
+  >`
+    WITH scoped AS (
+      SELECT "id", "code", "title", "status", "createdAt"
+      FROM ${TASK_TABLE}
+      ${scope}
+    )
+    SELECT
+      s."id", s."code", s."title", s."status",
+      a."at" AS "lastActivity",
+      (
+        SELECT json_agg(json_build_object('id', e."id", 'fullName', e."fullName")
+                        ORDER BY e."fullName")
+        FROM ${TASK_ASSIGNEE_TABLE} ta
+        JOIN ${EMPLOYEE_TABLE} e ON e."id" = ta."employeeId"
+        WHERE ta."taskId" = s."id"
+      ) AS "assignees",
+      count(*) OVER () AS "total"
+    FROM scoped s
+    CROSS JOIN LATERAL (
+      SELECT COALESCE(max(ev."createdAt"), s."createdAt") AS "at"
+      FROM ${TASK_EVENT_TABLE} ev
+      WHERE ev."taskId" = s."id"
+    ) a
+    WHERE s."status" IN ('IN_PROGRESS', 'BLOCKED') AND a."at" < ${cutoff}
+    ORDER BY a."at" ASC
+    LIMIT ${limit}
+  `;
+
+  return {
+    tasks: rows.map(({ total: _total, assignees, ...task }) => ({
+      ...task,
+      assignees: assignees ?? [],
+    })),
+    total: Number(rows[0]?.total ?? 0),
+  };
+}
+
+/**
+ * How many leads sit in each status, for the dashboard's summary of the
+ * customer board. Not narrowed by anyone — the board is shared, exactly as
+ * getCustomerPins() is — and one grouped query.
+ */
+export async function getLeadStatusCounts(): Promise<Record<CustomerStatus, number>> {
+  const rows = await db.customer.groupBy({ by: ["status"], _count: { _all: true } });
+  const counts = Object.fromEntries(CUSTOMER_STATUSES.map((status) => [status, 0])) as Record<
+    CustomerStatus,
+    number
+  >;
+
+  for (const row of rows) counts[row.status] = row._count._all;
+  return counts;
 }
 
 /** One person's frame on the dashboard: who they are plus their workload. */

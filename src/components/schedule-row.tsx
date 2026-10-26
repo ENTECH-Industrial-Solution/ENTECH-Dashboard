@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { AwayPanel } from "@/components/away-panel";
 import { CalendarSection } from "@/components/calendar-section";
 import type { SessionUser } from "@/lib/auth/session";
@@ -17,20 +19,24 @@ export async function ScheduleRow({
   basePath,
   assigneeId,
   linkTasksTo,
+  below,
 }: {
   user: SessionUser;
   cal?: string;
   basePath: string;
   assigneeId?: string;
   linkTasksTo: "anchor" | "person";
+  /** Drawn under the off-site panel, in the same column. */
+  below?: ReactNode;
 }) {
   const settings = await getSettings();
   const showCalendar = settings["dashboard.showCalendar"];
   const showAway = settings["fieldTrip.enabled"];
+  const showSide = showAway || Boolean(below);
 
-  if (!showCalendar && !showAway) return null;
+  if (!showCalendar && !showSide) return null;
 
-  const both = showCalendar && showAway;
+  const both = showCalendar && showSide;
 
   return (
     /*
@@ -70,15 +76,28 @@ export async function ScheduleRow({
         * Only from `lg`, and only when both are shown — stacked, each takes its
         * natural height and there is nothing to align to.
         */}
-      {showAway &&
+      {/*
+        * `below` shares the column and the calendar's height: it keeps its
+        * natural size and the off-site panel takes what is left (`flex-1
+        * min-h-0`), still scrolling inside itself.
+        */}
+      {showSide &&
         (both ? (
           <div className="relative">
-            <div className="lg:absolute lg:inset-0">
-              <AwayPanel user={user} employeeId={assigneeId} />
+            <div className="flex flex-col gap-4 lg:absolute lg:inset-0">
+              {showAway && (
+                <div className="min-h-0 flex-1">
+                  <AwayPanel user={user} employeeId={assigneeId} />
+                </div>
+              )}
+              {below}
             </div>
           </div>
         ) : (
-          <AwayPanel user={user} employeeId={assigneeId} />
+          <div className="flex flex-col gap-4">
+            {showAway && <AwayPanel user={user} employeeId={assigneeId} />}
+            {below}
+          </div>
         ))}
     </div>
   );
