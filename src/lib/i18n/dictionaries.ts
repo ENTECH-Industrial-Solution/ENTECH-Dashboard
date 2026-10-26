@@ -170,6 +170,7 @@ export const dictionary = {
   "calendar.startCount": { th: "งานเริ่มวันนี้", en: "starting" },
   "calendar.marksDue": { th: "ครบกำหนด", en: "Due" },
   "calendar.marksStart": { th: "เริ่มงาน", en: "Starts" },
+  "calendar.spans": { th: "งานที่ทำต่อเนื่องผ่านวันนี้", en: "Running through this day" },
   "calendar.move": { th: "ย้ายวัน", en: "Move" },
   "calendar.moveHint": {
     th: "แตะวันที่ต้องการย้ายไป หรือลากงานไปวางบนวันนั้น",

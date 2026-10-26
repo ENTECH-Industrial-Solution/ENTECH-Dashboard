@@ -1,5 +1,6 @@
 import {
   TaskCalendar,
+  type CalendarSpan,
   type CalendarTask,
   type CalendarTrip,
 } from "@/components/task-calendar";
@@ -133,6 +134,32 @@ export async function CalendarSection({
   }
 
   /*
+   * A task with both planned dates on different days also runs *between*
+   * them, and is drawn as a bar across those days. Unclipped: the calendar
+   * clips to the month itself, and needs the real ends to know whether a bar
+   * stops in this month or carries on past its edge.
+   */
+  const spanEntries: CalendarSpan[] = [];
+
+  for (const task of tasks) {
+    if (!task.startDate || !task.dueDate) continue;
+    const from = bangkokDayKey(task.startDate);
+    const to = bangkokDayKey(task.dueDate);
+    if (from >= to) continue;
+
+    spanEntries.push({
+      id: task.id,
+      code: task.code,
+      title: task.title,
+      status: task.status,
+      from,
+      to,
+      assigneeNames: peopleSummary(task.assignees.map((a) => a.employee)),
+      href: taskHref(task),
+    });
+  }
+
+  /*
    * A trip covers a range; the calendar works in single days. Expanding here
    * keeps that difference out of the component — a trip from the 3rd to the 5th
    * becomes three entries, clipped to the month on show, so a trip crossing a
@@ -197,6 +224,7 @@ export async function CalendarSection({
         monthLabel={monthLabel}
         todayKey={today}
         tasks={taskEntries}
+        spans={spanEntries}
         trips={tripEntries}
         prevHref={monthHref(-1)}
         nextHref={monthHref(1)}
