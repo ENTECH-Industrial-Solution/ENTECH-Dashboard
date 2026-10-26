@@ -526,14 +526,16 @@ export function TaskCalendar({
                 data-target={moving ? (dragOver === key ? "over" : "open") : undefined}
                 className="day-cell relative flex min-h-16 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs transition-colors"
                 style={{
+                  // Ink rather than brand blue: an open span's bar is brand
+                  // blue, and it vanished across a selected day.
                   background: isSelected
-                    ? "var(--brand)"
+                    ? "var(--text)"
                     : tint
                       ? `color-mix(in srgb, ${tint.color} 22%, var(--surface-muted))`
                       : dots.length > 0
                         ? "var(--surface-muted)"
                         : "transparent",
-                  color: isSelected ? "var(--brand-contrast)" : "var(--text)",
+                  color: isSelected ? "var(--surface)" : "var(--text)",
                   border: `1px solid ${
                     isToday && !isSelected ? "var(--brand)" : "transparent"
                   }`,
@@ -555,7 +557,7 @@ export function TaskCalendar({
                         className="h-1.5 w-1.5 rounded-full"
                         style={{
                           background: isSelected
-                            ? "var(--brand-contrast)"
+                            ? "var(--surface)"
                             : color,
                         }}
                       />
@@ -565,7 +567,7 @@ export function TaskCalendar({
                         className="text-[0.625rem] leading-none"
                         style={{
                           color: isSelected
-                            ? "var(--brand-contrast)"
+                            ? "var(--surface)"
                             : "var(--text-muted)",
                         }}
                       >
