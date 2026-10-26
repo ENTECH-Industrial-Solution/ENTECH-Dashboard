@@ -57,6 +57,68 @@ export type CalendarTask = {
 };
 
 /**
+ * A task's planned run, from its start date to its due date, drawn as a bar
+ * across the days between. The two ends keep their own `CalendarTask` entries;
+ * this is only the stretch joining them. `from` and `to` are the task's real
+ * dates, not clipped to the month, so a bar can tell an end from a page edge.
+ */
+export type CalendarSpan = {
+  /** The task's id: a task has one span. */
+  id: string;
+  code: string;
+  title: string;
+  status: CalendarTask["status"];
+  from: string;
+  to: string;
+  assigneeNames: string;
+  href: string;
+};
+
+/** Bars stacked in a day; more than this and the day's "+n" counts them. */
+const SPAN_LANES = 3;
+/**
+ * Where the bars sit in a 4rem cell, in px: the first lane just under the day
+ * number, each next one a bar and a 2px gap lower. Three end at 46px, clear of
+ * the marks at the foot (52px). A taller bar or a fourth lane needs a taller
+ * cell — in both pages, or the month turn jumps.
+ */
+const SPAN_TOP = 26;
+const SPAN_STEP = 8;
+
+/**
+ * A lane for every span, so a task keeps one height across every week it
+ * crosses. Open work is placed first, so when the lanes run out it is the
+ * finished work that gives way. A lane is taken when nothing already in it
+ * overlaps; the day keys compare as strings.
+ */
+function laneSpans(spans: CalendarSpan[]): Map<string, number> {
+  const ordered = [...spans].sort(
+    (a, b) =>
+      Number(a.status === "COMPLETED") - Number(b.status === "COMPLETED") ||
+      a.from.localeCompare(b.from) ||
+      b.to.localeCompare(a.to),
+  );
+  const lanes: CalendarSpan[][] = [];
+  const laneOf = new Map<string, number>();
+
+  for (const span of ordered) {
+    let lane = lanes.findIndex((taken) =>
+      taken.every((other) => other.to < span.from || other.from > span.to),
+    );
+    if (lane === -1) lane = lanes.push([]) - 1;
+    lanes[lane]?.push(span);
+    laneOf.set(span.id, lane);
+  }
+
+  return laneOf;
+}
+
+function spanTone(span: CalendarSpan, todayKey: string): Tone {
+  if (span.status === "COMPLETED") return "done";
+  return span.to < todayKey ? "overdue" : "open";
+}
+
+/**
  * One day of one trip: a trip spanning three days arrives as three of these,
  * expanded server-side so the calendar never has to reason about ranges.
  */
@@ -142,6 +204,7 @@ export function TaskCalendar({
   monthLabel,
   todayKey,
   tasks,
+  spans,
   trips,
   prevHref,
   nextHref,
@@ -155,6 +218,7 @@ export function TaskCalendar({
   monthLabel: string;
   todayKey: string;
   tasks: CalendarTask[];
+  spans: CalendarSpan[];
   trips: CalendarTrip[];
   prevHref: string;
   nextHref: string;
@@ -288,11 +352,83 @@ export function TaskCalendar({
 
   const cells = monthCells({ daysInMonth, startWeekday });
 
+  // Each span is cut into one bar per week row it crosses, clipped to the
+  // month. A bar is rounded only at a real end, so one running off the edge
+  // of a row or a page reads as carrying on.
+  const monthFirst = dayKeyOf({ year, month }, 1);
+  const monthLast = dayKeyOf({ year, month }, daysInMonth);
+  const laneOf = laneSpans(spans);
+  const bars: {
+    span: CalendarSpan;
+    lane: number;
+    row: number;
+    col: number;
+    length: number;
+    opens: boolean;
+    closes: boolean;
+  }[] = [];
+  const hiddenByDay = new Map<string, number>();
+  // The colour a day's tile takes from the spans over it: the lowest lane's,
+  // which is the bar drawn nearest the day number.
+  const tintByDay = new Map<string, { lane: number; color: string }>();
+
+  for (const span of spans) {
+    if (span.to < monthFirst || span.from > monthLast) continue;
+    const lane = laneOf.get(span.id) ?? 0;
+    const first = span.from < monthFirst ? 1 : Number(span.from.slice(8));
+    const last = span.to > monthLast ? daysInMonth : Number(span.to.slice(8));
+
+    if (lane >= SPAN_LANES) {
+      for (let day = first; day <= last; day += 1) {
+        const key = dayKeyOf({ year, month }, day);
+        hiddenByDay.set(key, (hiddenByDay.get(key) ?? 0) + 1);
+      }
+      continue;
+    }
+
+    const color = TONE_COLOR[spanTone(span, todayKey)];
+    for (let day = first; day <= last; day += 1) {
+      const key = dayKeyOf({ year, month }, day);
+      const tint = tintByDay.get(key);
+      if (!tint || tint.lane > lane) tintByDay.set(key, { lane, color });
+    }
+
+    for (let start = first; start <= last; ) {
+      const cell = startWeekday + start - 1;
+      const col = cell % 7;
+      const end = Math.min(last, start + 6 - col);
+      bars.push({
+        span,
+        lane,
+        row: Math.floor(cell / 7),
+        col,
+        length: end - start + 1,
+        opens: start === first && span.from >= monthFirst,
+        closes: end === last && span.to <= monthLast,
+      });
+      start = end + 1;
+    }
+  }
+
   const selectedTasks = selected ? (tasksByDay.get(selected) ?? []) : [];
   const dueCount = selectedTasks.filter((task) => task.kind === "due").length;
   const startCount = selectedTasks.length - dueCount;
   const selectedTrips = selected ? (tripsByDay.get(selected) ?? []) : [];
-  const nothingThisMonth = tasks.length === 0 && trips.length === 0;
+  // Strictly between the ends: the start and due days already carry a note.
+  const selectedSpans = selected
+    ? spans.filter((span) => span.from < selected && span.to > selected)
+    : [];
+  const nothingThisMonth =
+    tasks.length === 0 && trips.length === 0 && spans.length === 0;
+  const shortDay = new Intl.DateTimeFormat(locale === "th" ? "th-TH" : "en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+  const spanRange = (span: CalendarSpan) =>
+    `${shortDay.format(new Date(`${span.from}T00:00:00Z`))} – ${shortDay.format(
+      new Date(`${span.to}T00:00:00Z`),
+    )}`;
 
   return (
     <div className="card space-y-4 p-4">
@@ -353,10 +489,11 @@ export function TaskCalendar({
             >
           <WeekdayRow locale={locale} />
 
+          <div className="relative">
           <div className="grid grid-cols-7 gap-1">
           {cells.map((day, index) => {
             if (day === null) {
-              return <div key={`blank-${index}`} className="min-h-14" />;
+              return <div key={`blank-${index}`} className="min-h-16" />;
             }
 
             const key = dayKeyOf({ year, month }, day);
@@ -370,6 +507,10 @@ export function TaskCalendar({
               ...dayTrips.map((trip) => TRIP_TONE[trip.state].color),
               ...dayTasks.map((task) => TONE_COLOR[toneOf(task, todayKey)]),
             ];
+            // What the cell cannot show: dots past three, and spans past the
+            // lanes drawn under it.
+            const extra = Math.max(dots.length - 3, 0) + (hiddenByDay.get(key) ?? 0);
+            const tint = tintByDay.get(key);
 
             return (
               <button
@@ -383,14 +524,18 @@ export function TaskCalendar({
                 aria-pressed={isSelected}
                 data-day={key}
                 data-target={moving ? (dragOver === key ? "over" : "open") : undefined}
-                className="day-cell relative flex min-h-14 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs transition-colors"
+                className="day-cell relative flex min-h-16 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs transition-colors"
                 style={{
+                  // Ink rather than brand blue: an open span's bar is brand
+                  // blue, and it vanished across a selected day.
                   background: isSelected
-                    ? "var(--brand)"
-                    : dots.length > 0
-                      ? "var(--surface-muted)"
-                      : "transparent",
-                  color: isSelected ? "var(--brand-contrast)" : "var(--text)",
+                    ? "var(--text)"
+                    : tint
+                      ? `color-mix(in srgb, ${tint.color} 22%, var(--surface-muted))`
+                      : dots.length > 0
+                        ? "var(--surface-muted)"
+                        : "transparent",
+                  color: isSelected ? "var(--surface)" : "var(--text)",
                   border: `1px solid ${
                     isToday && !isSelected ? "var(--brand)" : "transparent"
                   }`,
@@ -402,29 +547,31 @@ export function TaskCalendar({
                   {day}
                 </span>
 
-                {dots.length > 0 && (
-                  <span className="day-marks flex flex-wrap items-center justify-center gap-0.5">
+                {(dots.length > 0 || extra > 0) && (
+                  // One line at the foot of the cell, never wrapped: a second
+                  // line on a phone-width cell would land on the span bars.
+                  <span className="day-marks mt-auto flex items-center justify-center gap-0.5 whitespace-nowrap">
                     {dots.slice(0, 3).map((color, dotIndex) => (
                       <span
                         key={dotIndex}
                         className="h-1.5 w-1.5 rounded-full"
                         style={{
                           background: isSelected
-                            ? "var(--brand-contrast)"
+                            ? "var(--surface)"
                             : color,
                         }}
                       />
                     ))}
-                    {dots.length > 3 && (
+                    {extra > 0 && (
                       <span
                         className="text-[0.625rem] leading-none"
                         style={{
                           color: isSelected
-                            ? "var(--brand-contrast)"
+                            ? "var(--surface)"
                             : "var(--text-muted)",
                         }}
                       >
-                        +{dots.length - 3}
+                        +{extra}
                       </span>
                     )}
                   </span>
@@ -432,6 +579,37 @@ export function TaskCalendar({
               </button>
             );
           })}
+          </div>
+
+          {/* The spans, laid over the cells on a grid of the same shape: six
+              equal rows, because every cell is the same fixed height. Lane
+              one sits lowest; three lanes fit under a cell's dots without
+              making it taller, so a month with bars is the same height as the
+              preview page that came before it. Decorative to a pointer and a
+              screen reader: the day's list below names the same tasks. */}
+          {bars.length > 0 && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 grid grid-cols-7 gap-1"
+              style={{ gridTemplateRows: "repeat(6, minmax(0, 1fr))" }}
+            >
+              {bars.map((bar) => (
+                <span
+                  key={`${bar.span.id}-${bar.row}`}
+                  className={`h-1.5 self-start ${bar.opens ? "ms-1.5 rounded-s-full" : ""} ${
+                    bar.closes ? "me-1.5 rounded-e-full" : ""
+                  }`}
+                  style={{
+                    gridRow: bar.row + 1,
+                    gridColumn: `${bar.col + 1} / span ${bar.length}`,
+                    marginTop: `${SPAN_TOP + bar.lane * SPAN_STEP}px`,
+                    background: TONE_COLOR[spanTone(bar.span, todayKey)],
+                    opacity: 0.75,
+                  }}
+                />
+              ))}
+            </div>
+          )}
           </div>
             </div>
           )}
@@ -485,9 +663,11 @@ export function TaskCalendar({
                   dueCount={dueCount}
                   startCount={startCount}
                 />
-                <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                  {t("calendar.emptyDay")}
-                </p>
+                {selectedSpans.length === 0 && (
+                  <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                    {t("calendar.emptyDay")}
+                  </p>
+                )}
               </>
             ) : (
               /*
@@ -625,6 +805,50 @@ export function TaskCalendar({
                   </StickyNote>
                 ))}
               </SlideRow>
+            )}
+
+            {/* Work running through the day rather than starting or ending
+                on it: a plain list, not notes, since there is no date here
+                to move. */}
+            {selectedSpans.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                  {t("calendar.spans")} · {selectedSpans.length}
+                </p>
+                <ul className="space-y-0.5">
+                  {selectedSpans.map((span) => (
+                    <li key={span.id}>
+                      <Link
+                        href={span.href}
+                        className="flex min-w-0 items-start gap-2 rounded-md px-1 py-1 text-sm hover:underline"
+                      >
+                        <span
+                          className="mt-2 h-1 w-3 shrink-0 rounded-full"
+                          style={{ background: TONE_COLOR[spanTone(span, todayKey)] }}
+                        />
+                        <span className="min-w-0">
+                          <span className="flex min-w-0 items-baseline gap-2">
+                            <span
+                              className="shrink-0 font-mono text-xs"
+                              style={{ color: "var(--text-muted)" }}
+                            >
+                              {span.code}
+                            </span>
+                            <span className="truncate">{span.title}</span>
+                          </span>
+                          <span
+                            className="block truncate text-xs"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            {spanRange(span)}
+                            {showAssignee && ` · ${span.assigneeNames}`}
+                          </span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
         )}
@@ -1010,19 +1234,19 @@ function PreviewPage({
       <div className="grid grid-cols-7 gap-1">
         {cells.map((day, index) => {
           if (day === null) {
-            return <div key={`blank-${index}`} className="min-h-14" />;
+            return <div key={`blank-${index}`} className="min-h-16" />;
           }
           const isToday = dayKeyOf({ year, month }, day) === todayKey;
           return (
             <div
               key={day}
-              className="flex min-h-14 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs"
+              className="flex min-h-16 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs"
               style={{
                 border: `1px solid ${isToday ? "var(--brand)" : "transparent"}`,
               }}
             >
               <span className={isToday ? "font-semibold" : undefined}>{day}</span>
-              <span className="skeleton h-1.5 w-5 rounded-full" />
+              <span className="skeleton mt-auto h-1.5 w-5 rounded-full" />
             </div>
           );
         })}

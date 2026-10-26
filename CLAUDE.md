@@ -1279,6 +1279,25 @@ a fact, not a problem, and colouring it as overdue would make the calendar cry
 wolf. A task with neither planned date appears nowhere on it, which is why an
 edit that empties `dueDate` silently drops the task off the calendar.
 
+A task with **both** dates on different days is also a `CalendarSpan`, drawn
+as a thin bar across the days between. So `getTasksInMonth()` takes a third
+kind of task as well: one that runs *through* the month, with neither date
+inside it. Without that clause, a job from September to December was absent
+from October altogether. The bars are an overlay grid laid over the day cells.
+Lanes are assigned once per month (`laneSpans()`), so a task keeps its height
+from week to week, and open work gets a lane before finished work does. Three
+lanes fit under a cell's dots without making it taller, and anything past them
+is counted in that day's "+n". The three lanes sit in the middle of the cell,
+between the day number and the marks, which are pinned to the cell's foot.
+That is why a cell is 4rem tall. Every page is six fixed rows, so if the bars
+ever need more room, grow the cell in `PreviewPage` as well, or the month turn
+jumps. A day a span covers takes a tint of the lowest lane's colour, so the
+run reads as a block of tiles as well as a line. The bars ignore the pointer. Selecting a day
+lists the spans that run through it, which is where the link to each card is.
+
+**The day's marks never wrap.** A second line of dots on a phone-width cell
+lands on the bars below it.
+
 ### The calendar changes month before the server answers
 
 `TaskCalendar` draws the month as a plain grid, and changing month **slides
