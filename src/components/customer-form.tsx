@@ -102,6 +102,19 @@ export type MapTripRow = {
   href: string | null;
 };
 
+/**
+ * A trip the map cannot draw: no coordinates and no pin. Listed instead, so it
+ * is visibly missing rather than silently absent.
+ */
+export type UnplacedTrip = {
+  id: string;
+  purpose: string;
+  locationName: string;
+  startDate: string;
+  /** For an admin, the card with the edit button; null when there is none. */
+  href: string | null;
+};
+
 export type CustomerPinRow = {
   id: string;
   label: string | null;

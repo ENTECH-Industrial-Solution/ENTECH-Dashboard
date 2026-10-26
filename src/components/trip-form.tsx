@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { PeoplePicker, type Person } from "@/components/people-picker";
 import { Alert, FieldError, SubmitButton } from "@/components/ui";
 import { useTranslations } from "@/lib/i18n/client";
+import type { TranslationKey } from "@/lib/i18n/dictionaries";
+import { coordinatesFromMapUrl, isShortMapUrl } from "@/lib/maps";
+import { resolveMapLinkAction } from "@/server/actions/places";
 
 /**
  * One place on the customer map, as the trip form offers it.
@@ -130,6 +133,44 @@ export function TripForm({
       address: pin.address ?? "",
       latitude: String(pin.latitude),
       longitude: String(pin.longitude),
+    });
+  };
+
+  /*
+   * A pasted Google Maps link fills the coordinates too, on the same terms as
+   * the pin picker: visibly, into fields that stay editable. Without them a
+   * trip cannot stand on the customer map, and people paste links far more
+   * readily than they copy two numbers. A short share link has to be followed
+   * on the server first; `linkRequest` drops an answer to a link that has
+   * since been replaced.
+   */
+  const [linkNote, setLinkNote] = useState<TranslationKey | null>(null);
+  const linkRequest = useRef(0);
+
+  const fillFromLink = (link: string) => {
+    const request = ++linkRequest.current;
+    const fill = (point: { latitude: number; longitude: number }) => {
+      setPlace((p) => ({
+        ...p,
+        latitude: String(point.latitude),
+        longitude: String(point.longitude),
+      }));
+      setLinkNote("trips.mapUrlFilled");
+    };
+
+    const point = coordinatesFromMapUrl(link);
+    if (point) return fill(point);
+    if (!isShortMapUrl(link)) {
+      // Only a complete link earns a "no coordinates" note, not a half-typed one.
+      setLinkNote(URL.canParse(link) ? "trips.mapUrlNoPoint" : null);
+      return;
+    }
+
+    setLinkNote("trips.mapUrlReading");
+    void resolveMapLinkAction({ url: link }).then((result) => {
+      if (request !== linkRequest.current) return;
+      if (result.status === "ok") fill(result);
+      else setLinkNote("trips.mapUrlNoPoint");
     });
   };
 
@@ -368,10 +409,15 @@ export function TripForm({
           className="input"
           placeholder="https://maps.app.goo.gl/..."
           defaultValue={trip?.mapUrl ?? ""}
+          onChange={(event) => fillFromLink(event.target.value.trim())}
         />
         <FieldError message={errors.mapUrl} />
-        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-          {t("trips.mapUrlHint")}
+        <p
+          className="mt-1 text-xs"
+          style={{ color: "var(--text-muted)" }}
+          aria-live="polite"
+        >
+          {t(linkNote ?? "trips.mapUrlHint")}
         </p>
       </div>
 

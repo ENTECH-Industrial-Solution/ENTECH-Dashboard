@@ -20,6 +20,7 @@ import {
   type CustomerPerson,
   type CustomerPinRow,
   type MapTripRow,
+  type UnplacedTrip,
 } from "@/components/customer-form";
 import { CustomerPanel } from "@/components/customer-panel";
 import {
@@ -104,6 +105,7 @@ export function CustomerMap({
   pins,
   people,
   trips,
+  unplacedTrips,
   isAdmin,
   initialPinId,
 }: {
@@ -111,6 +113,8 @@ export function CustomerMap({
   people: CustomerPerson[];
   /** Empty when field trips are switched off, which hides the layer entirely. */
   trips: MapTripRow[];
+  /** Trips with no coordinates and no pin, which the map can only list. */
+  unplacedTrips: UnplacedTrip[];
   isAdmin: boolean;
   /** From `?pin=` — the place a link elsewhere in the app is pointing at. */
   initialPinId?: string;
@@ -931,6 +935,41 @@ export function CustomerMap({
                 ),
               )}
             </div>
+          )}
+
+          {/* Trips with nowhere to stand: no coordinates and no pin. Listed
+              here so they are visibly missing rather than silently absent, and
+              each links to the card where an admin can give it a place. */}
+          {unplacedTrips.length > 0 && (
+            <details className="text-[11px]">
+              <summary
+                className="cursor-pointer"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {t("customers.unplacedTrips")} ({unplacedTrips.length})
+              </summary>
+              <ul className="map-scroll mt-1.5 max-h-40 space-y-1.5 pe-2">
+                {unplacedTrips.map((trip) => (
+                  <li key={trip.id} className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{trip.purpose}</p>
+                      <p className="truncate" style={{ color: "var(--text-muted)" }}>
+                        {trip.locationName}
+                      </p>
+                    </div>
+                    {trip.href && (
+                      <Link
+                        href={trip.href}
+                        className="shrink-0 underline"
+                        style={{ color: "var(--brand)" }}
+                      >
+                        {t(isAdmin ? "customers.addLocation" : "customers.openTrip")}
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
 
           {/* A select, not a seventh row of chips. Seven more of those would

@@ -783,10 +783,15 @@ The mechanics worth keeping:
   both sides, it goes in `lib/trips.ts` — the counterpart of `lib/customers.ts`.
 - **Two exclusions, both borrowed from rules that already exist.** Cancelled
   trips are dropped, exactly as the calendar drops them: they did not happen. A
-  trip with no coordinates *and* no pin is dropped, because `FieldTrip`'s
+  trip with no coordinates *and* no pin cannot be drawn, because `FieldTrip`'s
   latitude is nullable on purpose — a trip may be known only by the name of a
-  place, and there is nowhere on a map to put one of those. A trip linked to a
-  pin but with no coordinates of its own stands on the pin. A **completed**
+  place. It is **listed** in the toolbar ("ทริปที่ยังไม่มีตำแหน่ง") rather than
+  dropped in silence, linking an admin to the card to fix it. A trip linked to
+  a pin but with no coordinates of its own stands on the pin. The trip form
+  fills the coordinates from a pasted Google Maps link (`coordinatesFromMapUrl`
+  in `lib/maps.ts`); a short `maps.app.goo.gl` link is followed one hop on the
+  server by `resolveMapLinkAction`, which reads only the `Location` header of a
+  host the schema has pinned. A **completed**
   trip is *not* dropped: it happened, and its marker says so, which is the
   "every view of a trip must show its state" rule the calendar earned the hard
   way.

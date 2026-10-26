@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import type { MapTripRow, UnplacedTrip } from "@/components/customer-form";
 import { CustomerMap } from "@/components/customer-map";
 import { requireUser } from "@/lib/auth/rbac";
 import { dayStart, todayKey, tripHours } from "@/lib/calendar";
@@ -60,6 +61,75 @@ export default async function CustomersPage({
     searchParams,
   ]);
 
+  /*
+   * Where a trip's own card is, for this viewer. An upcoming trip is in
+   * AwayPanel on everyone's dashboard. A past one is only in its travellers'
+   * TripHistory and the admin list, so anyone else gets no link rather than one
+   * that lands nowhere.
+   */
+  const cardHref = (trip: (typeof trips)[number], past: boolean) =>
+    !past || trip.travellers.some((person) => person.id === user.id)
+      ? `/dashboard#trip-${trip.id}`
+      : isAdmin
+        ? `/admin/tasks#trip-${trip.id}`
+        : null;
+
+  /*
+   * Only the trips that can actually be drawn go on the map.
+   *
+   * A trip may be known only by the name of a place — `FieldTrip`'s
+   * coordinates are nullable, deliberately, unlike `CustomerPin`'s — and there
+   * is nowhere on a map to put one of those, unless it is linked to a pin, in
+   * which case it stands where the pin does. Narrowing here rather than in the
+   * component is what lets `MapTripRow` promise non-null numbers instead of
+   * making every reader check. The rest are listed rather than dropped, so a
+   * trip never goes missing from the map without anybody being told.
+   */
+  const placed: MapTripRow[] = [];
+  const unplaced: UnplacedTrip[] = [];
+
+  for (const trip of trips) {
+    const at =
+      trip.latitude !== null && trip.longitude !== null
+        ? { latitude: trip.latitude, longitude: trip.longitude }
+        : trip.pin;
+    const past = trip.endDate < today;
+
+    if (!at) {
+      unplaced.push({
+        id: trip.id,
+        purpose: trip.purpose,
+        locationName: trip.locationName,
+        startDate: trip.startDate.toISOString(),
+        // An admin is sent to the card with the edit button on it.
+        href: isAdmin ? `/admin/tasks#trip-${trip.id}` : cardHref(trip, past),
+      });
+      continue;
+    }
+
+    placed.push({
+      id: trip.id,
+      purpose: trip.purpose,
+      locationName: trip.locationName,
+      latitude: at.latitude,
+      longitude: at.longitude,
+      startDate: trip.startDate.toISOString(),
+      endDate: trip.endDate.toISOString(),
+      startedAt: trip.startedAt?.toISOString() ?? null,
+      completedAt: trip.completedAt?.toISOString() ?? null,
+      cancelledAt: trip.cancelledAt?.toISOString() ?? null,
+      // Resolved on the server, so "nobody said" becomes the office hours in
+      // one place rather than in every view.
+      hours: tripHours(trip),
+      travellers: trip.travellers.map((person) => ({
+        employeeCode: person.employeeCode,
+        fullName: person.fullName,
+      })),
+      past,
+      href: cardHref(trip, past),
+    });
+  }
+
   return (
     <CustomerMap
       pins={pins.map(serialiseCustomerPin)}
@@ -68,60 +138,10 @@ export default async function CustomersPage({
         employeeCode: person.employeeCode,
         fullName: person.fullName,
       }))}
+      trips={placed}
+      unplacedTrips={unplaced}
       // Draws the delete controls. It decides nothing about whether the delete
       // is allowed — assertAdmin in the action settles that.
-      /*
-       * Only the trips that can actually be drawn.
-       *
-       * A trip may be known only by the name of a place — `FieldTrip`'s
-       * coordinates are nullable, deliberately, unlike `CustomerPin`'s — and
-       * there is nowhere on a map to put one of those, unless it is linked to
-       * a pin, in which case it stands where the pin does. Narrowing here
-       * rather than in the component is what lets `MapTripRow` promise
-       * non-null numbers instead of making every reader check.
-       */
-      trips={trips.flatMap((trip) => {
-        const at =
-          trip.latitude !== null && trip.longitude !== null
-            ? { latitude: trip.latitude, longitude: trip.longitude }
-            : trip.pin;
-        if (!at) return [];
-        const past = trip.endDate < today;
-        const mine = trip.travellers.some((person) => person.id === user.id);
-
-        return [
-          {
-            id: trip.id,
-            purpose: trip.purpose,
-            locationName: trip.locationName,
-            latitude: at.latitude,
-            longitude: at.longitude,
-            startDate: trip.startDate.toISOString(),
-            endDate: trip.endDate.toISOString(),
-            startedAt: trip.startedAt?.toISOString() ?? null,
-            completedAt: trip.completedAt?.toISOString() ?? null,
-            cancelledAt: trip.cancelledAt?.toISOString() ?? null,
-            // Resolved on the server, so "nobody said" becomes the office
-            // hours in one place rather than in every view.
-            hours: tripHours(trip),
-            travellers: trip.travellers.map((person) => ({
-              employeeCode: person.employeeCode,
-              fullName: person.fullName,
-            })),
-            past,
-            // An upcoming trip is in AwayPanel on everyone's dashboard. A past
-            // one is only in its travellers' TripHistory and the admin list,
-            // so anyone else gets no link rather than one that lands nowhere.
-            href: !past
-              ? `/dashboard#trip-${trip.id}`
-              : isAdmin
-                ? `/admin/tasks#trip-${trip.id}`
-                : mine
-                  ? `/dashboard#trip-${trip.id}`
-                  : null,
-          },
-        ];
-      })}
       isAdmin={isAdmin}
       // Not validated here on purpose: the map already ignores an id that
       // matches no pin, and the board is readable by everyone signed in, so

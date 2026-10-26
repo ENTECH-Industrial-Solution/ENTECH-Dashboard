@@ -355,19 +355,14 @@ export async function getFieldTrips({
  * the map answers "where have we been" as well as "who is out".
  *
  * One query in place of a `window` read, so the page still pays one round
- * trip. Cancelled trips are left out — they did not happen — and so is a trip
- * with nowhere to stand: no coordinates of its own and no pin to borrow them
- * from. The pin's coordinates ride along for exactly that fallback.
+ * trip. Cancelled trips are left out — they did not happen. A trip with no
+ * coordinates of its own borrows its pin's, which is why they ride along; one
+ * with neither still comes back, so the map can say it exists rather than
+ * losing it in silence.
  */
 export async function getMapTrips(limit = 500) {
   const trips = await db.fieldTrip.findMany({
-    where: {
-      cancelledAt: null,
-      OR: [
-        { latitude: { not: null }, longitude: { not: null } },
-        { pinId: { not: null } },
-      ],
-    },
+    where: { cancelledAt: null },
     select: {
       ...fieldTripSelect,
       pin: { select: { id: true, label: true, latitude: true, longitude: true } },
