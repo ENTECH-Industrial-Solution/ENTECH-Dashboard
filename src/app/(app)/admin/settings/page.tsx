@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 
 import { PageShell } from "@/components/page-shell";
 import { requireAdmin } from "@/lib/auth/rbac";
+import { getGithubOverview } from "@/lib/github";
 import { getTranslations } from "@/lib/i18n/server";
-import { getSettings } from "@/lib/settings/server";
+import { getHiddenRepos, getSettings } from "@/lib/settings/server";
 import { isSettingKey, type SettingKey } from "@/lib/settings/settings";
 import { getSettingProvenance } from "@/server/queries";
 
+import { GithubRepoManager } from "./github-repo-manager";
 import { SettingsManager, type SettingDetail } from "./settings-manager";
 
 export const metadata: Metadata = { title: "ตั้งค่า / Settings" };
@@ -21,11 +23,15 @@ export const metadata: Metadata = { title: "ตั้งค่า / Settings" };
 export default async function AdminSettingsPage() {
   await requireAdmin();
 
-  const [t, settings, provenance] = await Promise.all([
+  const [t, settings, provenance, hidden] = await Promise.all([
     getTranslations(),
     getSettings(),
     getSettingProvenance(),
+    getHiddenRepos(),
   ]);
+
+  // Not fetched while the section is off — `github.enabled` is a `reads` switch.
+  const github = settings["github.enabled"] ? await getGithubOverview() : null;
 
   // Dates cross into the client component as ISO strings, like everywhere else.
   const detail: Partial<Record<SettingKey, SettingDetail>> = {};
@@ -52,6 +58,15 @@ export default async function AdminSettingsPage() {
       </header>
 
       <SettingsManager settings={settings} detail={detail} />
+
+      <GithubRepoManager
+        repos={
+          github?.repos.map((repo) => ({ name: repo.name, description: repo.description })) ??
+          null
+        }
+        hidden={[...hidden]}
+        unavailable={settings["github.enabled"] && !github}
+      />
     </PageShell>
   );
 }

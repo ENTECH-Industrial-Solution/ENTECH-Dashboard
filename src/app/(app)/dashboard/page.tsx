@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 
 import { CardGrid } from "@/components/card-grid";
 import { EmployeeFrame } from "@/components/employee-frame";
+import { GithubSection } from "@/components/github-section";
+import { LeadSummary } from "@/components/lead-summary";
 import { PageShell } from "@/components/page-shell";
 import { ScheduleRow } from "@/components/schedule-row";
 import { SelfWorkCreator } from "@/components/self-work-creator";
+import { StaleTasks } from "@/components/stale-tasks";
 import { SummaryTiles } from "@/components/summary-tiles";
 import { ActiveTaskCard, CompletedTaskCard } from "@/components/task-card";
 import { TaskSection } from "@/components/task-section";
@@ -20,6 +23,8 @@ import {
   getCompletedTasks,
   getCustomerPinOptions,
   getEmployeeWorkloads,
+  getLeadStatusCounts,
+  getStaleTasks,
   getTaskSummary,
 } from "@/server/queries";
 
@@ -62,18 +67,35 @@ async function PeopleOverview({ user, cal }: { user: SessionUser; cal?: string }
   const showSummary = settings["dashboard.showSummary"];
   const showPeople = settings["dashboard.showPeople"];
 
-  const [summary, workloads] = await Promise.all([
+  const [summary, workloads, stale, leads] = await Promise.all([
     showSummary ? getTaskSummary(user) : Promise.resolve(null),
     showPeople ? getEmployeeWorkloads(user) : Promise.resolve([]),
+    getStaleTasks(user),
+    // The board's own switch, so turning the map off skips this read too.
+    settings["customer.enabled"] ? getLeadStatusCounts() : Promise.resolve(null),
   ]);
 
   return (
-    <PageShell className="space-y-8">
-      {summary && (
-        <SummaryTiles summary={summary} people={showPeople ? workloads : undefined} />
-      )}
+    <PageShell
+      className="space-y-8"
+      aside={
+        <div className="space-y-4">
+          {summary && (
+            <SummaryTiles summary={summary} people={showPeople ? workloads : undefined} />
+          )}
+          <StaleTasks tasks={stale.tasks} total={stale.total} linkTo="person" />
+        </div>
+      }
+    >
+      {settings["github.enabled"] && <GithubSection />}
 
-      <ScheduleRow user={user} cal={cal} basePath="/dashboard" linkTasksTo="person" />
+      <ScheduleRow
+        user={user}
+        cal={cal}
+        basePath="/dashboard"
+        linkTasksTo="person"
+        below={leads && <LeadSummary counts={leads} />}
+      />
 
       {showPeople && (
       <section className="space-y-3">
@@ -114,19 +136,35 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
   // page keeps on this read, so `customer.enabled` still skips the query.
   const pinsEnabled = tripsEnabled && settings["customer.enabled"];
 
-  const [active, completed, summary, pins] = await Promise.all([
+  const [active, completed, summary, pins, stale, leads] = await Promise.all([
     getActiveTasks(user),
     getCompletedTasks(user, { limit: 200 }),
     // Not fetched at all when the strip is off — see PeopleOverview.
     settings["dashboard.showSummary"] ? getTaskSummary(user) : Promise.resolve(null),
     pinsEnabled ? getCustomerPinOptions() : Promise.resolve([]),
+    getStaleTasks(user),
+    settings["customer.enabled"] ? getLeadStatusCounts() : Promise.resolve(null),
   ]);
 
   return (
-    <PageShell className="space-y-8">
-      {summary && <SummaryTiles summary={summary} />}
+    <PageShell
+      className="space-y-8"
+      aside={
+        <div className="space-y-4">
+          {summary && <SummaryTiles summary={summary} />}
+          <StaleTasks tasks={stale.tasks} total={stale.total} linkTo="anchor" />
+        </div>
+      }
+    >
+      {settings["github.enabled"] && <GithubSection />}
 
-      <ScheduleRow user={user} cal={cal} basePath="/dashboard" linkTasksTo="anchor" />
+      <ScheduleRow
+        user={user}
+        cal={cal}
+        basePath="/dashboard"
+        linkTasksTo="anchor"
+        below={leads && <LeadSummary counts={leads} />}
+      />
 
       <TaskSection title={t("tasks.active")} hint={t("tasks.activeHint")}>
         {/* The one place an employee creates work: for themselves, and only
