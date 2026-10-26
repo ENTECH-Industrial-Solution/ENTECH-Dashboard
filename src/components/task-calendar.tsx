@@ -74,8 +74,16 @@ export type CalendarSpan = {
   href: string;
 };
 
-/** Bars stacked under a day; more than this and the day's "+n" counts them. */
+/** Bars stacked in a day; more than this and the day's "+n" counts them. */
 const SPAN_LANES = 3;
+/**
+ * Where the bars sit in a 4rem cell, in px: the first lane just under the day
+ * number, each next one a bar and a 2px gap lower. Three end at 46px, clear of
+ * the marks at the foot (52px). A taller bar or a fourth lane needs a taller
+ * cell — in both pages, or the month turn jumps.
+ */
+const SPAN_TOP = 26;
+const SPAN_STEP = 8;
 
 /**
  * A lane for every span, so a task keeps one height across every week it
@@ -360,6 +368,9 @@ export function TaskCalendar({
     closes: boolean;
   }[] = [];
   const hiddenByDay = new Map<string, number>();
+  // The colour a day's tile takes from the spans over it: the lowest lane's,
+  // which is the bar drawn nearest the day number.
+  const tintByDay = new Map<string, { lane: number; color: string }>();
 
   for (const span of spans) {
     if (span.to < monthFirst || span.from > monthLast) continue;
@@ -373,6 +384,13 @@ export function TaskCalendar({
         hiddenByDay.set(key, (hiddenByDay.get(key) ?? 0) + 1);
       }
       continue;
+    }
+
+    const color = TONE_COLOR[spanTone(span, todayKey)];
+    for (let day = first; day <= last; day += 1) {
+      const key = dayKeyOf({ year, month }, day);
+      const tint = tintByDay.get(key);
+      if (!tint || tint.lane > lane) tintByDay.set(key, { lane, color });
     }
 
     for (let start = first; start <= last; ) {
@@ -475,7 +493,7 @@ export function TaskCalendar({
           <div className="grid grid-cols-7 gap-1">
           {cells.map((day, index) => {
             if (day === null) {
-              return <div key={`blank-${index}`} className="min-h-14" />;
+              return <div key={`blank-${index}`} className="min-h-16" />;
             }
 
             const key = dayKeyOf({ year, month }, day);
@@ -492,6 +510,7 @@ export function TaskCalendar({
             // What the cell cannot show: dots past three, and spans past the
             // lanes drawn under it.
             const extra = Math.max(dots.length - 3, 0) + (hiddenByDay.get(key) ?? 0);
+            const tint = tintByDay.get(key);
 
             return (
               <button
@@ -505,13 +524,15 @@ export function TaskCalendar({
                 aria-pressed={isSelected}
                 data-day={key}
                 data-target={moving ? (dragOver === key ? "over" : "open") : undefined}
-                className="day-cell relative flex min-h-14 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs transition-colors"
+                className="day-cell relative flex min-h-16 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs transition-colors"
                 style={{
                   background: isSelected
                     ? "var(--brand)"
-                    : dots.length > 0
-                      ? "var(--surface-muted)"
-                      : "transparent",
+                    : tint
+                      ? `color-mix(in srgb, ${tint.color} 22%, var(--surface-muted))`
+                      : dots.length > 0
+                        ? "var(--surface-muted)"
+                        : "transparent",
                   color: isSelected ? "var(--brand-contrast)" : "var(--text)",
                   border: `1px solid ${
                     isToday && !isSelected ? "var(--brand)" : "transparent"
@@ -525,9 +546,9 @@ export function TaskCalendar({
                 </span>
 
                 {(dots.length > 0 || extra > 0) && (
-                  // One line, never wrapped: a second line of marks on a
-                  // phone-width cell would land on the span bars below.
-                  <span className="day-marks flex items-center justify-center gap-0.5 whitespace-nowrap">
+                  // One line at the foot of the cell, never wrapped: a second
+                  // line on a phone-width cell would land on the span bars.
+                  <span className="day-marks mt-auto flex items-center justify-center gap-0.5 whitespace-nowrap">
                     {dots.slice(0, 3).map((color, dotIndex) => (
                       <span
                         key={dotIndex}
@@ -573,13 +594,13 @@ export function TaskCalendar({
               {bars.map((bar) => (
                 <span
                   key={`${bar.span.id}-${bar.row}`}
-                  className={`h-1 self-end ${bar.opens ? "ms-1.5 rounded-s-full" : ""} ${
+                  className={`h-1.5 self-start ${bar.opens ? "ms-1.5 rounded-s-full" : ""} ${
                     bar.closes ? "me-1.5 rounded-e-full" : ""
                   }`}
                   style={{
                     gridRow: bar.row + 1,
                     gridColumn: `${bar.col + 1} / span ${bar.length}`,
-                    marginBottom: `${4 + bar.lane * 6}px`,
+                    marginTop: `${SPAN_TOP + bar.lane * SPAN_STEP}px`,
                     background: TONE_COLOR[spanTone(bar.span, todayKey)],
                     opacity: 0.75,
                   }}
@@ -1211,19 +1232,19 @@ function PreviewPage({
       <div className="grid grid-cols-7 gap-1">
         {cells.map((day, index) => {
           if (day === null) {
-            return <div key={`blank-${index}`} className="min-h-14" />;
+            return <div key={`blank-${index}`} className="min-h-16" />;
           }
           const isToday = dayKeyOf({ year, month }, day) === todayKey;
           return (
             <div
               key={day}
-              className="flex min-h-14 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs"
+              className="flex min-h-16 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs"
               style={{
                 border: `1px solid ${isToday ? "var(--brand)" : "transparent"}`,
               }}
             >
               <span className={isToday ? "font-semibold" : undefined}>{day}</span>
-              <span className="skeleton h-1.5 w-5 rounded-full" />
+              <span className="skeleton mt-auto h-1.5 w-5 rounded-full" />
             </div>
           );
         })}
