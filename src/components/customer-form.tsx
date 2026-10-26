@@ -92,6 +92,14 @@ export type MapTripRow = {
   hours: { start: string; end: string };
   /** Everyone on the trip. The marker's label summarises it, the popup lists it. */
   travellers: { employeeCode: string; fullName: string }[];
+  /**
+   * Its days are over — the same date-only split as everywhere else, decided on
+   * the server against the start of today in Bangkok. Puts the trip in the
+   * "เคยไปแล้ว" layer rather than the off-site one.
+   */
+  past: boolean;
+  /** Where the trip's own card is, or null when this viewer has none to see. */
+  href: string | null;
 };
 
 export type CustomerPinRow = {

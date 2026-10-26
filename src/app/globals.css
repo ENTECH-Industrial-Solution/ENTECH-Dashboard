@@ -1108,7 +1108,8 @@ button.pill:hover {
   transform-origin: 50% 50%;
 }
 
-.map-pin-count {
+.map-pin-count,
+.map-pin-visited {
   position: absolute;
   inset-block-start: -3px;
   inset-inline-end: -5px;
@@ -1121,6 +1122,12 @@ button.pill:hover {
   font-weight: 700;
   line-height: 1.05rem;
   text-align: center;
+}
+
+/* Opposite the count, so a visited place with several leads shows both. */
+.map-pin-visited {
+  inset-inline-end: auto;
+  inset-inline-start: -5px;
 }
 
 .map-marker.is-selected .map-pin {
@@ -1167,10 +1174,14 @@ button.pill:hover {
   border-color: var(--brand);
 }
 
-/* Leaflet draws the little arrow with a border colour; this is the one that
-   applies at `direction: "top"`. */
+/* Leaflet draws the little arrow with a border colour; these are the ones that
+   apply at `direction: "top"` (pins) and `"bottom"` (trips). */
 .leaflet-tooltip-top.map-label::before {
   border-top-color: var(--border);
+}
+
+.leaflet-tooltip-bottom.map-label::before {
+  border-bottom-color: var(--border);
 }
 
 .map-label-place {

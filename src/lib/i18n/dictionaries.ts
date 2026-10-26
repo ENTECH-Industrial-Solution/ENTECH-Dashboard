@@ -676,6 +676,8 @@ export const dictionary = {
   },
   "customers.toggleTools": { th: "เครื่องมือแผนที่", en: "Map tools" },
   "customers.showTrips": { th: "คนออกนอกสถานที่", en: "People off-site" },
+  "customers.showVisited": { th: "เคยไปแล้ว", en: "Visited" },
+  "customers.visited": { th: "เคยไปแล้ว", en: "Visited" },
   "customers.openTrip": { th: "ดูรายละเอียดภารกิจ", en: "Open the trip" },
   "customers.filterStatus": { th: "กรองตามสถานะ", en: "Filter by status" },
   "customers.legend": { th: "สีของหมุด", en: "Pin colours" },

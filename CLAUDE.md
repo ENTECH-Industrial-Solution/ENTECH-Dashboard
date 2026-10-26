@@ -783,17 +783,28 @@ The mechanics worth keeping:
   both sides, it goes in `lib/trips.ts` — the counterpart of `lib/customers.ts`.
 - **Two exclusions, both borrowed from rules that already exist.** Cancelled
   trips are dropped, exactly as the calendar drops them: they did not happen. A
-  trip with no coordinates is dropped, because `FieldTrip`'s latitude is
-  nullable on purpose — a trip may be known only by the name of a place, and
-  there is nowhere on a map to put one of those. A **completed** trip is *not*
-  dropped: it happened, and its marker says so, which is the "every view of a
-  trip must show its state" rule the calendar earned the hard way.
+  trip with no coordinates *and* no pin is dropped, because `FieldTrip`'s
+  latitude is nullable on purpose — a trip may be known only by the name of a
+  place, and there is nowhere on a map to put one of those. A trip linked to a
+  pin but with no coordinates of its own stands on the pin. A **completed**
+  trip is *not* dropped: it happened, and its marker says so, which is the
+  "every view of a trip must show its state" rule the calendar earned the hard
+  way.
+- **Past trips are on the map too.** `getMapTrips()` reads upcoming and past in
+  one query, so the map is also the record of where the team has been. They
+  split by date alone into two chips, "คนออกนอกสถานที่" and "เคยไปแล้ว", because
+  the history only grows and should be something you can put away. A pin with a
+  completed visit in its panel's list wears a ✓ in ink, not green, which would
+  read as WON. A trip's label hangs *below* its disc, so a trip standing on its
+  pin never covers the pin's own label.
 - The narrowing to trips that have a point happens **in the page**, so
   `MapTripRow` can promise non-null numbers instead of making every reader
-  check.
+  check. The page also decides the popup's link: an upcoming trip goes to the
+  dashboard, a past one to `/admin/tasks` for an admin, to the dashboard's
+  history for a traveller, and nowhere for anyone else.
 - `fieldTrip.enabled` skips the read rather than hiding the markers, which is
-  what `reads` in `SETTING_IMPACT` claims. The layer's own chip is a client
-  toggle on top of that: the trips are already here, so hiding them costs
+  what `reads` in `SETTING_IMPACT` claims. The layer's two chips are client
+  toggles on top of that: the trips are already here, so hiding them costs
   nothing.
 - The trip popup is **read-only**, on the same terms as the pin panel's visit
   list. A trip is scheduled from `/admin/tasks` and run by the person on it; a
