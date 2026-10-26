@@ -230,7 +230,14 @@ export async function getTasksInMonth(
   return db.task.findMany({
     where: {
       ...assigneeScope(user, assigneeId),
-      OR: [{ dueDate: inMonth }, { startDate: inMonth }],
+      // The third clause is a task running *through* the month — started
+      // before it, due after it — which has neither date inside it but is
+      // drawn as a span on every one of its days.
+      OR: [
+        { dueDate: inMonth },
+        { startDate: inMonth },
+        { startDate: { lt: to }, dueDate: { gte: from } },
+      ],
     },
     select: {
       id: true,
