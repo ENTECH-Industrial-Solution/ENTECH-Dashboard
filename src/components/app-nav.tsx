@@ -1,11 +1,12 @@
 "use client";
 
-import Link, { useLinkStatus } from "next/link";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { BrandWordmark } from "@/components/brand";
 import { LocaleSwitch } from "@/components/locale-switch";
+import { LinkPending, NavProgressBar } from "@/components/nav-progress";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { useTranslations } from "@/lib/i18n/client";
 import { Collapse } from "@/components/motion";
@@ -83,7 +84,7 @@ export function AppNav({ user }: { user: SessionUser }) {
   const [open, setOpen] = useState(false);
 
   // The menu closes when the page it asked for arrives, not on the tap: a link
-  // that unmounted on click would take its `useLinkStatus` with it, and the
+  // that unmounted on click would take its `LinkPending` with it, and the
   // loading bar would never show on the one screen that waits longest. Done
   // during render, React's way of resetting state when a value changes.
   const [openedOn, setOpenedOn] = useState(pathname);
@@ -129,7 +130,7 @@ export function AppNav({ user }: { user: SessionUser }) {
         >
           <BrandWordmark className="h-[0.875em] w-auto shrink-0" />
           {t("app.product")}
-          <NavProgress />
+          <LinkPending />
         </Link>
 
         {/* `overflow-x-auto` is the release valve: a label longer than these
@@ -147,7 +148,7 @@ export function AppNav({ user }: { user: SessionUser }) {
               }
             >
               {t(link.key)}
-              <NavProgress />
+              <LinkPending />
             </Link>
           ))}
         </nav>
@@ -226,7 +227,7 @@ export function AppNav({ user }: { user: SessionUser }) {
                   }
                 >
                   {t(link.key)}
-                  <NavProgress />
+                  <LinkPending />
                 </Link>
               ))}
             </nav>
@@ -244,23 +245,10 @@ export function AppNav({ user }: { user: SessionUser }) {
           </div>
         </div>
       </Collapse>
+
+      <NavProgressBar />
     </header>
   );
-}
-
-/**
- * The bar along the header's bottom edge while a link's page is on its way —
- * a round trip through the pooler is one to three seconds, and a header that
- * does nothing for that long reads as a click that missed.
- *
- * One per link, because `useLinkStatus` only answers inside the `<Link>` it
- * describes; only the pending one is ever visible. It is positioned against
- * the sticky header, not the link, so every one of them draws in the same
- * place. The look and the short grace delay live in `.nav-progress`.
- */
-function NavProgress() {
-  const { pending } = useLinkStatus();
-  return <span aria-hidden className="nav-progress" data-pending={pending} />;
 }
 
 /** Three lines, or the cross that closes them. */

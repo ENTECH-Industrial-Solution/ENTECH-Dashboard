@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Fragment, useActionState, useEffect, useState } from "react";
 
+import { LinkPending } from "@/components/nav-progress";
 import { Alert, FieldError, SubmitButton } from "@/components/ui";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
 import {
@@ -260,6 +261,7 @@ export function EmployeeManager({
                       className="underline-offset-2 hover:underline"
                     >
                       {employee.fullName}
+                      <LinkPending />
                     </Link>
                     {employee.id === currentUserId && (
                       <span

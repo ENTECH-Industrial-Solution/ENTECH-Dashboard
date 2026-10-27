@@ -1552,9 +1552,22 @@ fast clock**, about 60% of the entrance. `Swap` is the one way a value changes
 in place (a status badge, a submit button's label): keyed by the value, both
 in one grid cell so the row does not jump.
 
-The header's loading bar is `NavProgress`, one per link, because
-`useLinkStatus` only answers inside the `<Link>` it describes; all of them
-draw at the sticky header's bottom edge. That is also why the mobile menu
-now closes **when the page arrives** rather than on the tap — a link that
-unmounted on click would take its status with it, and the bar would never
-show on the screen that waits longest.
+The header's loading bar lives in `nav-progress.tsx`. `useLinkStatus` only
+answers inside the `<Link>` it describes, so each link carries a
+`LinkPending` that reports into a module-level count, and the one
+`NavProgressBar` in the header reads it — a span inside a card would draw
+against the card. **A `Link` to another page should carry a `LinkPending`.**
+The calendar's month arrows deliberately do not: that page has already
+turned before the server answers. The mobile menu closes **when the page
+arrives** rather than on the tap, because a link that unmounted on click
+would take its status with it.
+
+`Segmented` in `ui.tsx` is the one single-choice button row (language,
+task-or-trip), with a pill that slides to the chosen option. The server
+renders the chosen button with its own background, and the pill takes over
+once measured, so the row is right before hydration. The two switches that
+save through a server action, `LocaleSwitch` and `ThemeSwitch`, show the
+choice through `useOptimistic`, so it moves on the click rather than after
+the round trip. `ThemeSwitch` also writes `data-theme` itself inside
+`startViewTransition`, so the palette cross-fades immediately and the cookie
+follows.

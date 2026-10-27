@@ -6,8 +6,8 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, m, useReducedMotion } from "@/components/motion";
 
 /**
- * A number that counts up to its value when it first appears, and pops its
- * changed digits in when the value moves after that.
+ * A number that counts up to its value the first time the app shows it, and
+ * pops its changed digits in when the value moves after that.
  *
  * The one client leaf inside `SummaryTiles`, which stays a server component:
  * the tile's markup and its query are server work, and the only thing that
@@ -19,23 +19,33 @@ import { AnimatePresence, m, useReducedMotion } from "@/components/motion";
  * number in state, not an element's style. It honours the OS reduced-motion
  * setting by not moving at all.
  */
+// Set once a count has finished, and module scope on purpose: it survives
+// client navigation and resets on a reload. So the numbers count when the app
+// is opened and sit still on every return to the dashboard after that — a
+// flourish that plays on every visit to a page opened all day stops being one.
+// Set on *completion*, so the three tiles that mount together all count.
+let hasCounted = false;
+
 export function CountUp({ value }: { value: number }) {
   const reduced = useReducedMotion();
   const [shown, setShown] = useState(value);
   const [counted, setCounted] = useState(false);
 
-  // Counts once, on mount. A later value — a task closed out, the page
+  // Counts at most once, on mount. A later value — a task closed out, the page
   // revalidated — is drawn by `PopDigits` rather than counted again from 0.
   useEffect(() => {
-    if (reduced) {
+    if (reduced || hasCounted) {
       setCounted(true);
       return;
     }
     const controls = animate(0, value, {
-      duration: 0.8,
+      duration: 0.6,
       ease: [0.22, 1, 0.36, 1],
       onUpdate: (latest) => setShown(Math.round(latest)),
-      onComplete: () => setCounted(true),
+      onComplete: () => {
+        hasCounted = true;
+        setCounted(true);
+      },
     });
     return () => controls.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the count is a mount flourish only

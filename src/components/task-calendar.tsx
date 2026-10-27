@@ -12,6 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { LinkPending } from "@/components/nav-progress";
 import { SlideRow } from "@/components/slide-row";
 import { Alert, PriorityBadge, StatusBadge, SubmitButton } from "@/components/ui";
 import { dayKeyOf, monthGrid, monthOf, monthParam, shiftMonth, type YearMonth } from "@/lib/calendar";
@@ -773,6 +774,7 @@ export function TaskCalendar({
                       className="line-clamp-3 text-sm font-medium leading-snug hover:underline"
                     >
                       {task.title}
+                      <LinkPending />
                     </Link>
 
                     {showAssignee && (
@@ -844,6 +846,7 @@ export function TaskCalendar({
                             {showAssignee && ` · ${span.assigneeNames}`}
                           </span>
                         </span>
+                        <LinkPending />
                       </Link>
                     </li>
                   ))}

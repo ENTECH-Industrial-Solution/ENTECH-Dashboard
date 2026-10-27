@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { CardGrid } from "@/components/card-grid";
 import { Avatar } from "@/components/employee-frame";
+import { LinkPending } from "@/components/nav-progress";
 import { PageShell } from "@/components/page-shell";
 import { ScheduleRow } from "@/components/schedule-row";
 import { SelfWorkCreator } from "@/components/self-work-creator";
@@ -82,6 +83,7 @@ export default async function EmployeeTasksPage({
           style={{ color: "var(--text-muted)" }}
         >
           ← {t("dashboard.back")}
+          <LinkPending />
         </Link>
       </div>
 

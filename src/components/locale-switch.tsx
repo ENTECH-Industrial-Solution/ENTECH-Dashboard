@@ -1,43 +1,38 @@
 "use client";
 
-import { useTransition } from "react";
+import { useOptimistic, useTransition } from "react";
 
+import { Segmented } from "@/components/ui";
 import { useLocale } from "@/lib/i18n/client";
 import { LOCALES, type Locale } from "@/lib/i18n/dictionaries";
 import { setLocaleAction } from "@/server/actions/locale";
 
 const LABEL: Record<Locale, string> = { th: "ไทย", en: "EN" };
+const OPTIONS = LOCALES.map((code) => ({ value: code, label: LABEL[code] }));
 
+/**
+ * The pill slides on the click, not on the round trip: `useOptimistic` shows
+ * the choice at once, and the page re-rendering in the new language follows
+ * when the server answers.
+ */
 export function LocaleSwitch() {
-  const locale = useLocale();
+  const saved = useLocale();
+  const [locale, showLocale] = useOptimistic(saved);
   const [pending, startTransition] = useTransition();
 
   return (
-    <div
-      className="inline-flex rounded-lg border p-0.5"
-      role="group"
-      aria-label="Language"
-    >
-      {LOCALES.map((code) => {
-        const active = code === locale;
-        return (
-          <button
-            key={code}
-            type="button"
-            disabled={pending || active}
-            onClick={() => startTransition(() => setLocaleAction(code))}
-            className="rounded-md px-2 py-1 text-xs font-medium transition-colors"
-            style={
-              active
-                ? { background: "var(--brand)", color: "var(--brand-contrast)" }
-                : { color: "var(--text-muted)" }
-            }
-            aria-pressed={active}
-          >
-            {LABEL[code]}
-          </button>
-        );
-      })}
-    </div>
+    <Segmented
+      value={locale}
+      options={OPTIONS}
+      size="sm"
+      label="Language"
+      disabled={pending}
+      onChange={(code) =>
+        startTransition(async () => {
+          showLocale(code);
+          await setLocaleAction(code);
+        })
+      }
+    />
   );
 }

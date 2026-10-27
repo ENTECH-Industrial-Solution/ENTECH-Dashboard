@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 
 import { Reveal } from "@/components/motion";
-import { Alert } from "@/components/ui";
+import { Alert, Segmented } from "@/components/ui";
 import { TaskForm, type AssigneeOption } from "@/components/task-form";
 import { TripForm, type TripPinOption } from "@/components/trip-form";
 import { useTranslations } from "@/lib/i18n/client";
@@ -86,31 +86,15 @@ export function SelfWorkCreator({
       {tripsEnabled && (
         <div>
           <span className="label">{t("tasks.kind")}</span>
-          <div
-            className="inline-flex rounded-lg border p-0.5"
-            role="group"
-            aria-label={t("tasks.kind")}
-          >
-            {(["task", "trip"] as const).map((option) => {
-              const active = option === kind;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setKind(option)}
-                  aria-pressed={active}
-                  className="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-                  style={
-                    active
-                      ? { background: "var(--brand)", color: "var(--brand-contrast)" }
-                      : { color: "var(--text-muted)" }
-                  }
-                >
-                  {option === "task" ? t("tasks.kindTask") : t("tasks.kindTrip")}
-                </button>
-              );
-            })}
-          </div>
+          <Segmented
+            value={kind}
+            onChange={setKind}
+            label={t("tasks.kind")}
+            options={[
+              { value: "task", label: t("tasks.kindTask") },
+              { value: "trip", label: t("tasks.kindTrip") },
+            ]}
+          />
         </div>
       )}
 

@@ -237,8 +237,29 @@ body {
   line-height: 1.5;
 }
 
-/* The header's loading bar (`NavProgress` in app-nav.tsx). It fills towards
-   85% on a long decelerating curve — the server gives no progress to report,
+/* The chosen-option pill of `Segmented` in ui.tsx. Positioned by `translate`
+   from measured offsets; only a change animates, since it mounts in place. */
+.segmented-pill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 0.375rem;
+  background: var(--brand);
+  transition: translate var(--dur-base) var(--ease-out),
+    width var(--dur-base) var(--ease-out);
+}
+
+/* The cross-fade `ThemeSwitch` runs the whole page through when the palette
+   changes. The browser's default is a 250ms linear blend; this puts it on the
+   app's own clock and curve so it reads as the same hand as everything else. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--dur-slow);
+  animation-timing-function: var(--ease-out);
+}
+
+/* The header's loading bar (`NavProgressBar` in nav-progress.tsx). It fills
+   towards 85% on a long decelerating curve — the server gives no progress to report,
    so it slows rather than pretending to finish — and when the page lands the
    animation is dropped, so it snaps full and fades out on the way. The 120ms
    delay keeps a fast navigation from flashing it at all. */

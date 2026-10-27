@@ -3,6 +3,7 @@ import Link from "next/link";
 import { dueState } from "@/lib/calendar";
 import { formatDate, getLocale, getTranslations } from "@/lib/i18n/server";
 import type { EmployeeWorkload } from "@/server/queries";
+import { LinkPending } from "@/components/nav-progress";
 
 /**
  * One person = one frame on the dashboard. The whole card is a link into that
@@ -171,6 +172,7 @@ export async function EmployeeFrame({
           </span>
         </div>
       )}
+      <LinkPending />
     </Link>
   );
 }

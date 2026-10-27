@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { CUSTOMER_STATUSES, CUSTOMER_STATUS_META } from "@/lib/customers";
 import { getTranslations } from "@/lib/i18n/server";
+import { LinkPending } from "@/components/nav-progress";
 
 /**
  * The customer board in five numbers, one per lead status. Each is a link to
@@ -23,6 +24,7 @@ export async function LeadSummary({ counts }: { counts: Record<CustomerStatus, n
           style={{ color: "var(--text-muted)" }}
         >
           {t("dashboard.leadsAll")} {total}
+          <LinkPending />
         </Link>
       </header>
 
@@ -43,6 +45,7 @@ export async function LeadSummary({ counts }: { counts: Record<CustomerStatus, n
                 />
                 <span className="min-w-0 flex-1 truncate">{t(meta.label)}</span>
                 <span className="font-semibold tabular-nums">{counts[status]}</span>
+                <LinkPending />
               </Link>
             </li>
           );
