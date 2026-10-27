@@ -1,12 +1,17 @@
 import type { CSSProperties } from "react";
 
-import { Avatar } from "@/components/employee-frame";
 import { SlideRow } from "@/components/slide-row";
-import { TripActions, TripEvidence, TripMapHeader } from "@/components/trip-card";
+import {
+  TripActions,
+  TripEvidence,
+  TripHeadline,
+  TripMapHeader,
+  TripPeople,
+} from "@/components/trip-card";
 import type { SessionUser } from "@/lib/auth/session";
 import { canRunFieldTrip } from "@/lib/auth/rbac";
-import { bangkokDayKey, todayKey, tripHours } from "@/lib/calendar";
-import { formatDate, getLocale, getTranslations } from "@/lib/i18n/server";
+import { bangkokDayKey, todayKey } from "@/lib/calendar";
+import { getLocale, getTranslations } from "@/lib/i18n/server";
 import { serialiseTrip } from "@/lib/serialise";
 import { getFieldTrips, type FieldTripListItem } from "@/server/queries";
 
@@ -136,12 +141,6 @@ export async function AwayPanel({
 }
 
 /**
- * How many faces a box draws before it says "+n" instead. Four fills the
- * header's width at the box's floor without pushing the names off it.
- */
-const MAX_FACES = 4;
-
-/**
  * The parts of a box, top to bottom, as the rows of the rail's grid: map, day
  * and purpose, evidence, people, buttons. Every part places itself on its own
  * row (`row-start-N`) so the five sit at the same five heights in every box on
@@ -151,16 +150,6 @@ const MAX_FACES = 4;
  * must take no room at all.
  */
 const BOX_ROWS = 5;
-
-/** The date block's two lines, on Bangkok's calendar like every date here. */
-function dayParts(date: Date, locale: Awaited<ReturnType<typeof getLocale>>) {
-  const part = (options: Intl.DateTimeFormatOptions) =>
-    new Intl.DateTimeFormat(locale === "th" ? "th-TH" : "en-GB", {
-      ...options,
-      timeZone: "Asia/Bangkok",
-    }).format(date);
-  return { day: part({ day: "numeric" }), month: part({ month: "short" }) };
-}
 
 /**
  * One box per trip, in the order the trips arrive — sorted by start date, so
@@ -192,7 +181,6 @@ async function Group({
   user: SessionUser;
   highlight?: boolean;
 }) {
-  const t = await getTranslations();
   const heading = `${label} · ${trips.length}`;
 
   return (
@@ -210,9 +198,6 @@ async function Group({
     >
       {trips.map((trip) => {
         const row = serialiseTrip(trip, locale);
-        const faces = trip.travellers.slice(0, MAX_FACES);
-        const more = trip.travellers.length - faces.length;
-        const { day, month } = dayParts(trip.startDate, locale);
 
         return (
           /* `slide-card` is the width rule: 85% of the row so the next trip
@@ -241,28 +226,8 @@ async function Group({
               <TripMapHeader trip={row} />
             </div>
 
-            {/* The day as a block, so "which day" reads before anything else;
-                the line beside it carries only what the block cannot. */}
-            <div className="row-start-2 flex items-stretch gap-3 pt-3">
-              <div
-                className="flex w-12 shrink-0 flex-col items-center justify-center rounded-lg py-1.5 leading-tight"
-                style={{ background: "var(--brand-soft)", color: "var(--brand)" }}
-              >
-                <span className="text-lg font-semibold">{day}</span>
-                <span className="text-xs">{month}</span>
-              </div>
-              {/* Stretched to the block's height and centred in it, so the two
-                  read as one row however many lines the purpose takes. */}
-              <div className="flex min-w-0 flex-1 flex-col justify-center">
-                <div className="text-sm font-medium leading-snug break-words">
-                  {trip.purpose}
-                </div>
-                <div className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                  {bangkokDayKey(trip.startDate) !== bangkokDayKey(trip.endDate) &&
-                    `${t("trips.untilDate")} ${formatDate(trip.endDate, locale)} · `}
-                  {`${tripHours(trip).start}–${tripHours(trip).end}`}
-                </div>
-              </div>
+            <div className="row-start-2 pt-3">
+              <TripHeadline trip={row} />
             </div>
 
             {/* Renders nothing until the trip is closed out, so the row is a
@@ -275,52 +240,10 @@ async function Group({
             {/* The dashed line is the ticket's tear: what the trip is above
                 it, who is on it below. */}
             <header
-              className="row-start-4 mt-3 flex items-center gap-3 border-t border-dashed pt-3"
+              className="row-start-4 mt-3 border-t border-dashed pt-3"
               style={{ borderColor: "var(--border)" }}
             >
-              {/* The faces overlap so four of them take the room of two and a
-                  half; each carries a ring in the box's colour so the overlap
-                  reads as a stack rather than a smear. */}
-              <div className="flex shrink-0 -space-x-2">
-                {faces.map((person) => (
-                  <span
-                    key={person.id}
-                    className="rounded-full ring-2"
-                    style={{ "--tw-ring-color": "var(--face-ring)" } as CSSProperties}
-                    title={`${person.employeeCode} — ${person.fullName}`}
-                  >
-                    <Avatar fullName={person.fullName} />
-                  </span>
-                ))}
-                {more > 0 && (
-                  <span
-                    aria-hidden
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-2"
-                    style={
-                      {
-                        background: "var(--surface-muted)",
-                        color: "var(--text-muted)",
-                        "--tw-ring-color": "var(--face-ring)",
-                      } as CSSProperties
-                    }
-                  >
-                    +{more}
-                  </span>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                {/* Every name, wrapping — this is the line that tells four
-                    people they are on the same job, and the full list is what
-                    a box with room for it owes them. */}
-                <div className="text-sm font-medium leading-snug break-words">
-                  {trip.travellers.map((person) => person.fullName).join(", ")}
-                </div>
-                <div className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
-                  {trip.travellers.length > 1
-                    ? `${trip.travellers.length} ${t("trips.peopleCount")}`
-                    : trip.travellers[0]?.employeeCode}
-                </div>
-              </div>
+              <TripPeople travellers={row.travellers} />
             </header>
 
             {/* Decided here, on the server, from the session — the buttons are

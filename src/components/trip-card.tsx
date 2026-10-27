@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 
+import { Avatar } from "@/components/avatar";
 import { MiniMap } from "@/components/map-embed";
 import { Reveal, Swap } from "@/components/motion";
 import { LinkPending } from "@/components/nav-progress";
@@ -97,94 +98,11 @@ export function dayCount(startIso: string, endIso: string): number {
 }
 
 /**
- * Renders the trip card's location block. The dashboard panel draws its own
- * (TripMapHeader).
+ * The location as the head of a trip, on the dashboard box and the card alike:
+ * the map across the top, the place named on it.
  *
- * The mini map sits beside the details rather than under them, and its size is
- * a container query, not a viewport one: the card is half-width or full-width
- * on the admin page, and only the block itself knows which. Below 224px there
- * is no "beside" left, so it stacks.
- */
-export function TripLocation({ trip }: { trip: FieldTripRow }) {
-  const t = useTranslations();
-  const settings = useSettings();
-
-  return (
-    <div
-      className="@container rounded-lg border-s-2 px-3 py-2 text-sm"
-      style={{
-        borderInlineStartColor: "var(--brand)",
-        background: "var(--surface-muted)",
-      }}
-    >
-      <div className="flex flex-col gap-2 @min-[14rem]:flex-row @min-[14rem]:items-start @min-[14rem]:gap-3">
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div>
-            <div className="font-medium">{trip.locationName}</div>
-            {trip.address && (
-              <div className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                {trip.address}
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <a
-              href={trip.mapHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs underline"
-              style={{ color: "var(--brand)" }}
-            >
-              <PinIcon />
-              {t("trips.openMap")}
-            </a>
-            {/* Only when the trip is attached to a place on the board. An
-                internal link, unlike the Google one beside it — this one goes
-                to our own map, where the leads at that address are. */}
-            {trip.pin && (
-              <Link
-                href={`/customers?pin=${trip.pin.id}`}
-                className="inline-flex items-center gap-1 text-xs underline"
-                style={{ color: "var(--brand)" }}
-              >
-                <PinIcon />
-                {t("trips.openCustomerPin")}
-                <LinkPending />
-              </Link>
-            )}
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-              {trip.pinned ? t("trips.pinned") : t("trips.searchOnly")}
-              {trip.latitude !== null &&
-                trip.longitude !== null &&
-                ` · ${trip.latitude}, ${trip.longitude}`}
-            </span>
-          </div>
-        </div>
-
-        {/* The link above is the part that always stays; the thumbnail is the
-            part an admin can switch off, and switching it off is what stops a
-            page of twelve trips creating twelve Google frames. */}
-        {settings["fieldTrip.showMap"] && (
-          <MiniMap
-            src={trip.mapEmbedSrc}
-            href={trip.mapHref}
-            title={trip.locationName}
-            subtitle={trip.address}
-            className="aspect-[4/3] w-full @min-[14rem]:w-28 @2xs:w-32 @sm:w-40 @lg:w-52"
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * The location as the head of an off-site box: the map across the top, the
- * place named on it.
- *
- * The panel's boxes are a phone's width, where TripLocation's map-beside-text
- * left both halves cramped. Here the map is the header and the name rides on
+ * It replaced a block that put the map beside the address, which at a phone's
+ * width left both halves cramped. Here the map is the header and the name rides on
  * it, top-start, because Google prints its attribution along the foot and the
  * expand cue sits top-end. The label ignores the pointer, so the whole picture
  * stays one button that opens the full map — whose dialog carries the Google
@@ -243,6 +161,133 @@ export function TripMapHeader({ trip }: { trip: FieldTripRow }) {
         </span>
       </div>
       {customerLink}
+    </div>
+  );
+}
+
+/**
+ * The day as a block beside what the trip is for, shared by the dashboard box
+ * and the card so the two read the same.
+ *
+ * "Which day" reads before anything else; the line under the purpose carries
+ * only what the block cannot — the last day of a longer trip, the hours, and
+ * when it actually started. The text column stretches to the block's height
+ * and centres in it, so the two read as one row however long the purpose is.
+ */
+export function TripHeadline({
+  trip,
+  aside,
+}: {
+  trip: FieldTripRow;
+  /** Drawn top-end, beside the purpose — the card's status badge. */
+  aside?: React.ReactNode;
+}) {
+  const t = useTranslations();
+  const locale = useLocale();
+  const formatDay = useDayFormatter();
+  const formatMoment = useMomentFormatter();
+
+  const part = (options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat(locale === "th" ? "th-TH" : "en-GB", {
+      ...options,
+      timeZone: "Asia/Bangkok",
+    }).format(new Date(trip.startDate));
+  const days = dayCount(trip.startDate, trip.endDate);
+  const hours = tripHours(trip);
+  const cancelled = tripState(trip) === "CANCELLED";
+
+  return (
+    <div className="flex items-stretch gap-3">
+      <div
+        className="flex w-12 shrink-0 flex-col items-center justify-center rounded-lg py-1.5 leading-tight"
+        style={{ background: "var(--brand-soft)", color: "var(--brand)" }}
+      >
+        <span className="text-lg font-semibold">{part({ day: "numeric" })}</span>
+        <span className="text-xs">{part({ month: "short" })}</span>
+      </div>
+
+      <div className="flex min-w-0 flex-1 flex-col justify-center">
+        <div className="flex items-start gap-2">
+          <div
+            className="min-w-0 flex-1 text-sm font-medium leading-snug break-words"
+            style={cancelled ? { textDecoration: "line-through" } : undefined}
+          >
+            {trip.purpose}
+          </div>
+          {aside}
+        </div>
+        <div className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+          {days > 1 &&
+            `${t("trips.untilDate")} ${formatDay(trip.endDate)} · ${days} ${t("trips.days")} · `}
+          <span className="tabular-nums">
+            {hours.start}–{hours.end}
+          </span>
+          {/* Always shown, defaulted or not — "what time" is the question, and
+              "nobody filled it in" is not an answer people can act on. This
+              says when it is the house rule rather than a choice. */}
+          {hours.assumed && ` (${t("trips.officeHours")})`}
+          {/* The planned days above, what happened here — never merged, for
+              the same reason Task keeps dueDate apart from completedAt. */}
+          {trip.startedAt &&
+            ` · ${t("trips.startedAt")} ${formatMoment(trip.startedAt)}`}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Beyond this the faces stop and a "+n" stands for the rest. */
+const MAX_FACES = 4;
+
+/**
+ * Who is on a trip: their faces stacked, every name beside them, and a head
+ * count. Shared by the dashboard box and the card.
+ *
+ * The faces overlap so four take the room of two and a half; each carries a
+ * ring in `--face-ring` — set by the box to its own background — so the
+ * overlap reads as a stack rather than a smear. The names are the full list,
+ * wrapping rather than truncating: this is the line that tells four people
+ * they are on the same job.
+ */
+export function TripPeople({ travellers }: { travellers: FieldTripRow["travellers"] }) {
+  const t = useTranslations();
+  const faces = travellers.slice(0, MAX_FACES);
+  const more = travellers.length - faces.length;
+  const ring = { "--tw-ring-color": "var(--face-ring, var(--surface))" } as React.CSSProperties;
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex shrink-0 -space-x-2">
+        {faces.map((person) => (
+          <span
+            key={person.id}
+            className="rounded-full ring-2"
+            style={ring}
+            title={`${person.employeeCode} — ${person.fullName}`}
+          >
+            <Avatar fullName={person.fullName} />
+          </span>
+        ))}
+        {more > 0 && (
+          <span
+            aria-hidden
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-2"
+            style={{ ...ring, background: "var(--surface-muted)", color: "var(--text-muted)" }}
+          >
+            +{more}
+          </span>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium leading-snug break-words">
+          {travellers.map((person) => person.fullName).join(", ")}
+        </div>
+        <div className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
+          {travellers.length > 1
+            ? `${travellers.length} ${t("trips.peopleCount")}`
+            : travellers[0]?.employeeCode}
+        </div>
+      </div>
     </div>
   );
 }
@@ -567,6 +612,10 @@ function TripDeleter({
 /**
  * A trip as a card.
  *
+ * Laid out as the dashboard's off-site box is — map, day and purpose, report,
+ * then who is going under a dashed line — from the same parts, so a trip looks
+ * the same on /admin/tasks as it does on the dashboard.
+ *
  * The admin controls are optional so a server component can render the same
  * card read-only — that is what the off-site history sections do.
  */
@@ -591,11 +640,7 @@ export function TripCard({
   cancelAction?: (formData: FormData) => void;
 }) {
   const t = useTranslations();
-  const formatDay = useDayFormatter();
-  const formatMoment = useMomentFormatter();
 
-  const days = dayCount(trip.startDate, trip.endDate);
-  const hours = tripHours(trip);
   const state = tripState(trip);
   const cancelled = state === "CANCELLED";
 
@@ -605,69 +650,9 @@ export function TripCard({
       className="card flex scroll-mt-24 flex-col gap-3 p-4"
       style={cancelled ? { opacity: 0.7 } : undefined}
     >
-      <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-        <div className="min-w-0 flex-1">
-          <h3
-            className="font-medium leading-snug break-words"
-            style={cancelled ? { textDecoration: "line-through" } : undefined}
-          >
-            {trip.purpose}
-          </h3>
-          {/* The full list, not the summary the calendar and the map use: the
-              card is the view with room for it, and "who else is going" is
-              exactly what somebody opens a trip to find out. Wraps rather than
-              truncating — on a phone this is the line that tells four people
-              they are on the same job. */}
-          <div className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-            {trip.travellers
-              .map((person) => `${person.employeeCode} — ${person.fullName}`)
-              .join(", ")}
-          </div>
-        </div>
+      <TripMapHeader trip={trip} />
 
-        <TripStatusBadge state={state} />
-      </div>
-
-      <dl
-        className="flex flex-wrap gap-x-4 gap-y-1 text-xs"
-        style={{ color: "var(--text-muted)" }}
-      >
-        <div className="flex gap-1">
-          <dt>{t("trips.startDate")}:</dt>
-          <dd style={{ color: "var(--text)" }}>
-            {formatDay(trip.startDate)}
-            {trip.endDate !== trip.startDate && ` – ${formatDay(trip.endDate)}`}
-            {` · ${days} ${t("trips.days")}`}
-          </dd>
-        </div>
-
-        {/* Always shown, defaulted or not — "what time" is the question, and
-            "nobody filled it in" is not an answer people can act on. The
-            marker below says when it is the house rule rather than a choice. */}
-        <div className="flex gap-1">
-          <dt>{t("trips.startTime")}:</dt>
-          <dd className="tabular-nums" style={{ color: "var(--text)" }}>
-            {hours.start}–{hours.end}
-            {hours.assumed && (
-              <span style={{ color: "var(--text-muted)" }}>
-                {" "}
-                ({t("trips.officeHours")})
-              </span>
-            )}
-          </dd>
-        </div>
-
-        {/* The planned days above, what happened below — never merged, for the
-            same reason Task keeps dueDate apart from completedAt. */}
-        {trip.startedAt && (
-          <div className="flex gap-1">
-            <dt>{t("trips.startedAt")}:</dt>
-            <dd style={{ color: "var(--text)" }}>{formatMoment(trip.startedAt)}</dd>
-          </div>
-        )}
-      </dl>
-
-      <TripLocation trip={trip} />
+      <TripHeadline trip={trip} aside={<TripStatusBadge state={state} />} />
 
       {trip.note && (
         <p
@@ -685,6 +670,12 @@ export function TripCard({
       )}
 
       <TripEvidence trip={trip} />
+
+      {/* The dashed line is the ticket's tear: what the trip is above it, who
+          is on it below. */}
+      <div className="border-t border-dashed pt-3" style={{ borderColor: "var(--border)" }}>
+        <TripPeople travellers={trip.travellers} />
+      </div>
 
       {/* The actions sit with the record they act on, not stranded under the
           footnote: what someone reads last on a finished trip is the report,
