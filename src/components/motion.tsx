@@ -46,14 +46,18 @@ export const DURATION = {
 } as const;
 
 /**
- * The entrance everything that appears uses: a fade and a short rise. The
- * exit is quicker and shorter — leaving should never feel like the page is
- * waiting for something to finish.
+ * The entrance everything that appears uses: a fade, a short rise and a 2px
+ * blur that clears as it lands. The exit is quicker and shorter — leaving
+ * should never feel like the page is waiting for something to finish.
+ *
+ * The blur ends on `filter: none`, not `blur(0px)`: any filter value makes the
+ * element a containing block for `position: fixed` descendants, and a card
+ * left wearing one would trap every overlay drawn inside it.
  */
 export const fadeUp = {
-  initial: { opacity: 0, y: 6 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -4, transition: { duration: DURATION.fast } },
+  initial: { opacity: 0, y: 6, filter: "blur(2px)" },
+  animate: { opacity: 1, y: 0, filter: "blur(0px)", transitionEnd: { filter: "none" } },
+  exit: { opacity: 0, y: -4, filter: "blur(2px)", transition: { duration: DURATION.fast } },
 } as const;
 
 /**
@@ -91,6 +95,8 @@ export function Reveal({
  * A region that opens and closes in place — the list under a capsule, the
  * menu under the header. Animates `height` between 0 and `auto`, which is the
  * one thing CSS transitions still cannot do, and clips while doing it.
+ * Closing runs on the fast clock, about 60% of opening, as every exit here
+ * does: something put away should be gone before the hand has moved on.
  *
  * The child is unmounted once closed, exactly as an `open && ...` would, so a
  * closed region costs nothing and carries no hidden form state.
@@ -114,7 +120,7 @@ export function Collapse({
           className={className}
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: "auto", opacity: 1 }}
-          exit={{ height: 0, opacity: 0 }}
+          exit={{ height: 0, opacity: 0, transition: { duration: DURATION.fast, ease: EASE_OUT } }}
           transition={{ duration: DURATION.base, ease: EASE_OUT }}
           style={{ overflow: "hidden" }}
         >
@@ -122,6 +128,41 @@ export function Collapse({
         </m.div>
       )}
     </AnimatePresence>
+  );
+}
+
+/**
+ * A value that changes in place — a status badge, a button's label. The old
+ * one lifts out and blurs while the new one rises in, both in the same grid
+ * cell, so the row does not collapse and jump for the length of the swap.
+ *
+ * `id` is what decides that something changed; `initial={false}` keeps the
+ * first render still, so server-rendered content gets no entrance.
+ */
+export function Swap({
+  id,
+  children,
+  className = "",
+}: {
+  id: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <span className={`inline-grid ${className}`}>
+      <AnimatePresence initial={false}>
+        <m.span
+          key={id}
+          className="inline-flex [grid-area:1/1]"
+          initial={{ opacity: 0, y: 4, filter: "blur(2px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)", transitionEnd: { filter: "none" } }}
+          exit={{ opacity: 0, y: -4, filter: "blur(2px)", transition: { duration: 0.1, ease: "easeIn" } }}
+          transition={{ duration: 0.15, ease: "easeOut" }}
+        >
+          {children}
+        </m.span>
+      </AnimatePresence>
+    </span>
   );
 }
 

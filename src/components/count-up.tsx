@@ -3,37 +3,70 @@
 import { animate } from "motion";
 import { useEffect, useState } from "react";
 
-import { useReducedMotion } from "@/components/motion";
+import { AnimatePresence, m, useReducedMotion } from "@/components/motion";
 
 /**
- * A number that counts up to its value when it first appears.
+ * A number that counts up to its value when it first appears, and pops its
+ * changed digits in when the value moves after that.
  *
  * The one client leaf inside `SummaryTiles`, which stays a server component:
  * the tile's markup and its query are server work, and the only thing that
- * needs a browser is the ticking. The server renders the final value, so the
+ * needs a browser is the motion. The server renders the final value, so the
  * page is correct before hydration and correct without JavaScript; the count
  * is a flourish laid over a number that was already there.
  *
- * `motion`'s bare `animate()` rather than a component, because the thing
- * animating is a number in state, not an element's style. It honours the OS
- * reduced-motion setting by not counting at all.
+ * `motion`'s bare `animate()` for the count, because the thing animating is a
+ * number in state, not an element's style. It honours the OS reduced-motion
+ * setting by not moving at all.
  */
 export function CountUp({ value }: { value: number }) {
   const reduced = useReducedMotion();
   const [shown, setShown] = useState(value);
+  const [counted, setCounted] = useState(false);
 
+  // Counts once, on mount. A later value — a task closed out, the page
+  // revalidated — is drawn by `PopDigits` rather than counted again from 0.
   useEffect(() => {
     if (reduced) {
-      setShown(value);
+      setCounted(true);
       return;
     }
     const controls = animate(0, value, {
       duration: 0.8,
       ease: [0.22, 1, 0.36, 1],
       onUpdate: (latest) => setShown(Math.round(latest)),
+      onComplete: () => setCounted(true),
     });
     return () => controls.stop();
-  }, [value, reduced]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the count is a mount flourish only
+  }, [reduced]);
 
-  return <>{shown}</>;
+  if (reduced) return <>{value}</>;
+  return counted ? <PopDigits value={value} /> : <>{shown}</>;
+}
+
+/**
+ * Each digit is keyed by its place and its value, so only the digits that
+ * actually changed remount — and only those rise in, blurred and with a little
+ * overshoot. `initial={false}` keeps the hand-over from the count still.
+ */
+function PopDigits({ value }: { value: number }) {
+  const digits = String(value).split("");
+  return (
+    <span className="inline-flex">
+      <AnimatePresence initial={false}>
+        {digits.map((digit, i) => (
+          <m.span
+            key={`${digits.length - i}:${digit}`}
+            className="inline-block"
+            initial={{ opacity: 0, y: 8, filter: "blur(2px)" }}
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)", transitionEnd: { filter: "none" } }}
+            transition={{ duration: 0.5, ease: [0.34, 1.45, 0.64, 1], delay: i * 0.07 }}
+          >
+            {digit}
+          </m.span>
+        ))}
+      </AnimatePresence>
+    </span>
+  );
 }

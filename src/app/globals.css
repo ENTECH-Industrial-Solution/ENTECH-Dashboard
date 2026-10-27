@@ -237,10 +237,91 @@ body {
   line-height: 1.5;
 }
 
+/* The header's loading bar (`NavProgress` in app-nav.tsx). It fills towards
+   85% on a long decelerating curve — the server gives no progress to report,
+   so it slows rather than pretending to finish — and when the page lands the
+   animation is dropped, so it snaps full and fades out on the way. The 120ms
+   delay keeps a fast navigation from flashing it at all. */
+.nav-progress {
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  height: 2px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-out);
+}
+.nav-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--brand);
+  transform-origin: left;
+}
+.nav-progress[data-pending="true"] {
+  opacity: 1;
+  transition-duration: var(--dur-fast);
+  transition-delay: 120ms;
+}
+.nav-progress[data-pending="true"]::after {
+  animation: nav-progress 8s cubic-bezier(0.1, 0.7, 0.2, 1) 120ms both;
+}
+@keyframes nav-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(0.85);
+  }
+}
+
+/* `Alert` in ui.tsx — the "saved" or "failed" line under a form. A keyframe
+   rather than `Reveal` because some are server-rendered: CSS plays on first
+   paint, where a motion `initial` would hold it invisible until hydration.
+   Ends on `filter: none` for the containing-block reason fadeUp gives. */
+.alert {
+  animation: alert-in 260ms var(--ease-out) both;
+}
+@keyframes alert-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    translate: 0;
+    filter: none;
+  }
+}
+
+/* Only ever drawn in answer to a submit, so it can afford an entrance: it
+   fades in with a short shake that settles, which is what says "this one". */
 .field-error {
   color: var(--danger);
   font-size: 0.8125rem;
   margin-top: 0.25rem;
+  animation: field-error-in 360ms var(--ease-out) both;
+}
+@keyframes field-error-in {
+  0% {
+    opacity: 0;
+    translate: 0;
+  }
+  25% {
+    opacity: 1;
+    translate: -6px 0;
+  }
+  50% {
+    translate: 4px 0;
+  }
+  75% {
+    translate: -2px 0;
+  }
+  100% {
+    opacity: 1;
+    translate: 0;
+  }
 }
 
 /* Tables scroll inside their own container rather than the page body. */
