@@ -114,6 +114,14 @@ export type MapControls = {
 
 const FIT_OPTIONS: Leaflet.FitBoundsOptions = { padding: [64, 64], maxZoom: 16 };
 
+/** Pins closer than this on screen fold into one numbered disc. */
+const CLUSTER_RADIUS = 48;
+/**
+ * From this zoom every pin stands alone. The same as FIT_OPTIONS' `maxZoom`, so
+ * clicking a cluster of pins on one exact spot still lands where they split.
+ */
+const CLUSTER_MAX_ZOOM = 16;
+
 /**
  * What the popup needs, in pixels, so the map can make room for it.
  *
@@ -211,6 +219,38 @@ function labelHtml(id: string, label: MapPinLabel): string {
   return `<span class="map-label-body" data-pin="${escapeHtml(id)}">${place}${rows}${more}</span>`;
 }
 
+/**
+ * Hides every always-on label that would land on one already shown.
+ *
+ * Zoomed out, a city's worth of pins sit within a few pixels of each other and
+ * their labels stack into an unreadable pile. First come, first shown — the
+ * pin keeps its marker either way, and zooming in pulls the labels apart and
+ * brings them back. `visibility` rather than `display`, so a hidden label keeps
+ * its box and can be measured again on the next zoom.
+ */
+function declutter(markers: Iterable<Leaflet.Marker>, occupied: DOMRect[]) {
+  // Labels live in a pane above every marker, so a cluster disc they landed on
+  // would be covered — it counts as already shown.
+  const shown = [...occupied];
+
+  for (const marker of markers) {
+    const element = marker.getTooltip()?.getElement();
+    if (!element || !marker.isTooltipOpen()) continue;
+
+    const box = element.getBoundingClientRect();
+    const clash = shown.some(
+      (other) =>
+        box.left < other.right &&
+        box.right > other.left &&
+        box.top < other.bottom &&
+        box.bottom > other.top,
+    );
+
+    element.classList.toggle("map-label-hidden", clash);
+    if (!clash) shown.push(box);
+  }
+}
+
 /** The marker's markup. One element, coloured entirely by `--pin`. */
 function pinHtml(pin: MapPin): string {
   const badge = pin.count > 1 ? `<b class="map-pin-count">${pin.count}</b>` : "";
@@ -248,6 +288,7 @@ export function MapCanvas({
   style,
   anchor,
   initialFocus = null,
+  clusterLabel,
   onSelect,
   onPlace,
   onDragEnd,
@@ -276,6 +317,8 @@ export function MapCanvas({
    * caller did on receiving the controls was immediately framed away again.
    */
   initialFocus?: { latitude: number; longitude: number } | null;
+  /** A cluster's title after its count, e.g. "หมุดในบริเวณนี้ — คลิกเพื่อซูมเข้า". */
+  clusterLabel: string;
   onControls: (controls: MapControls | null) => void;
   /** Where `anchor` currently sits in container pixels — tracked live. */
   onAnchorPoint: (point: { x: number; y: number } | null) => void;
@@ -284,6 +327,7 @@ export function MapCanvas({
   const map = useRef<Leaflet.Map | null>(null);
   const lib = useRef<typeof Leaflet | null>(null);
   const markers = useRef(new Map<string, Leaflet.Marker>());
+  const clusters = useRef<Leaflet.LayerGroup | null>(null);
   const [ready, setReady] = useState(false);
 
   // Split out so the effect below can depend on the numbers rather than on an
@@ -295,7 +339,10 @@ export function MapCanvas({
   const latest = useRef({
     pins,
     placing,
+    selectedId,
+    movingId,
     initialFocus,
+    clusterLabel,
     onSelect,
     onPlace,
     onDragEnd,
@@ -305,7 +352,10 @@ export function MapCanvas({
   latest.current = {
     pins,
     placing,
+    selectedId,
+    movingId,
     initialFocus,
+    clusterLabel,
     onSelect,
     onPlace,
     onDragEnd,
@@ -325,6 +375,85 @@ export function MapCanvas({
       ),
       FIT_OPTIONS,
     );
+  }, []);
+
+  /*
+   * Folds pins that crowd one spot into a single numbered disc; zooming in
+   * pulls them apart again. Clicking the disc frames its pins.
+   *
+   * Computed per zoom in screen pixels, greedily in list order: the first pin
+   * not yet taken gathers everything within CLUSTER_RADIUS of it. The members
+   * are taken off the map rather than hidden, so they cannot be clicked or
+   * tabbed to under the disc; `markers` still holds them, so the in-place
+   * updates above carry on untouched. The selected pin and the one being dragged
+   * never fold — the popup and the pointer are both attached to them.
+   */
+  const regroup = useCallback(() => {
+    const L = lib.current;
+    const instance = map.current;
+    const layer = clusters.current;
+    if (!L || !instance || !layer) return;
+
+    layer.clearLayers();
+    const { selectedId: selected, movingId: moving, clusterLabel: label } = latest.current;
+    const zoom = instance.getZoom();
+    const loose = (id: string) =>
+      zoom < CLUSTER_MAX_ZOOM && id !== selected && id !== moving;
+
+    const points = [...markers.current].map(([id, marker]) => ({
+      id,
+      marker,
+      at: instance.project(marker.getLatLng(), zoom),
+    }));
+    const taken = new Set<string>();
+
+    for (const seed of points) {
+      if (taken.has(seed.id)) continue;
+      taken.add(seed.id);
+
+      const group = [seed];
+      if (loose(seed.id)) {
+        for (const other of points) {
+          if (taken.has(other.id) || !loose(other.id)) continue;
+          if (seed.at.distanceTo(other.at) > CLUSTER_RADIUS) continue;
+          group.push(other);
+          taken.add(other.id);
+        }
+      }
+
+      if (group.length === 1) {
+        if (!instance.hasLayer(seed.marker)) seed.marker.addTo(instance);
+        continue;
+      }
+
+      for (const member of group) member.marker.remove();
+
+      const bounds = L.latLngBounds(group.map((member) => member.marker.getLatLng()));
+      const title = `${group.length} ${label}`;
+      const cluster = L.marker(bounds.getCenter(), {
+        icon: L.divIcon({
+          className: "map-marker",
+          html: `<span class="map-cluster">${group.length}</span>`,
+          iconSize: [36, 36],
+          iconAnchor: [18, 18],
+        }),
+        title,
+        alt: title,
+        riseOnHover: true,
+      });
+      const open = () => instance.fitBounds(bounds, FIT_OPTIONS);
+      cluster.on("click", open);
+      cluster.on("keypress", (event: Leaflet.LeafletKeyboardEvent) => {
+        if (event.originalEvent.key === "Enter") open();
+      });
+      layer.addLayer(cluster);
+    }
+
+    const discs = layer
+      .getLayers()
+      .flatMap((cluster) => (cluster as Leaflet.Marker).getElement() ?? [])
+      .map((element) => element.getBoundingClientRect());
+    declutter(markers.current.values(), discs);
   }, []);
 
   useEffect(() => {
@@ -400,6 +529,10 @@ export function MapCanvas({
         latest.current.onPlace(event.latlng.lat, event.latlng.lng);
       });
 
+      // Only a zoom changes how far apart pins are on screen; a pan moves them all.
+      clusters.current = L.layerGroup().addTo(instance);
+      instance.on("zoomend", regroup);
+
       map.current = instance;
       setReady(true);
 
@@ -449,10 +582,11 @@ export function MapCanvas({
       latest.current.onControls(null);
       map.current?.remove();
       map.current = null;
+      clusters.current = null;
       live.clear();
       setReady(false);
     };
-  }, [fit]);
+  }, [fit, regroup]);
 
   /*
    * Where the popup has to point, in container pixels, kept true while the map
@@ -607,7 +741,9 @@ export function MapCanvas({
       marker.remove();
       markers.current.delete(id);
     }
-  }, [ready, pins, selectedId, movingId]);
+
+    regroup();
+  }, [ready, pins, selectedId, movingId, regroup]);
 
   // Exactly one marker is draggable at a time, and only after someone asked for
   // it: on a shared board a stray thumb moving somebody else's pin is worse

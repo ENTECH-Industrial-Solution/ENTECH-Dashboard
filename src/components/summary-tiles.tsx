@@ -1,25 +1,24 @@
 import { CountUp } from "@/components/count-up";
-import { WorkloadPills, type WorkloadPillRow } from "@/components/workload-pills";
+import { WorkloadShare, type WorkloadPillRow } from "@/components/workload-pills";
 import { getTranslations } from "@/lib/i18n/server";
 import type { EmployeeWorkload, WorkloadMetric } from "@/server/queries";
 
 /**
  * The three headline counts, shared by the dashboard and a person's page.
  *
- * When more than one person is in view each tile also breaks its number down
- * into one capsule per person — name, count, and fill in a single row — so
+ * When more than one person is in view each tile also breaks its number down:
+ * one bar split into each person's share, and a legend naming them — so
  * "4 งานที่กำลังดำเนินการ" answers *whose* without scrolling to the frames
- * below. Capsules are scaled against the largest value in that tile rather than
- * the total: the question they answer is "who is carrying the most", and a
- * share-of-total bar makes two people with 3 and 1 look nearly the same when
- * the tile is this narrow.
+ * below. One bar rather than a row per person keeps the three tiles the same
+ * few lines tall, where a row each left "overdue" mostly empty beside a
+ * "completed" five rows deep.
  *
  * With one person (an employee's own dashboard, or one person's page) the
  * breakdown is skipped — a single full-width bar restates the number above it.
  *
- * Each capsule opens onto the tasks behind it, loaded on demand — see
- * `WorkloadPills`. That is why the list is a client component while the tile
- * around it stays server-rendered: only the capsules need state.
+ * Each legend entry opens onto the tasks behind it, loaded on demand — see
+ * `WorkloadShare`. That is why the breakdown is a client component while the
+ * tile around it stays server-rendered: only the entries need state.
  */
 export async function SummaryTiles({
   summary,
@@ -86,8 +85,8 @@ export async function SummaryTiles({
   );
 }
 
-/** Beyond this the tile turns into a list; the rest collapse into a count. */
-const MAX_ROWS = 4;
+/** How many people the legend names; the rest are a count. The bar has all. */
+const MAX_NAMED = 3;
 
 function SummaryTile({
   label,
@@ -113,9 +112,6 @@ function SummaryTile({
         ? "var(--danger)"
         : "var(--brand)";
 
-  const shown = rows?.slice(0, MAX_ROWS) ?? [];
-  const hidden = (rows?.length ?? 0) - shown.length;
-
   return (
     <div className="card space-y-3 px-4 py-3">
       <div>
@@ -130,21 +126,15 @@ function SummaryTile({
         </div>
       </div>
 
-      {shown.length > 0 && (
-        <div className="space-y-1.5">
-          <WorkloadPills
-            rows={shown}
-            metric={metric}
-            color={color}
-            moreLabel={moreTasks}
-          />
-
-          {hidden > 0 && (
-            <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-              +{hidden} {morePeople}
-            </div>
-          )}
-        </div>
+      {rows && (
+        <WorkloadShare
+          rows={rows}
+          metric={metric}
+          color={color}
+          limit={MAX_NAMED}
+          morePeople={morePeople}
+          moreLabel={moreTasks}
+        />
       )}
     </div>
   );

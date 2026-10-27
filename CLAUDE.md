@@ -223,7 +223,8 @@ another read action; do not let one skip the guard because "it only reads".
 ### The summary strip
 
 `SummaryTiles` renders the three headline counts, and — when more than one
-person is in view — a capsule per person under each. The tile is a server
+person is in view — a bar under each split into every person's share, with a
+legend whose entries ("capsules" below) name the first three and count the rest. The tile is a server
 component; only the capsules are client-side, because only they hold state.
 
 The strip lives in `PageShell`'s **`aside`**, not at the top of the content. From
@@ -568,7 +569,7 @@ be. `canRun` on the buttons is still asked of the trip's traveller list, since
 anyone on it may run it.
 
 `SlideRow` is that row, and it is a **grid with `subgrid` rows, not a flex
-row**: each box's five parts (faces, purpose, location, evidence, buttons) are
+row**: each box's five parts (map, day and purpose, evidence, faces, buttons) are
 tracks the whole row shares, so the same part sits at the same height in
 every box — a flex row only matched their outer edges, and a two-line address
 put one box's buttons halfway down and the next box's at the bottom. Each

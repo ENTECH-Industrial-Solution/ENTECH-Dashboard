@@ -620,6 +620,7 @@ export function CustomerMap({
               ? { latitude: initialPin.latitude, longitude: initialPin.longitude }
               : null
           }
+          clusterLabel={t("customers.cluster")}
           onSelect={handleSelect}
           onPlace={handlePlace}
           onDragEnd={handleDragEnd}

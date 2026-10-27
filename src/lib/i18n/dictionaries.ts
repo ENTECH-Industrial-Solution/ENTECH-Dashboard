@@ -199,7 +199,8 @@ export const dictionary = {
   "dashboard.staleNone": { th: "ไม่มีงานค้างนาน", en: "Nothing has stalled" },
   "dashboard.staleDays": { th: "เงียบมา", en: "Quiet for" },
   "dashboard.leads": { th: "ลีดลูกค้าตามสถานะ", en: "Leads by status" },
-  "dashboard.leadsAll": { th: "ทั้งหมด", en: "All" },
+  "dashboard.leadsAll": { th: "ดูทั้งหมด", en: "See all" },
+  "dashboard.leadsTotal": { th: "ลีดทั้งหมด", en: "leads in total" },
   "dashboard.personTasks": { th: "งานของพนักงานคนนี้", en: "This employee's work" },
 
   "trips.title": { th: "ตารางออกนอกสถานที่", en: "Field trip schedule" },
@@ -709,6 +710,10 @@ export const dictionary = {
   "customers.zoomIn": { th: "ขยาย", en: "Zoom in" },
   "customers.zoomOut": { th: "ย่อ", en: "Zoom out" },
   "customers.locateAll": { th: "ดูหมุดทั้งหมด", en: "Fit all pins" },
+  "customers.cluster": {
+    th: "หมุดในบริเวณนี้ — คลิกเพื่อซูมเข้า",
+    en: "pins in this area — click to zoom in",
+  },
 
   "settings.customerMap": { th: "เปิดใช้งานแผนที่ลูกค้า", en: "Enable the customer map" },
   "settings.customerMapHint": {
