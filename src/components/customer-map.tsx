@@ -760,7 +760,7 @@ export function CustomerMap({
           >
             {searching && (
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                {t("customers.searchingPlace")}
+                <span className="text-shimmer">{t("customers.searchingPlace")}</span>
               </p>
             )}
 

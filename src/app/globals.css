@@ -237,6 +237,79 @@ body {
   line-height: 1.5;
 }
 
+/* Text that is waiting on something — "กำลังบันทึก…", "กำลังค้นหาสถานที่…"
+   — with a band of light running across it. Adapted from Text Shimmer in
+   motion-primitives by ibelick (MIT), as CSS rather than a motion component:
+   it is one background moving forever, which needs no JavaScript.
+
+   It is drawn in the text's own colour, so the same class works on a blue
+   button and on muted text. That is why the glyphs are cleared with
+   `-webkit-text-fill-color` and not `color: transparent` — the latter would
+   make `currentColor` transparent too, and the gradient with it. */
+.text-shimmer {
+  background-image:
+    linear-gradient(90deg, transparent 40%, currentColor 50%, transparent 60%),
+    linear-gradient(
+      color-mix(in oklab, currentColor 55%, transparent),
+      color-mix(in oklab, currentColor 55%, transparent)
+    );
+  background-size: 250% 100%, auto;
+  background-repeat: no-repeat, padding-box;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: text-shimmer 1.6s linear infinite;
+}
+@keyframes text-shimmer {
+  from {
+    background-position: 100% center, 0 0;
+  }
+  to {
+    background-position: 0% center, 0 0;
+  }
+}
+/* Stopped, the band would sit off one end and leave the text at half ink. */
+@media (prefers-reduced-motion: reduce) {
+  .text-shimmer {
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
+/* `EdgeBlur` in slide-row.tsx: the soft edge of a rail with more beyond it.
+   Fades rather than snapping when the rail reaches its end — and the fade is
+   on each layer, never on `.edge-blur` itself: a parent below full opacity
+   becomes the layers' backdrop root, leaving them nothing behind to blur. */
+.edge-blur {
+  position: absolute;
+  inset-block: 0;
+  width: 2.5rem;
+  pointer-events: none;
+}
+.edge-blur > span {
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.edge-blur[data-shown="true"] > span {
+  opacity: 1;
+}
+
+/* The header links' two pills (`AppNav`): the current page's, and the one
+   that follows the mouse. The hover pill fades rather than vanishing when the
+   pointer leaves the bar, and re-enters from where it last was. */
+.nav-pill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 0.375rem;
+  pointer-events: none;
+  transition: translate var(--dur-base) var(--ease-out),
+    width var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+}
+.nav-pill[data-shown="false"] {
+  opacity: 0;
+}
+
 /* The chosen-option pill of `Segmented` in ui.tsx. Positioned by `translate`
    from measured offsets; only a change animates, since it mounts in place. */
 .segmented-pill {
@@ -440,6 +513,46 @@ body {
 .slide-rail {
   grid-auto-flow: column;
   grid-auto-columns: minmax(min(100%, clamp(17.5rem, 85%, 20rem)), 1fr);
+  /* The content fades out under `EdgeBlur` where there is more beyond it.
+     Blur alone left the clipped card's border standing as a hard line at the
+     rail's edge — nothing past the clip is drawn, so there is nothing there to
+     blur. Fading it to transparent dissolves the cut into the panel. Each
+     fade is a registered length, so it eases in and out as the rail reaches
+     its ends; `SlideRow` sets `data-back` / `data-forward`. */
+  --fade-back: 0px;
+  --fade-forward: 0px;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade-back),
+    #000 calc(100% - var(--fade-forward)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade-back),
+    #000 calc(100% - var(--fade-forward)),
+    transparent
+  );
+  transition: --fade-back var(--dur-base) var(--ease-out),
+    --fade-forward var(--dur-base) var(--ease-out);
+}
+.slide-rail[data-back="true"] {
+  --fade-back: 2.5rem;
+}
+.slide-rail[data-forward="true"] {
+  --fade-forward: 2.5rem;
+}
+@property --fade-back {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --fade-forward {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
 }
 .slide-card {
   scroll-snap-align: start;

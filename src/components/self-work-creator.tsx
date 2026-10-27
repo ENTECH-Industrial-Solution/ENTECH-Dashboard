@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 
-import { Reveal } from "@/components/motion";
+import { Reveal, SwapPanel } from "@/components/motion";
 import { Alert, Segmented } from "@/components/ui";
 import { TaskForm, type AssigneeOption } from "@/components/task-form";
 import { TripForm, type TripPinOption } from "@/components/trip-form";
@@ -98,36 +98,38 @@ export function SelfWorkCreator({
         </div>
       )}
 
-      {kind === "trip" ? (
-        <TripForm
-          action={tripAction}
-          errors={tripErrors}
-          formError={
-            tripState.status === "error" && !tripState.fieldErrors
-              ? tripState.message
-              : undefined
-          }
-          people={[self]}
-          lockedTravellers={[self]}
-          pins={pins}
-          submitLabel={t("common.create")}
-          onCancel={() => setOpen(false)}
-        />
-      ) : (
-        <TaskForm
-          action={taskAction}
-          errors={taskErrors}
-          formError={
-            taskState.status === "error" && !taskState.fieldErrors
-              ? taskState.message
-              : undefined
-          }
-          assignees={[self]}
-          lockedAssignees={[self]}
-          submitLabel={t("common.create")}
-          onCancel={() => setOpen(false)}
-        />
-      )}
+      <SwapPanel id={kind} direction={kind === "trip" ? 1 : -1}>
+        {kind === "trip" ? (
+          <TripForm
+            action={tripAction}
+            errors={tripErrors}
+            formError={
+              tripState.status === "error" && !tripState.fieldErrors
+                ? tripState.message
+                : undefined
+            }
+            people={[self]}
+            lockedTravellers={[self]}
+            pins={pins}
+            submitLabel={t("common.create")}
+            onCancel={() => setOpen(false)}
+          />
+        ) : (
+          <TaskForm
+            action={taskAction}
+            errors={taskErrors}
+            formError={
+              taskState.status === "error" && !taskState.fieldErrors
+                ? taskState.message
+                : undefined
+            }
+            assignees={[self]}
+            lockedAssignees={[self]}
+            submitLabel={t("common.create")}
+            onCancel={() => setOpen(false)}
+          />
+        )}
+      </SwapPanel>
     </Reveal>
   );
 }
