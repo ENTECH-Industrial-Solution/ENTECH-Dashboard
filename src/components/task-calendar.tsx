@@ -697,7 +697,7 @@ export function TaskCalendar({
                   const tone = TRIP_TONE[trip.state];
 
                   return (
-                    <StickyNote key={trip.id} index={index}>
+                    <StickyNote key={trip.id} id={trip.id} index={index}>
                       <span
                         className="inline-flex items-center gap-1 text-xs"
                         style={{ color: tone.color }}
@@ -731,6 +731,7 @@ export function TaskCalendar({
                 {selectedTasks.map((task, index) => (
                   <StickyNote
                     key={task.id}
+                    id={task.id}
                     index={selectedTrips.length + index}
                     lifted={moving?.id === task.id}
                     drag={
@@ -887,6 +888,34 @@ function DayHeading({
   );
 }
 
+/** What a note can be made of and put up with; `.sticky-note[data-*]` draws each. */
+const PAPERS = ["yellow", "blue", "pink", "green", "white"] as const;
+const PINS = ["red", "blue", "yellow", "green", "white"] as const;
+const SHEETS = ["flat", "fold", "torn"] as const;
+const FIXES = ["pushpin", "tack", "tape"] as const;
+
+/**
+ * How one note hangs: its paper, its fastener and its angle. Random-looking,
+ * but hashed from the id rather than drawn from `Math.random()`, so the server
+ * and the browser agree and a note looks the same every time it is opened.
+ */
+function noteLook(id: string, index: number) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  h >>>= 0;
+  return {
+    "data-paper": PAPERS[h % PAPERS.length],
+    "data-pin": PINS[(h >>> 4) % PINS.length],
+    "data-sheet": SHEETS[(h >>> 8) % SHEETS.length],
+    "data-fix": FIXES[(h >>> 12) % FIXES.length],
+    style: {
+      "--i": index,
+      "--tilt": `${((h >>> 16) % 41) / 10 - 2}deg`,
+      "--pin-x": `${35 + ((h >>> 22) % 31)}%`,
+    } as React.CSSProperties,
+  };
+}
+
 /** How long a finger holds still on a note before it comes off the board. */
 const HOLD_MS = 350;
 /** How far it may wander during the hold before it is a scroll instead. */
@@ -914,11 +943,14 @@ function dayUnder(x: number, y: number): string | null {
  * rather than tracked by the cells, since the finger is captured by the note.
  */
 function StickyNote({
+  id,
   index,
   lifted = false,
   drag,
   children,
 }: {
+  /** Seeds the note's look. */
+  id: string;
   index: number;
   lifted?: boolean;
   drag?: {
@@ -931,6 +963,13 @@ function StickyNote({
   children: ReactNode;
 }) {
   const note = useRef<HTMLDivElement>(null);
+  const look = noteLook(id, index);
+  const fastener =
+    look["data-fix"] === "tape" ? (
+      <span className="note-tape" aria-hidden />
+    ) : (
+      <Pushpin tack={look["data-fix"] === "tack"} />
+    );
   const [ghost, setGhost] = useState<{ x: number; y: number; w: number; h: number } | null>(
     null,
   );
@@ -1020,7 +1059,7 @@ function StickyNote({
       <div
         ref={note}
         className="sticky-note slide-card"
-        style={{ "--i": index, "--tilt": `${index % 2 ? 0.9 : -1.1}deg` } as React.CSSProperties}
+        {...look}
         data-lifted={lifted || undefined}
         draggable={drag ? true : undefined}
         onDragStart={
@@ -1041,7 +1080,7 @@ function StickyNote({
         onPointerCancel={release}
         onContextMenu={drag ? (event) => { if (hold.current) event.preventDefault(); } : undefined}
       >
-        <Pushpin />
+        {fastener}
         {children}
       </div>
 
@@ -1049,10 +1088,11 @@ function StickyNote({
         createPortal(
           <div
             className="sticky-note sticky-ghost"
-            style={{ left: ghost.x, top: ghost.y, width: ghost.w, height: ghost.h }}
+            {...look}
+            style={{ ...look.style, left: ghost.x, top: ghost.y, width: ghost.w, height: ghost.h }}
             aria-hidden
           >
-            <Pushpin />
+            {fastener}
             {children}
           </div>,
           document.body,
@@ -1139,16 +1179,26 @@ function MoveIcon() {
 }
 
 /** The pin the selected day and its note both wear; `.day-pin` places it. */
-function Pushpin() {
+function Pushpin({ tack = false }: { tack?: boolean }) {
   return (
     <span className="day-pin" aria-hidden>
       <svg viewBox="0 0 24 24" fill="none">
-        {/* needle */}
-        <path d="M12 13v9" stroke="oklch(0.45 0.01 260)" strokeWidth="1.6" strokeLinecap="round" />
-        {/* collar and head */}
-        <path d="M8 13h8l-1.2-3H9.2L8 13Z" fill="currentColor" opacity="0.85" />
-        <circle cx="12" cy="6.5" r="4.5" fill="currentColor" />
-        <circle cx="10.5" cy="5" r="1.2" fill="oklch(1 0 0 / 0.55)" />
+        {tack ? (
+          // A round-headed tack seen face on: all head, no needle showing.
+          <>
+            <circle cx="12" cy="9" r="5.5" fill="currentColor" />
+            <circle cx="10" cy="7" r="1.6" fill="oklch(1 0 0 / 0.6)" />
+          </>
+        ) : (
+          <>
+            {/* needle */}
+            <path d="M12 13v9" stroke="oklch(0.45 0.01 260)" strokeWidth="1.6" strokeLinecap="round" />
+            {/* collar and head */}
+            <path d="M8 13h8l-1.2-3H9.2L8 13Z" fill="currentColor" opacity="0.85" />
+            <circle cx="12" cy="6.5" r="4.5" fill="currentColor" />
+            <circle cx="10.5" cy="5" r="1.2" fill="oklch(1 0 0 / 0.55)" />
+          </>
+        )}
       </svg>
     </span>
   );

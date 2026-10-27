@@ -97,12 +97,13 @@ export function dayCount(startIso: string, endIso: string): number {
 }
 
 /**
- * Renders the location block shared by the trip card and the dashboard panel.
+ * Renders the trip card's location block. The dashboard panel draws its own
+ * (TripMapHeader).
  *
  * The mini map sits beside the details rather than under them, and its size is
- * a container query, not a viewport one: the same block is a third-width panel
- * on the dashboard and a full-width card on the admin page, and only the block
- * itself knows which. Below 224px there is no "beside" left, so it stacks.
+ * a container query, not a viewport one: the card is half-width or full-width
+ * on the admin page, and only the block itself knows which. Below 224px there
+ * is no "beside" left, so it stacks.
  */
 export function TripLocation({ trip }: { trip: FieldTripRow }) {
   const t = useTranslations();
@@ -174,6 +175,74 @@ export function TripLocation({ trip }: { trip: FieldTripRow }) {
           />
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The location as the head of an off-site box: the map across the top, the
+ * place named on it.
+ *
+ * The panel's boxes are a phone's width, where TripLocation's map-beside-text
+ * left both halves cramped. Here the map is the header and the name rides on
+ * it, top-start, because Google prints its attribution along the foot and the
+ * expand cue sits top-end. The label ignores the pointer, so the whole picture
+ * stays one button that opens the full map — whose dialog carries the Google
+ * link, which is why this repeats only the link to our own customer map.
+ */
+export function TripMapHeader({ trip }: { trip: FieldTripRow }) {
+  const t = useTranslations();
+  const settings = useSettings();
+
+  const customerLink = trip.pin && (
+    <Link
+      href={`/customers?pin=${trip.pin.id}`}
+      className="mt-1.5 inline-flex items-center gap-1 text-xs underline"
+      style={{ color: "var(--brand)" }}
+    >
+      <PinIcon />
+      {t("trips.openCustomerPin")}
+      <LinkPending />
+    </Link>
+  );
+
+  // Switched off, the map gives way to the plain line it would have carried.
+  if (!settings["fieldTrip.showMap"]) {
+    return (
+      <div className="flex flex-col items-start text-sm">
+        <a
+          href={trip.mapHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-start gap-1 font-medium underline"
+          style={{ color: "var(--brand)" }}
+        >
+          <PinIcon />
+          {trip.locationName}
+        </a>
+        {customerLink}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="relative">
+        <MiniMap
+          src={trip.mapEmbedSrc}
+          href={trip.mapHref}
+          title={trip.locationName}
+          subtitle={trip.address}
+          className="h-28 w-full"
+        />
+        <span
+          className="pointer-events-none absolute start-2 top-2 max-w-[calc(100%-3rem)] truncate rounded-md px-2 py-1 text-xs font-medium shadow-sm"
+          style={{ background: "var(--surface)", color: "var(--text)" }}
+        >
+          {trip.locationName}
+        </span>
+      </div>
+      {customerLink}
     </div>
   );
 }

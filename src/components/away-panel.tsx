@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 
 import { Avatar } from "@/components/employee-frame";
 import { SlideRow } from "@/components/slide-row";
-import { TripActions, TripEvidence, TripLocation } from "@/components/trip-card";
+import { TripActions, TripEvidence, TripMapHeader } from "@/components/trip-card";
 import type { SessionUser } from "@/lib/auth/session";
 import { canRunFieldTrip } from "@/lib/auth/rbac";
 import { bangkokDayKey, todayKey, tripHours } from "@/lib/calendar";
@@ -142,14 +142,25 @@ export async function AwayPanel({
 const MAX_FACES = 4;
 
 /**
- * The parts of a box, top to bottom, as the rows of the rail's grid. Every
- * part places itself on its own row (`row-start-N`) so the five sit at the
- * same five heights in every box on the row — a part that renders nothing
- * (a trip with no evidence yet) leaves its row empty rather than pulling
- * the buttons up into it. Spacing is each part's own `pt-3`, not the grid's
- * row gap, for the same reason: an empty row must take no room at all.
+ * The parts of a box, top to bottom, as the rows of the rail's grid: map, day
+ * and purpose, evidence, people, buttons. Every part places itself on its own
+ * row (`row-start-N`) so the five sit at the same five heights in every box on
+ * the row — a part that renders nothing (a trip with no evidence yet) leaves
+ * its row empty rather than pulling the buttons up into it. Spacing is each
+ * part's own `pt-3`, not the grid's row gap, for the same reason: an empty row
+ * must take no room at all.
  */
 const BOX_ROWS = 5;
+
+/** The date block's two lines, on Bangkok's calendar like every date here. */
+function dayParts(date: Date, locale: Awaited<ReturnType<typeof getLocale>>) {
+  const part = (options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat(locale === "th" ? "th-TH" : "en-GB", {
+      ...options,
+      timeZone: "Asia/Bangkok",
+    }).format(date);
+  return { day: part({ day: "numeric" }), month: part({ month: "short" }) };
+}
 
 /**
  * One box per trip, in the order the trips arrive — sorted by start date, so
@@ -201,6 +212,7 @@ async function Group({
         const row = serialiseTrip(trip, locale);
         const faces = trip.travellers.slice(0, MAX_FACES);
         const more = trip.travellers.length - faces.length;
+        const { day, month } = dayParts(trip.startDate, locale);
 
         return (
           /* `slide-card` is the width rule: 85% of the row so the next trip
@@ -225,7 +237,47 @@ async function Group({
               } as CSSProperties
             }
           >
-            <header className="row-start-1 flex items-center gap-3">
+            <div className="row-start-1">
+              <TripMapHeader trip={row} />
+            </div>
+
+            {/* The day as a block, so "which day" reads before anything else;
+                the line beside it carries only what the block cannot. */}
+            <div className="row-start-2 flex items-stretch gap-3 pt-3">
+              <div
+                className="flex w-12 shrink-0 flex-col items-center justify-center rounded-lg py-1.5 leading-tight"
+                style={{ background: "var(--brand-soft)", color: "var(--brand)" }}
+              >
+                <span className="text-lg font-semibold">{day}</span>
+                <span className="text-xs">{month}</span>
+              </div>
+              {/* Stretched to the block's height and centred in it, so the two
+                  read as one row however many lines the purpose takes. */}
+              <div className="flex min-w-0 flex-1 flex-col justify-center">
+                <div className="text-sm font-medium leading-snug break-words">
+                  {trip.purpose}
+                </div>
+                <div className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                  {bangkokDayKey(trip.startDate) !== bangkokDayKey(trip.endDate) &&
+                    `${t("trips.untilDate")} ${formatDate(trip.endDate, locale)} · `}
+                  {`${tripHours(trip).start}–${tripHours(trip).end}`}
+                </div>
+              </div>
+            </div>
+
+            {/* Renders nothing until the trip is closed out, so the row is a
+                wrapper that always exists and takes no height when empty: the
+                spacing lives on the content, not on the wrapper. */}
+            <div className="row-start-3 [&>*]:mt-3">
+              <TripEvidence trip={row} />
+            </div>
+
+            {/* The dashed line is the ticket's tear: what the trip is above
+                it, who is on it below. */}
+            <header
+              className="row-start-4 mt-3 flex items-center gap-3 border-t border-dashed pt-3"
+              style={{ borderColor: "var(--border)" }}
+            >
               {/* The faces overlap so four of them take the room of two and a
                   half; each carries a ring in the box's colour so the overlap
                   reads as a stack rather than a smear. */}
@@ -270,29 +322,6 @@ async function Group({
                 </div>
               </div>
             </header>
-
-            <div className="row-start-2 pt-3">
-              <div className="text-sm font-medium leading-snug break-words">
-                {trip.purpose}
-              </div>
-              <div className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                {formatDate(trip.startDate, locale)}
-                {bangkokDayKey(trip.startDate) !== bangkokDayKey(trip.endDate) &&
-                  ` ${t("trips.untilDate")} ${formatDate(trip.endDate, locale)}`}
-                {` · ${tripHours(trip).start}–${tripHours(trip).end}`}
-              </div>
-            </div>
-
-            {/* These two render nothing on some trips, so their rows are
-                wrappers that always exist and take no height when empty:
-                the `pt-3` lives on the content, not on the wrapper. */}
-            <div className="row-start-3 [&>*]:mt-3">
-              <TripLocation trip={row} />
-            </div>
-
-            <div className="row-start-4 [&>*]:mt-3">
-              <TripEvidence trip={row} />
-            </div>
 
             {/* Decided here, on the server, from the session — the buttons are
                 a reflection of the rule, never the thing enforcing it. Asked of

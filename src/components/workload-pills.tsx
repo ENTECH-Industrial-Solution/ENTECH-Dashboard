@@ -28,41 +28,66 @@ export type WorkloadTaskRow = {
 export type WorkloadPillRow = { id: string; name: string; value: number };
 
 /**
- * The per-person capsules under a summary number, each one openable.
+ * A segment's colour: the tone itself for the largest share, then paler steps
+ * of it. Rows arrive sorted largest first, so the shade also says the rank.
+ */
+function shade(color: string, index: number): string {
+  if (index === 0) return color;
+  return `color-mix(in oklab, ${color} ${Math.max(30, 100 - index * 20)}%, var(--surface-muted))`;
+}
+
+/**
+ * The breakdown under a summary number: one bar split by person, and a legend
+ * under it whose entries open.
  *
- * A capsule answers "who is carrying the most"; opening it answers "carrying
- * *what*" — the question people were clicking through to someone's page to ask.
- * It expands in place rather than opening a dialog: the answer is a few lines
- * of context for the number directly above it, and a dialog would make it feel
- * like a destination.
+ * The bar answers "who is carrying the most" at a glance; opening an entry
+ * answers "carrying *what*" — the question people were clicking through to
+ * someone's page to ask. It expands in place rather than opening a dialog: the
+ * answer is a few lines of context for the number directly above it, and a
+ * dialog would make it feel like a destination.
  *
- * The list is fetched when a capsule is opened, not with the page. The strip
- * carries up to twelve capsules and almost nobody opens more than one, so
+ * The bar carries everyone; the legend names the first `limit` and counts the
+ * rest, so the tile stays the same few lines however many people are in view.
+ *
+ * The list is fetched when an entry is opened, not with the page. The strip
+ * carries up to twelve entries and almost nobody opens more than one, so
  * loading every list up front would put a round trip and the whole company's
  * task rows onto a page that currently makes three. Each answer is kept, so
- * closing and reopening the same capsule costs nothing.
+ * closing and reopening the same entry costs nothing.
  *
- * Only the first few tasks are listed — the capsule already states the total,
+ * Only the first few tasks are listed — the entry already states the total,
  * so the list says how many it left out rather than growing without bound.
  */
-export function WorkloadPills({
+export function WorkloadShare({
   rows,
   metric,
   color,
+  limit,
+  morePeople,
   moreLabel,
 }: {
   rows: WorkloadPillRow[];
   metric: "active" | "overdue" | "completed";
   color: string;
+  limit: number;
+  morePeople: string;
   moreLabel: string;
 }) {
   const t = useTranslations();
   const [openId, setOpenId] = useState<string | null>(null);
+  // What the panel shows. Kept after closing, so the list stays put while the
+  // panel collapses instead of emptying first.
+  const [shownId, setShownId] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [tasksBy, setTasksBy] = useState<Record<string, WorkloadTaskRow[]>>({});
   const [errorBy, setErrorBy] = useState<Record<string, string>>({});
 
-  const max = rows[0]?.value ?? 0;
+  const named = rows.slice(0, limit);
+  const unnamed = rows.length - named.length;
+  const panelId = `workload-${metric}`;
+  const shown = rows.find((row) => row.id === shownId);
+  const tasks = shownId ? tasksBy[shownId] : undefined;
+  const error = shownId ? errorBy[shownId] : undefined;
 
   const toggle = async (assigneeId: string) => {
     if (openId === assigneeId) {
@@ -71,6 +96,7 @@ export function WorkloadPills({
     }
 
     setOpenId(assigneeId);
+    setShownId(assigneeId);
     if (tasksBy[assigneeId]) return;
 
     setLoadingId(assigneeId);
@@ -86,64 +112,66 @@ export function WorkloadPills({
   };
 
   return (
-    <div className="space-y-1.5">
-      {rows.map((row) => {
-        const open = openId === row.id;
-        const tasks = tasksBy[row.id];
-        const error = errorBy[row.id];
-        const panelId = `workload-${metric}-${row.id}`;
+    <div>
+      {/* The legend says everything the bar does, in words, so the bar is
+          decoration to a screen reader. */}
+      <div className="share-bar" data-open={openId ? "" : undefined} aria-hidden>
+        {rows.map((row, index) => (
+          <span
+            key={row.id}
+            data-open={row.id === openId ? "" : undefined}
+            style={{ flexGrow: row.value, background: shade(color, index) }}
+          />
+        ))}
+      </div>
 
-        return (
-          <div key={row.id}>
-            <button
-              type="button"
-              className="pill"
-              aria-expanded={open}
-              aria-controls={panelId}
-              onClick={() => void toggle(row.id)}
-            >
-              <span
-                className="pill-fill"
-                style={{
-                  width: `${max === 0 ? 0 : Math.round((row.value / max) * 100)}%`,
-                  background: `color-mix(in oklab, ${color} 32%, var(--surface-muted))`,
-                }}
-              />
-              <span className="pill-label">{row.name}</span>
-              {/* Plain text, not the tone: the number sits on the fill whenever
-                  a bar is near full, and tinted text on a tinted fill measured
-                  below 4.5:1. The tone is already carried by the fill itself. */}
-              <span className="pill-value inline-flex items-center gap-1">
-                {row.value}
-                <Chevron open={open} />
-              </span>
-            </button>
+      {/* Pulled out by the entries' own padding, so their swatches line up
+          with the bar's edge rather than sitting a step inside it. */}
+      <div className="-mx-1.5 mt-2 flex flex-wrap items-center gap-x-0.5 gap-y-0.5">
+        {named.map((row, index) => (
+          <button
+            key={row.id}
+            type="button"
+            className="share-key"
+            aria-expanded={openId === row.id}
+            aria-controls={panelId}
+            onClick={() => void toggle(row.id)}
+          >
+            <i style={{ background: shade(color, index) }} />
+            <span>{row.name}</span>
+            <b>{row.value}</b>
+            <Chevron open={openId === row.id} />
+          </button>
+        ))}
+        {unnamed > 0 && (
+          <span className="px-1.5 text-xs" style={{ color: "var(--text-muted)" }}>
+            +{unnamed} {morePeople}
+          </span>
+        )}
+      </div>
 
-            <Collapse open={open} id={panelId}>
-              <div className="mt-1.5" aria-live="polite">
-                {error ? (
-                  <p className="px-2 text-xs" style={{ color: "var(--danger)" }}>
-                    {error}
-                  </p>
-                ) : !tasks ? (
-                  <Skeleton label={t("common.loading")} />
-                ) : tasks.length === 0 ? (
-                  <p className="px-2 text-xs" style={{ color: "var(--text-muted)" }}>
-                    {t("tasks.empty")}
-                  </p>
-                ) : (
-                  <TaskLines
-                    tasks={tasks}
-                    assigneeId={row.id}
-                    hidden={row.value - tasks.length}
-                    moreLabel={moreLabel}
-                  />
-                )}
-              </div>
-            </Collapse>
-          </div>
-        );
-      })}
+      <Collapse open={openId !== null} id={panelId}>
+        <div className="mt-1.5" aria-live="polite">
+          {!shown ? null : error ? (
+            <p className="px-2 text-xs" style={{ color: "var(--danger)" }}>
+              {error}
+            </p>
+          ) : !tasks ? (
+            <Skeleton label={t("common.loading")} />
+          ) : tasks.length === 0 ? (
+            <p className="px-2 text-xs" style={{ color: "var(--text-muted)" }}>
+              {t("tasks.empty")}
+            </p>
+          ) : (
+            <TaskLines
+              tasks={tasks}
+              assigneeId={shown.id}
+              hidden={shown.value - tasks.length}
+              moreLabel={moreLabel}
+            />
+          )}
+        </div>
+      </Collapse>
 
       {/* Referenced so a stale spinner can never outlive its request. */}
       <span className="sr-only">{loadingId ? t("common.loading") : ""}</span>
