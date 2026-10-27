@@ -1543,3 +1543,18 @@ mean the OS setting is honoured without any component checking it; a
 transform-driven entrance becomes an instant fade. Keep an opacity in every
 variant for that reason — a reduced-motion viewer should still see something
 appear rather than snap.
+
+The vocabulary is fade, a few pixels of travel, and a **2px blur that clears**
+— and every blur ends on `filter: none`, never `blur(0px)`. Any filter value
+makes the element a containing block for `position: fixed` descendants, so a
+card left wearing one traps every overlay drawn inside it. **Exits run on the
+fast clock**, about 60% of the entrance. `Swap` is the one way a value changes
+in place (a status badge, a submit button's label): keyed by the value, both
+in one grid cell so the row does not jump.
+
+The header's loading bar is `NavProgress`, one per link, because
+`useLinkStatus` only answers inside the `<Link>` it describes; all of them
+draw at the sticky header's bottom edge. That is also why the mobile menu
+now closes **when the page arrives** rather than on the tap — a link that
+unmounted on click would take its status with it, and the bar would never
+show on the screen that waits longest.

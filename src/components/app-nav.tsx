@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -82,6 +82,16 @@ export function AppNav({ user }: { user: SessionUser }) {
   const settings = useSettings();
   const [open, setOpen] = useState(false);
 
+  // The menu closes when the page it asked for arrives, not on the tap: a link
+  // that unmounted on click would take its `useLinkStatus` with it, and the
+  // loading bar would never show on the one screen that waits longest. Done
+  // during render, React's way of resetting state when a value changes.
+  const [openedOn, setOpenedOn] = useState(pathname);
+  if (openedOn !== pathname) {
+    setOpenedOn(pathname);
+    setOpen(false);
+  }
+
   // The link disappears with the switch, but hiding it is not what protects the
   // page — /customers calls the same guard itself. See SETTING_IMPACT.
   const base = user.role === "ADMIN" ? ADMIN_LINKS : EMPLOYEE_LINKS;
@@ -119,6 +129,7 @@ export function AppNav({ user }: { user: SessionUser }) {
         >
           <BrandWordmark className="h-[0.875em] w-auto shrink-0" />
           {t("app.product")}
+          <NavProgress />
         </Link>
 
         {/* `overflow-x-auto` is the release valve: a label longer than these
@@ -136,6 +147,7 @@ export function AppNav({ user }: { user: SessionUser }) {
               }
             >
               {t(link.key)}
+              <NavProgress />
             </Link>
           ))}
         </nav>
@@ -200,10 +212,12 @@ export function AppNav({ user }: { user: SessionUser }) {
                 <Link
                   key={link.href}
                   href={link.href}
-                  // Closed here rather than off the pathname: tapping the page
-                  // you are already on navigates nowhere, and a menu that
-                  // stayed open on that one tap would look stuck.
-                  onClick={() => setOpen(false)}
+                  // Every other tap closes it when the page arrives (above);
+                  // the page you are already on never arrives, so a tap on it
+                  // closes here or the menu would look stuck.
+                  onClick={() => {
+                    if (pathname === link.href) setOpen(false);
+                  }}
                   className="rounded-md px-3 py-2 text-sm transition-colors"
                   style={
                     isActive(link.href)
@@ -212,6 +226,7 @@ export function AppNav({ user }: { user: SessionUser }) {
                   }
                 >
                   {t(link.key)}
+                  <NavProgress />
                 </Link>
               ))}
             </nav>
@@ -231,6 +246,21 @@ export function AppNav({ user }: { user: SessionUser }) {
       </Collapse>
     </header>
   );
+}
+
+/**
+ * The bar along the header's bottom edge while a link's page is on its way —
+ * a round trip through the pooler is one to three seconds, and a header that
+ * does nothing for that long reads as a click that missed.
+ *
+ * One per link, because `useLinkStatus` only answers inside the `<Link>` it
+ * describes; only the pending one is ever visible. It is positioned against
+ * the sticky header, not the link, so every one of them draws in the same
+ * place. The look and the short grace delay live in `.nav-progress`.
+ */
+function NavProgress() {
+  const { pending } = useLinkStatus();
+  return <span aria-hidden className="nav-progress" data-pending={pending} />;
 }
 
 /** Three lines, or the cross that closes them. */

@@ -3,6 +3,7 @@
 import { useFormStatus } from "react-dom";
 import type { ReactNode } from "react";
 
+import { Swap } from "@/components/motion";
 import { useTranslations } from "@/lib/i18n/client";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
 
@@ -21,7 +22,9 @@ export function SubmitButton({
 
   return (
     <button type="submit" className={className} disabled={pending}>
-      {pending ? (pendingLabel ?? t("common.saving")) : children}
+      <Swap id={pending ? "pending" : "idle"}>
+        {pending ? (pendingLabel ?? t("common.saving")) : children}
+      </Swap>
     </button>
   );
 }
@@ -51,7 +54,7 @@ export function Alert({
   return (
     <div
       role={tone === "error" ? "alert" : "status"}
-      className="rounded-lg px-3 py-2 text-sm"
+      className="alert rounded-lg px-3 py-2 text-sm"
       style={styles}
     >
       {children}
@@ -69,9 +72,11 @@ const STATUS_TONE = {
 export function StatusBadge({ status }: { status: keyof typeof STATUS_TONE }) {
   const t = useTranslations();
   return (
-    <span className="badge" style={STATUS_TONE[status]}>
-      {t(`status.${status}` as TranslationKey)}
-    </span>
+    <Swap id={status}>
+      <span className="badge" style={STATUS_TONE[status]}>
+        {t(`status.${status}` as TranslationKey)}
+      </span>
+    </Swap>
   );
 }
 

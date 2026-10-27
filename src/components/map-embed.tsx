@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { DURATION, EASE_OUT, m } from "@/components/motion";
+import { AnimatePresence, DURATION, EASE_OUT, m } from "@/components/motion";
 import { useTranslations } from "@/lib/i18n/client";
 
 /**
@@ -131,15 +131,17 @@ export function MiniMap({
         </span>
       </button>
 
-      {open && (
-        <MapDialog
-          src={src}
-          href={href}
-          title={title}
-          subtitle={subtitle}
-          onClose={close}
-        />
-      )}
+      <AnimatePresence>
+        {open && (
+          <MapDialog
+            src={src}
+            href={href}
+            title={title}
+            subtitle={subtitle}
+            onClose={close}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }
@@ -186,9 +188,9 @@ function MapDialog({
     };
   }, [onClose]);
 
-  // The backdrop fades and the card rises into it. Entrance only: the dialog
-  // is unmounted by its parent the moment it closes, and holding it on screen
-  // for an exit would need an AnimatePresence at every call site.
+  // The backdrop fades and the card scales up into it. Closing is the same
+  // move backwards on a shorter clock, held on screen by the AnimatePresence
+  // around the one call site.
   return createPortal(
     <m.div
       role="dialog"
@@ -198,6 +200,7 @@ function MapDialog({
       style={{ background: "color-mix(in oklab, black 62%, transparent)" }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
+      exit={{ opacity: 0, transition: { duration: DURATION.fast } }}
       transition={{ duration: DURATION.fast }}
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -206,9 +209,10 @@ function MapDialog({
       <m.div
         className="card flex w-full max-w-4xl flex-col overflow-hidden"
         style={{ boxShadow: "0 24px 60px oklch(0 0 0 / 0.35)" }}
-        initial={{ opacity: 0, scale: 0.96, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: DURATION.base, ease: EASE_OUT }}
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.15, ease: EASE_OUT } }}
+        transition={{ duration: 0.25, ease: EASE_OUT }}
       >
         <header className="flex items-center gap-2 border-b px-3 py-2">
           <div className="min-w-0 flex-1">

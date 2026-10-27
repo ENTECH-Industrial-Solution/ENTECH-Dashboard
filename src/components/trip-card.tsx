@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { MiniMap } from "@/components/map-embed";
-import { Reveal } from "@/components/motion";
+import { Reveal, Swap } from "@/components/motion";
 import { VideoPlayer } from "@/components/video-embed";
 import { tripHours } from "@/lib/calendar";
 import { Alert, SubmitButton } from "@/components/ui";
@@ -81,9 +81,11 @@ export const TRIP_LABEL: Record<TripState, TranslationKey> = {
 export function TripStatusBadge({ state }: { state: TripState }) {
   const t = useTranslations();
   return (
-    <span className="badge shrink-0" style={TRIP_TONE[state]}>
-      {t(TRIP_LABEL[state])}
-    </span>
+    <Swap id={state} className="shrink-0">
+      <span className="badge" style={TRIP_TONE[state]}>
+        {t(TRIP_LABEL[state])}
+      </span>
+    </Swap>
   );
 }
 
