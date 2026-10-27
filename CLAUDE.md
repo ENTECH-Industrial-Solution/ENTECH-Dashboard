@@ -1568,6 +1568,17 @@ renders the chosen button with its own background, and the pill takes over
 once measured, so the row is right before hydration. The two switches that
 save through a server action, `LocaleSwitch` and `ThemeSwitch`, show the
 choice through `useOptimistic`, so it moves on the click rather than after
-the round trip. `ThemeSwitch` also writes `data-theme` itself inside
+the round trip. The header links reuse the same measuring hook,
+`useChildBox`, for a pill under the current page that slides when the route
+changes and a neutral one that follows the mouse — measured and moved by
+`translate`, never `layoutId`, which would cost motion's layout bundle.
+
+Four pieces are adapted from motion-primitives (MIT, credited where each
+lives), and only where they could be rebuilt on what is already here:
+`SwapPanel` (the task form giving way to the trip form), `.text-shimmer`
+(waiting text, pure CSS), `EdgeBlur` in `SlideRow` (the rail's edge going
+soft where there is more), and the nav's hover pill. Anything there that
+needs `layoutId` — morphing dialogs, sliding numbers — is a decision about
+`domMax`, not a copy-paste. `ThemeSwitch` also writes `data-theme` itself inside
 `startViewTransition`, so the palette cross-fades immediately and the cookie
 follows.

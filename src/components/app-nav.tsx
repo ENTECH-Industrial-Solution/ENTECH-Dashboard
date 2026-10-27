@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { BrandWordmark } from "@/components/brand";
 import { LocaleSwitch } from "@/components/locale-switch";
 import { LinkPending, NavProgressBar } from "@/components/nav-progress";
 import { ThemeSwitch } from "@/components/theme-switch";
+import { boxOf, useChildBox, type Box } from "@/components/ui";
 import { useTranslations } from "@/lib/i18n/client";
 import { Collapse } from "@/components/motion";
 import { useSettings } from "@/lib/settings/client";
@@ -103,6 +104,17 @@ export function AppNav({ user }: { user: SessionUser }) {
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
 
+  // The bar's two pills: the current page's, which slides when the route
+  // changes (the layout, and this header with it, survives navigation), and
+  // a neutral one that follows the mouse between links. Adapted from Animated
+  // Background in motion-primitives by ibelick (MIT) — measured and moved by
+  // `translate` like `Segmented`, rather than through `layoutId`, which would
+  // need motion's layout bundle for two rectangles.
+  const bar = useRef<HTMLElement>(null);
+  const current = useChildBox(bar, "[aria-current]", pathname);
+  const [hover, setHover] = useState<Box | null>(null);
+  const [hovering, setHovering] = useState(false);
+
   const roleLabel = user.role === "ADMIN" ? t("nav.admin") : t("nav.employee");
 
   // What a disclosure is expected to do. Bound while it is open only, so the
@@ -135,22 +147,65 @@ export function AppNav({ user }: { user: SessionUser }) {
 
         {/* `overflow-x-auto` is the release valve: a label longer than these
             leaves the row scrollable rather than pushing the bar apart. */}
-        <nav className="col-start-2 hidden items-center gap-1 overflow-x-auto xl:flex">
-          {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded-md px-2.5 py-1.5 text-sm whitespace-nowrap transition-colors"
-              style={
-                isActive(link.href)
-                  ? { background: "var(--brand-soft)", color: "var(--brand)" }
-                  : { color: "var(--text-muted)" }
-              }
-            >
-              {t(link.key)}
-              <LinkPending />
-            </Link>
-          ))}
+        <nav
+          ref={bar}
+          className="relative col-start-2 hidden items-center gap-1 overflow-x-auto xl:flex"
+          onMouseLeave={() => setHovering(false)}
+        >
+          {hover && (
+            <span
+              aria-hidden
+              className="nav-pill"
+              data-shown={hovering}
+              style={{
+                width: hover.w,
+                height: hover.h,
+                translate: `${hover.x}px ${hover.y}px`,
+                background: "var(--surface-muted)",
+              }}
+            />
+          )}
+          {current && (
+            <span
+              aria-hidden
+              className="nav-pill"
+              style={{
+                width: current.w,
+                height: current.h,
+                translate: `${current.x}px ${current.y}px`,
+                background: "var(--brand-soft)",
+              }}
+            />
+          )}
+          {links.map((link) => {
+            const active = isActive(link.href);
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                // "page" on the page itself, "true" on the section it is in —
+                // the dashboard link while one person's page is open.
+                aria-current={active ? (pathname === link.href ? "page" : "true") : undefined}
+                onMouseEnter={(event) => {
+                  setHover(boxOf(event.currentTarget));
+                  setHovering(true);
+                }}
+                className="relative rounded-md px-2.5 py-1.5 text-sm whitespace-nowrap transition-colors"
+                style={
+                  active
+                    ? {
+                        // The server draws it; the pill takes over once measured.
+                        background: current ? undefined : "var(--brand-soft)",
+                        color: "var(--brand)",
+                      }
+                    : { color: "var(--text-muted)" }
+                }
+              >
+                {t(link.key)}
+                <LinkPending />
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="col-start-3 flex items-center justify-end gap-3">

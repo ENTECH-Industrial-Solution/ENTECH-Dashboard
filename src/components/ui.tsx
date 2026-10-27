@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import { Swap } from "@/components/motion";
 import { useTranslations } from "@/lib/i18n/client";
@@ -23,10 +23,52 @@ export function SubmitButton({
   return (
     <button type="submit" className={className} disabled={pending}>
       <Swap id={pending ? "pending" : "idle"}>
-        {pending ? (pendingLabel ?? t("common.saving")) : children}
+        {pending ? (
+          <span className="text-shimmer">{pendingLabel ?? t("common.saving")}</span>
+        ) : (
+          children
+        )}
       </Swap>
     </button>
   );
+}
+
+/** Where an element sits inside its positioned parent. */
+export type Box = { x: number; y: number; w: number; h: number };
+
+export function boxOf(el: HTMLElement): Box {
+  return { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
+}
+
+/**
+ * Where the child of `container` matching `selector` sits, kept current as
+ * the container resizes — the measuring half of a pill that slides between
+ * options (`Segmented`, the header's links). A layout effect, so the pill
+ * lands in the same paint as whatever it replaces; `key` is whatever decides
+ * which child matches. A hidden container measures zero and is measured again
+ * the moment it is shown, since that is a resize.
+ */
+export function useChildBox(
+  container: RefObject<HTMLElement | null>,
+  selector: string,
+  key: unknown,
+): Box | null {
+  const [box, setBox] = useState<Box | null>(null);
+
+  useLayoutEffect(() => {
+    const el = container.current;
+    if (!el) return;
+    const measure = () => {
+      const child = el.querySelector<HTMLElement>(selector);
+      setBox(child ? boxOf(child) : null);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [container, selector, key]);
+
+  return box;
 }
 
 /**
@@ -55,26 +97,7 @@ export function Segmented<T extends string>({
   disabled?: boolean;
 }) {
   const group = useRef<HTMLDivElement>(null);
-  const [pill, setPill] = useState<{ x: number; y: number; w: number; h: number } | null>(
-    null,
-  );
-
-  // Layout effect, so the pill lands in the same paint the button lets go of
-  // its own background — a passive effect would show neither for a frame.
-  useLayoutEffect(() => {
-    const el = group.current;
-    if (!el) return;
-    const measure = () => {
-      const on = el.querySelector<HTMLElement>('[aria-pressed="true"]');
-      if (on) {
-        setPill({ x: on.offsetLeft, y: on.offsetTop, w: on.offsetWidth, h: on.offsetHeight });
-      }
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [value]);
+  const pill = useChildBox(group, '[aria-pressed="true"]', value);
 
   return (
     <div

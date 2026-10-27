@@ -7,6 +7,7 @@ import {
   domAnimation,
   m,
   useReducedMotion,
+  type Variants,
 } from "motion/react";
 import type { ReactNode } from "react";
 
@@ -163,6 +164,62 @@ export function Swap({
         </m.span>
       </AnimatePresence>
     </span>
+  );
+}
+
+const PANEL = {
+  enter: (direction: number) => ({ opacity: 0, x: 12 * direction, filter: "blur(2px)" }),
+  center: {
+    opacity: 1,
+    x: 0,
+    filter: "blur(0px)",
+    transitionEnd: { filter: "none" },
+    transition: { duration: DURATION.base, ease: EASE_OUT },
+  },
+  exit: (direction: number) => ({
+    opacity: 0,
+    x: -12 * direction,
+    filter: "blur(2px)",
+    transition: { duration: DURATION.fast, ease: EASE_OUT },
+  }),
+} satisfies Variants;
+
+/**
+ * A block that is replaced rather than changed — the task form giving way to
+ * the trip form under the switch above it. The new block comes in from the
+ * side its option sits on (`direction`: 1 from the right, -1 from the left)
+ * and the old one leaves the other way, on the fast clock. Adapted from
+ * Transition Panel in motion-primitives by ibelick (MIT).
+ *
+ * `popLayout` lifts the outgoing block out of flow the moment it starts to
+ * leave, so the box takes the new block's height at once rather than
+ * stacking both for the length of the exit. Server-rendered content gets no
+ * entrance (`initial={false}`).
+ */
+export function SwapPanel({
+  id,
+  direction,
+  children,
+}: {
+  id: string;
+  direction: 1 | -1;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative">
+      <AnimatePresence initial={false} mode="popLayout" custom={direction}>
+        <m.div
+          key={id}
+          custom={direction}
+          variants={PANEL}
+          initial="enter"
+          animate="center"
+          exit="exit"
+        >
+          {children}
+        </m.div>
+      </AnimatePresence>
+    </div>
   );
 }
 

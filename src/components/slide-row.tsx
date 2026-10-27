@@ -173,16 +173,60 @@ export function SlideRow({
         * Focusable, since arrow keys are the other way to move a row whose bar
         * is hidden.
         */}
-      <div
-        ref={rail}
-        tabIndex={0}
-        role="group"
-        aria-label={label}
-        className={`scroll-bare slide-rail grid snap-x snap-mandatory gap-x-3 overflow-x-auto ${padding}`}
-        style={{ gridTemplateRows: `repeat(${rows}, auto)`, gridAutoColumns: autoColumns }}
-      >
-        {children}
+      <div className="relative">
+        <div
+          ref={rail}
+          tabIndex={0}
+          role="group"
+          aria-label={label}
+          data-back={reach.back}
+          data-forward={reach.forward}
+          className={`scroll-bare slide-rail grid snap-x snap-mandatory gap-x-3 overflow-x-auto ${padding}`}
+          style={{ gridTemplateRows: `repeat(${rows}, auto)`, gridAutoColumns: autoColumns }}
+        >
+          {children}
+        </div>
+        <EdgeBlur side="left" shown={reach.back} />
+        <EdgeBlur side="right" shown={reach.forward} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * The rail's edge going soft where there is more beyond it — a third cue on
+ * top of the part-visible card and the arrows, and the one that says *which*
+ * way. Stacked layers, each blurring a little more behind a mask that moves a
+ * step further out, so the blur deepens towards the edge rather than starting
+ * at a line. Adapted from Progressive Blur in motion-primitives by ibelick
+ * (MIT). It ignores the pointer, so the card under it still takes a click.
+ */
+const BLUR_LAYERS = [0.5, 1, 2, 4];
+
+function EdgeBlur({ side, shown }: { side: "left" | "right"; shown: boolean }) {
+  const toward = side === "left" ? "to left" : "to right";
+  const step = 100 / BLUR_LAYERS.length;
+  return (
+    <div
+      aria-hidden
+      className={`edge-blur ${side === "left" ? "left-0" : "right-0"}`}
+      data-shown={shown}
+    >
+      {BLUR_LAYERS.map((blur, i) => {
+        const mask = `linear-gradient(${toward}, transparent ${i * step}%, black ${(i + 1) * step}%)`;
+        return (
+          <span
+            key={blur}
+            className="absolute inset-0"
+            style={{
+              backdropFilter: `blur(${blur}px)`,
+              WebkitBackdropFilter: `blur(${blur}px)`,
+              maskImage: mask,
+              WebkitMaskImage: mask,
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
