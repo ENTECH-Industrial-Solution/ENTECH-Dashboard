@@ -863,7 +863,7 @@ button.pill:hover {
 
 /*
  * One note on the board. `--tilt` is its resting angle and `--i` its place in
- * the row, so neighbours lean opposite ways and hang one after another. The
+ * the row, so the notes hang one after another. The
  * whole thing is `user-select: none` and callout-free because a finger holds
  * it to pick it up, and a long press must not open the title link's preview
  * or select the text instead.
@@ -871,6 +871,13 @@ button.pill:hover {
 .sticky-note {
   --tilt: -0.8deg;
   --i: 0;
+  --paper: oklch(0.95 0.085 100);
+  --pin: oklch(0.58 0.2 25);
+  /* Paper is paper in either theme. Every token is light-dark(), resolved
+     where it is used, so this one line keeps the text and badges inside
+     dark-on-light even when the page around the note is dark. */
+  color-scheme: light;
+  color: var(--text);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -878,16 +885,15 @@ button.pill:hover {
   min-height: 7.5rem;
   /* Room for the pin's head above the note: the rail clips at its own edge,
      and a pin hanging over that edge is a pin cut in half. */
-  margin-top: 0.6rem;
+  margin-top: 0.85rem;
   transform-origin: 50% 0;
   rotate: var(--tilt);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  background: var(--paper);
+  border-radius: 2px;
   padding: 1rem 0.875rem 0.75rem;
   box-shadow:
-    0 10px 24px -10px oklch(0 0 0 / 0.3),
-    0 1px 2px oklch(0 0 0 / 0.06);
+    0 8px 12px -6px oklch(0 0 0 / 0.4),
+    0 1px 2px oklch(0 0 0 / 0.18);
   animation: note-hang 0.7s var(--ease-out) both;
   animation-delay: calc(var(--i) * 70ms);
   user-select: none;
@@ -904,6 +910,83 @@ button.pill:hover {
 }
 .sticky-note[draggable="true"] {
   cursor: grab;
+}
+/* A stack of mixed pads, and a jar of mixed pins. Decoration only — what a
+   note is says itself in words on it. `noteLook()` picks one of each. */
+.sticky-note[data-paper="blue"] {
+  --paper: oklch(0.9 0.05 230);
+}
+.sticky-note[data-paper="pink"] {
+  --paper: oklch(0.9 0.05 5);
+}
+.sticky-note[data-paper="green"] {
+  --paper: oklch(0.92 0.07 140);
+}
+.sticky-note[data-paper="white"] {
+  --paper: oklch(0.99 0 0);
+}
+.sticky-note[data-pin="blue"] {
+  --pin: oklch(0.55 0.17 255);
+}
+.sticky-note[data-pin="yellow"] {
+  --pin: oklch(0.84 0.16 92);
+}
+.sticky-note[data-pin="green"] {
+  --pin: oklch(0.55 0.15 150);
+}
+.sticky-note[data-pin="white"] {
+  --pin: oklch(0.97 0 0);
+}
+/* Bigger than the day cell's pin: on a note it is the thing you notice. */
+.sticky-note .day-pin {
+  inset-inline-start: var(--pin-x, 50%);
+  inset-block-start: -1rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  color: var(--pin);
+}
+
+/* A corner folded over. The corner is cut out of the note's own background
+   rather than clipped, since a clip would also cut off the pin above it;
+   the flap is a square on that corner, half of it the paper's back. */
+.sticky-note[data-sheet="fold"] {
+  background: linear-gradient(-45deg, transparent 0.7rem, var(--paper) 0.7rem);
+}
+.sticky-note[data-sheet="fold"]::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-end: 0;
+  width: calc(0.7rem * 1.4142);
+  height: calc(0.7rem * 1.4142);
+  background: linear-gradient(
+    to top left,
+    transparent 50%,
+    color-mix(in oklch, var(--paper), black 12%) 50%
+  );
+  pointer-events: none;
+}
+/* Torn off a pad: a row of small teeth along the top edge. */
+.sticky-note[data-sheet="torn"] {
+  border-radius: 0;
+  background:
+    conic-gradient(from 135deg at 50% 0, var(--paper) 90deg, transparent 0) top / 0.5rem
+      0.25rem repeat-x,
+    linear-gradient(var(--paper), var(--paper)) bottom / 100% calc(100% - 0.25rem) no-repeat;
+}
+
+/* A strip of tape instead of a pin, leaning against the note's own tilt. */
+.note-tape {
+  position: absolute;
+  inset-inline-start: var(--pin-x, 50%);
+  inset-block-start: -0.55rem;
+  width: 3.75rem;
+  height: 1.2rem;
+  translate: -50% 0;
+  rotate: calc(var(--tilt) * -2.5);
+  background: oklch(0.92 0.035 85 / 0.8);
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.22);
+  pointer-events: none;
 }
 /* Off the board and in the hand: what is left behind fades. */
 .sticky-note[data-lifted] {
