@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { Swap } from "@/components/motion";
 import { useTranslations } from "@/lib/i18n/client";
@@ -26,6 +26,98 @@ export function SubmitButton({
         {pending ? (pendingLabel ?? t("common.saving")) : children}
       </Swap>
     </button>
+  );
+}
+
+/**
+ * A row of mutually exclusive buttons — the language, task-or-trip — with a
+ * pill that slides to the chosen one instead of the colour jumping across.
+ *
+ * The server renders the chosen button wearing its own background, so the row
+ * is right before hydration and without JavaScript. Once the pill has been
+ * measured it takes that background over; it mounts already in place, so only
+ * a *change* slides. A `ResizeObserver` re-measures when the labels change
+ * width — switching language is exactly that.
+ */
+export function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+  size = "md",
+  disabled = false,
+}: {
+  value: T;
+  options: readonly { value: T; label: ReactNode }[];
+  onChange: (value: T) => void;
+  label: string;
+  size?: "sm" | "md";
+  disabled?: boolean;
+}) {
+  const group = useRef<HTMLDivElement>(null);
+  const [pill, setPill] = useState<{ x: number; y: number; w: number; h: number } | null>(
+    null,
+  );
+
+  // Layout effect, so the pill lands in the same paint the button lets go of
+  // its own background — a passive effect would show neither for a frame.
+  useLayoutEffect(() => {
+    const el = group.current;
+    if (!el) return;
+    const measure = () => {
+      const on = el.querySelector<HTMLElement>('[aria-pressed="true"]');
+      if (on) {
+        setPill({ x: on.offsetLeft, y: on.offsetTop, w: on.offsetWidth, h: on.offsetHeight });
+      }
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [value]);
+
+  return (
+    <div
+      ref={group}
+      className="relative inline-flex rounded-lg border p-0.5"
+      role="group"
+      aria-label={label}
+    >
+      {pill && (
+        <span
+          aria-hidden
+          className="segmented-pill"
+          style={{ width: pill.w, height: pill.h, translate: `${pill.x}px ${pill.y}px` }}
+        />
+      )}
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            disabled={disabled}
+            onClick={() => {
+              if (!active) onChange(option.value);
+            }}
+            aria-pressed={active}
+            className={`relative rounded-md font-medium transition-colors ${
+              size === "sm" ? "px-2 py-1 text-xs" : "px-3 py-1.5 text-sm"
+            }`}
+            style={
+              active
+                ? {
+                    background: pill ? undefined : "var(--brand)",
+                    color: "var(--brand-contrast)",
+                  }
+                : { color: "var(--text-muted)" }
+            }
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

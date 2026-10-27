@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { LinkPending } from "@/components/nav-progress";
 import { PageShell } from "@/components/page-shell";
 import { EmptyState } from "@/components/ui";
 import { requireUser } from "@/lib/auth/rbac";
@@ -148,6 +149,7 @@ export default async function CustomerLeadsPage({
             </a>
             <Link href="/customers" className="btn btn-secondary">
               {t("customers.openMap")}
+              <LinkPending />
             </Link>
           </div>
           <p
@@ -308,6 +310,7 @@ export default async function CustomerLeadsPage({
                         href={`/customers?pin=${lead.pinId}`}
                       >
                         {lead.place ?? t("customers.noPlaceName")}
+                        <LinkPending />
                       </Link>
                     </td>
                     <td className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -471,6 +474,7 @@ function FacetLink({
       }
     >
       {children}
+      <LinkPending />
     </Link>
   );
 }

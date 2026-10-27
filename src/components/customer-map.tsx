@@ -36,6 +36,7 @@ import {
   type MapControls,
   type MapPin,
 } from "@/components/map-canvas";
+import { LinkPending } from "@/components/nav-progress";
 import { Alert } from "@/components/ui";
 import {
   DEFAULT_MAP_STYLE,
@@ -964,6 +965,7 @@ export function CustomerMap({
                         style={{ color: "var(--brand)" }}
                       >
                         {t(isAdmin ? "customers.addLocation" : "customers.openTrip")}
+                        <LinkPending />
                       </Link>
                     )}
                   </li>
@@ -1006,6 +1008,7 @@ export function CustomerMap({
                 className="btn btn-secondary shrink-0"
               >
                 {t("customers.openLeads")}
+                <LinkPending />
               </Link>
             </div>
 
@@ -1322,6 +1325,7 @@ function TripPanel({
         {trip.href && (
           <Link href={trip.href} className="btn btn-secondary w-full">
             {t("customers.openTrip")}
+            <LinkPending />
           </Link>
         )}
       </div>

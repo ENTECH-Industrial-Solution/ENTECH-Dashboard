@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useOptimistic, useState, useTransition } from "react";
 
 import { useTranslations } from "@/lib/i18n/client";
 import { useTheme } from "@/lib/theme/client";
+import type { Theme } from "@/lib/theme/themes";
 import { setThemeAction } from "@/server/actions/theme";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
@@ -26,12 +27,21 @@ const DARK_QUERY = "(prefers-color-scheme: dark)";
  * truth a frame late rather than the page painting wrong.
  *
  * Pressing it flips away from whatever is showing: on "system" that means
- * reading the device's scheme at that moment and choosing the opposite. The
+ * reading the device's scheme at that moment and choosing the opposite.
+ *
+ * The page repaints **before** the server answers, under a cross-fade: the
+ * click writes `data-theme` itself inside `startViewTransition`, and the
+ * cookie follows. Waiting for the round trip meant a second of nothing and
+ * then every colour snapping at once. `useOptimistic` moves the switch with
+ * the page, and the server's re-render then lands on what is already shown. A
+ * browser without view transitions, or a reduced-motion setting, gets the
+ * same early repaint with no fade. The
  * artwork is adapted from "Switch" by Galahhad on uiverse.io (MIT).
  */
 export function ThemeSwitch() {
   const t = useTranslations();
-  const theme = useTheme();
+  const saved = useTheme();
+  const [theme, showTheme] = useOptimistic(saved);
   const [pending, startTransition] = useTransition();
   const [deviceDark, setDeviceDark] = useState(false);
 
@@ -44,6 +54,22 @@ export function ThemeSwitch() {
   }, []);
 
   const isDark = theme === "dark" || (theme === "system" && deviceDark);
+
+  const choose = (next: Theme) => {
+    const repaint = () => {
+      const root = document.documentElement;
+      if (next === "system") delete root.dataset.theme;
+      else root.dataset.theme = next;
+    };
+    const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (document.startViewTransition && !calm) document.startViewTransition(repaint);
+    else repaint();
+
+    startTransition(async () => {
+      showTheme(next);
+      await setThemeAction(next);
+    });
+  };
 
   return (
     <div
@@ -60,9 +86,7 @@ export function ThemeSwitch() {
         className="theme-switch"
         data-choice={theme}
         disabled={pending}
-        onClick={() =>
-          startTransition(() => setThemeAction(isDark ? "light" : "dark"))
-        }
+        onClick={() => choose(isDark ? "light" : "dark")}
       >
         <span className="theme-switch__container">
           <span className="theme-switch__clouds" />
@@ -90,7 +114,7 @@ export function ThemeSwitch() {
           style={{ color: "var(--text-muted)" }}
           disabled={pending}
           title={t("theme.system")}
-          onClick={() => startTransition(() => setThemeAction("system"))}
+          onClick={() => choose("system")}
         >
           <DeviceIcon />
           <span className="sr-only">{t("theme.system")}</span>

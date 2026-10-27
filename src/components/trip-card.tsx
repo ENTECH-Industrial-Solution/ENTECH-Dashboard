@@ -5,6 +5,7 @@ import { useActionState, useState } from "react";
 
 import { MiniMap } from "@/components/map-embed";
 import { Reveal, Swap } from "@/components/motion";
+import { LinkPending } from "@/components/nav-progress";
 import { VideoPlayer } from "@/components/video-embed";
 import { tripHours } from "@/lib/calendar";
 import { Alert, SubmitButton } from "@/components/ui";
@@ -148,6 +149,7 @@ export function TripLocation({ trip }: { trip: FieldTripRow }) {
               >
                 <PinIcon />
                 {t("trips.openCustomerPin")}
+                <LinkPending />
               </Link>
             )}
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>

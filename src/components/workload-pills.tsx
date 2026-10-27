@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Collapse } from "@/components/motion";
+import { LinkPending } from "@/components/nav-progress";
 import { PinIcon } from "@/components/trip-card";
 import { StatusBadge } from "@/components/ui";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
@@ -199,6 +200,7 @@ function TaskLines({
                 </span>
               )}
             </div>
+            <LinkPending />
           </Link>
         </li>
       ))}

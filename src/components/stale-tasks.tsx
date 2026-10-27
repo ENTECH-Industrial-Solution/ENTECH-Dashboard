@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getTranslations } from "@/lib/i18n/server";
 import { peopleSummary } from "@/lib/trips";
 import { STALE_TASK_DAYS, type StaleTask } from "@/server/queries";
+import { LinkPending } from "@/components/nav-progress";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -77,6 +78,7 @@ export async function StaleTasks({
                       <span style={{ color: "var(--danger)" }}>{t("status.BLOCKED")}</span>
                     )}
                   </span>
+                  <LinkPending />
                 </Link>
               </li>
             );
