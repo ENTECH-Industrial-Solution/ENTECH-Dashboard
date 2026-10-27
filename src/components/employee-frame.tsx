@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { Avatar } from "@/components/avatar";
 import { dueState } from "@/lib/calendar";
 import { formatDate, getLocale, getTranslations } from "@/lib/i18n/server";
 import type { EmployeeWorkload } from "@/server/queries";
@@ -13,42 +14,6 @@ import { LinkPending } from "@/components/nav-progress";
  * A server component: the counts are already aggregated by the query layer and
  * nothing here is interactive, so none of this needs to ship to the browser.
  */
-
-/** First letters of the first two words — works for Thai and Latin names alike. */
-export function initials(fullName: string): string {
-  return fullName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => [...word][0] ?? "")
-    .join("");
-}
-
-export function Avatar({
-  fullName,
-  size = "md",
-  muted = false,
-}: {
-  fullName: string;
-  size?: "md" | "lg";
-  muted?: boolean;
-}) {
-  return (
-    <span
-      aria-hidden
-      className={`flex shrink-0 items-center justify-center rounded-full font-semibold ${
-        size === "lg" ? "h-14 w-14 text-lg" : "h-10 w-10 text-sm"
-      }`}
-      style={
-        muted
-          ? { background: "var(--surface-muted)", color: "var(--text-muted)" }
-          : { background: "var(--brand-soft)", color: "var(--brand)" }
-      }
-    >
-      {initials(fullName)}
-    </span>
-  );
-}
 
 /** The same three tones the task card gives a deadline. */
 const NEXT_DUE_COLOR = {

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CardGrid } from "@/components/card-grid";
-import { Avatar } from "@/components/employee-frame";
+import { Avatar } from "@/components/avatar";
 import { LinkPending } from "@/components/nav-progress";
 import { PageShell } from "@/components/page-shell";
 import { ScheduleRow } from "@/components/schedule-row";
