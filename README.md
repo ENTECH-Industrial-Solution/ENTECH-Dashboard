@@ -43,7 +43,7 @@ string**, and both need `?schema=app`:
 
 | Variable | Notes |
 | --- | --- |
-| `DATABASE_URL` | Transaction pooler, port **6543**, with `?pgbouncer=true&connection_limit=1&schema=app` |
+| `DATABASE_URL` | Transaction pooler, port **6543**, with `?pgbouncer=true&connection_limit=5&schema=app` |
 | `DIRECT_URL` | Session pooler, port **5432**, with `?schema=app` — migrations need session-level features a transaction pooler cannot carry |
 | `SESSION_SECRET` | 32+ random characters — `openssl rand -base64 48` |
 | `APP_URL` | Must match the deployed origin exactly in production |
