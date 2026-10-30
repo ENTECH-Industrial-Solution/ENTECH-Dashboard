@@ -76,6 +76,28 @@ npm run db:deploy
 idempotent and re-asserts RLS and the role lockout on the new tables. See
 "Database hosting" below for why.
 
+**There is one database, and development uses it.** No separate dev or staging
+database exists: a local `.env` points at the same Supabase project production
+reads, so `npm run dev` writes live company data and every `db:*` script acts on
+production. The Free plan keeps no backups of its own. On 2026-09-16 a
+`prisma migrate diff --shadow-database-url "$DIRECT_URL"` emptied the whole
+`app` schema, because Prisma wipes a shadow database before using it, and the
+tasks, employees and trips in it were not recoverable. So:
+
+- **Never pass `DATABASE_URL` or `DIRECT_URL` as a shadow database**, by flag or
+  by `shadowDatabaseUrl`.
+- `npm run db:migrate` is `prisma migrate dev`, which offers to **reset the
+  schema** when it finds drift. Never accept that prompt here. The same goes
+  for `migrate reset` and `db push --force-reset`.
+- To check a hand-written migration, diff datamodel against datamodel, which
+  needs no database at all:
+  `prisma migrate diff --from-schema-datamodel <old schema> --to-schema-datamodel prisma/schema.prisma --script`.
+- **Take a backup before any schema change.** The private
+  `entech-dashboard-backups` repository runs a restore-tested `pg_dump` nightly
+  and on demand (`gh workflow run backup.yml --repo
+  ENTECH-Industrial-Solution/entech-dashboard-backups`); its README has the
+  restore steps.
+
 ## Architecture
 
 Next.js 15 App Router, TypeScript, Prisma + PostgreSQL (Supabase), Tailwind v4.
@@ -488,7 +510,9 @@ calendar and the off-site panel on the dashboard.
 
 Trips are **cancelled, not deleted**: people plan around them, and a trip that
 silently vanishes is worse than one marked cancelled with a reason. Cancelled
-trips stay in the list and drop off the calendar.
+trips stay in the list and drop off the calendar. The admin-only
+`deleteFieldTripAction` exists for a trip entered by mistake, not as another
+way to call one off.
 
 The upcoming/past split is **by date alone**. Completing a trip does not move it
 between the two, exactly as cancelling one does not: both stay in the list they
@@ -496,7 +520,7 @@ were in, wearing the badge that says what became of them, and roll into the past
 when their days are over. `AwayPanel` is the exception that matters — a
 completed trip leaves "ออกอยู่ตอนนี้" the moment it is closed out and moves to
 its own group, because "who is out right now" is the one question a finished
-trip is no longer an answer to. Nothing is ever deleted, so `window: "past"` is
+trip is no longer an answer to. Nothing leaves it but an admin's audited delete, so `window: "past"` is
 the permanent record: `TripHistory` is one person's copy of it, on their
 dashboard and their page, and `/admin/tasks` carries everyone's.
 
@@ -707,8 +731,9 @@ the map, and the pin's panel lists the visits to that place. "We have been here
 three times and the last one was cancelled" is the thing worth knowing before
 knocking again, and neither view could answer it before.
 
-`onDelete: SetNull`, and both alternatives would be wrong. A trip is never
-deleted, so `Cascade` would let a pin delete history; `Restrict` would make a
+`onDelete: SetNull`, and both alternatives would be wrong. A trip is history,
+removed only by an admin's audited delete, so `Cascade` would let a pin delete
+it; `Restrict` would make a
 pin undeletable because somebody once drove there. The trip keeps its own
 `locationName` and coordinates regardless — the link is a cross-reference, not
 the trip's record of where it went — so unlinking costs it nothing.

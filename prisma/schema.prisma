@@ -309,7 +309,8 @@ model FieldTrip {
   /// from either end.
   ///
   /// SetNull rather than Restrict or Cascade, and both of the others would be
-  /// wrong. A trip is never deleted, so Cascade would let a pin delete history;
+  /// wrong. A trip is history, removed only by an admin's audited delete, so
+  /// Cascade would let a pin delete it;
   /// Restrict would make a pin undeletable because somebody once drove there.
   /// The trip keeps its own locationName and coordinates either way — the link
   /// is a convenience, not the trip's record of where it went — so losing it
