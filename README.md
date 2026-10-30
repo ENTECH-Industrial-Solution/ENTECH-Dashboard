@@ -3,7 +3,9 @@
 ระบบติดตามงานพนักงาน — Employee task tracking with centralised admin control.
 
 - ผู้ดูแลระบบสร้างและระงับบัญชีพนักงานได้ทั้งหมด (admins provision and revoke employee accounts)
-- หน้าหลักแบ่งงานเป็น 2 หมวด: **งานที่กำลังดำเนินการ** และ **ประวัติงานที่เสร็จแล้ว** (เก็บเป็นหลักฐาน แก้ไขไม่ได้)
+- หน้าหลักแบ่งงานเป็น 2 หมวด: **งานที่กำลังดำเนินการ** และ **ประวัติงานที่เสร็จแล้ว** (เก็บเป็นหลักฐาน แก้ไขได้เฉพาะผู้ดูแลระบบ และทุกการแก้ไขถูกบันทึกไว้)
+- ตารางออกนอกสถานที่ (field trips) บนปฏิทิน และแผนที่ลูกค้าแสดงสถานะของแต่ละราย
+- ผู้ดูแลระบบเปิด/ปิดส่วนต่าง ๆ ของหน้าจอได้จากหน้าตั้งค่า
 - รองรับภาษาไทยและอังกฤษ สลับได้ทันที
 - บันทึกการใช้งานแบบ append-only ลบหรือแก้ไขไม่ได้
 
@@ -43,7 +45,7 @@ string**, and both need `?schema=app`:
 
 | Variable | Notes |
 | --- | --- |
-| `DATABASE_URL` | Transaction pooler, port **6543**, with `?pgbouncer=true&connection_limit=1&schema=app` |
+| `DATABASE_URL` | Transaction pooler, port **6543**, with `?pgbouncer=true&connection_limit=5&schema=app` |
 | `DIRECT_URL` | Session pooler, port **5432**, with `?schema=app` — migrations need session-level features a transaction pooler cannot carry |
 | `SESSION_SECRET` | 32+ random characters — `openssl rand -base64 48` |
 | `APP_URL` | Must match the deployed origin exactly in production |
@@ -73,6 +75,14 @@ npm run dev
 
 Sign in at http://localhost:3000/login with the seeded `SEED_ADMIN_CODE`. The
 seeded account is forced to change its password on first sign-in.
+
+### If your `.env` points at the live database
+
+The company's own checkout has no separate development database: its `.env`
+points at the same Supabase project production uses. Read "There is one
+database" in [CLAUDE.md](CLAUDE.md) before running any `npm run db:*` command
+against it — `db:migrate` can offer to reset the schema, and a Prisma shadow
+database pointed at it is wiped on use.
 
 ## Deploying
 
@@ -123,9 +133,9 @@ Then re-run `prisma/supabase-02-harden.sql` if the migration added a table.
 | Enumeration | Identical error and comparable response timing for unknown code vs wrong password |
 | Authorization | Enforced server-side in every page and action; middleware is only a cheap pre-filter |
 | Input | Zod schemas at every action boundary |
-| Evidence | Completed tasks immutable; `TaskEvent` and `AuditLog` append-only; reopening requires an admin and a reason |
+| Evidence | A completed task's lifecycle is locked; an admin may correct its content, and every edit is diffed into the audit trail; `TaskEvent` and `AuditLog` append-only; reopening requires an admin and a reason |
 | Headers | Strict CSP, HSTS, `frame-ancestors 'none'`, `nosniff`, restrictive Permissions-Policy |
-| Data retention | Employees are deactivated, never deleted, so task history survives |
+| Data retention | Employees are deactivated, so task history survives; only a deactivated account with nothing referencing it can be deleted, by an admin, with a reason |
 | Database exposure | Tables live in a non-exposed `app` schema, unreachable by Supabase's anon key, with deny-all RLS on top |
 
 Known limitation: the per-IP rate limiter is in-memory and therefore per-instance
