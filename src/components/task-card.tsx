@@ -25,6 +25,7 @@ export type TaskCardData = {
   description: string | null;
   status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+  category: "SOFTWARE" | "DOCUMENT" | "OTHER";
   /** Planned start, set when the work was assigned. */
   startDate: string | null;
   dueDate: string | null;

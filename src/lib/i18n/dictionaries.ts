@@ -184,6 +184,13 @@ export const dictionary = {
   "calendar.legendOverdue": { th: "เลยกำหนด", en: "Overdue" },
   "calendar.notDrawn": { th: "ไม่ได้แสดงเป็นเส้น", en: "not drawn as a bar" },
   "calendar.tripPrefix": { th: "ทริป", en: "Trip" },
+  "calendar.filter": { th: "ประเภทงาน", en: "Work type" },
+  "calendar.filterAll": { th: "ทุกประเภท", en: "All types" },
+  "calendar.filterTrips": { th: "งานนอกสถานที่", en: "Off-site" },
+  "tasks.category": { th: "ประเภทงาน", en: "Type" },
+  "category.SOFTWARE": { th: "Software", en: "Software" },
+  "category.DOCUMENT": { th: "เอกสาร", en: "Documents" },
+  "category.OTHER": { th: "อื่นๆ", en: "Other" },
 
   "dashboard.byPerson": { th: "งานรายบุคคล", en: "By employee" },
   "dashboard.byPersonHint": {

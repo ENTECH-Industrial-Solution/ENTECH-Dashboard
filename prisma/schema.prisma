@@ -49,6 +49,16 @@ enum TaskPriority {
   URGENT
 }
 
+/// What kind of work a task is, so the calendar can show one kind at a time.
+/// Closed for the reason CustomerSource is: a filter counts these, and free
+/// text would be forty spellings of "เอกสาร". Off-site work is not a value
+/// here — it is a FieldTrip, a different model.
+enum TaskCategory {
+  SOFTWARE
+  DOCUMENT
+  OTHER
+}
+
 enum TaskEventType {
   CREATED
   ASSIGNED
@@ -161,6 +171,11 @@ model Task {
   description String?
   status      TaskStatus   @default(TODO)
   priority    TaskPriority @default(MEDIUM)
+
+  /// OTHER by default, because that is what every task predating the column
+  /// honestly is: nobody said. An admin sorts them out one edit at a time,
+  /// and each edit is in the trail like any other (EDITABLE_FIELDS).
+  category TaskCategory @default(OTHER)
 
   /// Who the work belongs to. Any number, and they are equals — see
   /// TaskAssignee. "At least one" is a rule the database cannot state, so it

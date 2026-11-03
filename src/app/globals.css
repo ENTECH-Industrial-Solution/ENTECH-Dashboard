@@ -35,6 +35,16 @@
   --warning-soft: light-dark(oklch(0.96 0.05 75), oklch(0.29 0.05 75));
   --danger: light-dark(oklch(0.55 0.19 25), oklch(0.68 0.17 25));
   --danger-soft: light-dark(oklch(0.95 0.04 25), oklch(0.28 0.06 25));
+
+  /*
+   * The calendar's open-task bars, so overlapping runs can be told apart.
+   * Hues kept clear of the three that mean something there — red overdue,
+   * green done, amber off-site — and level with --brand, which is the first.
+   */
+  --span-1: var(--brand);
+  --span-2: light-dark(oklch(0.54 0.17 300), oklch(0.7 0.15 300));
+  --span-3: light-dark(oklch(0.55 0.1 200), oklch(0.74 0.11 200));
+  --span-4: light-dark(oklch(0.55 0.17 335), oklch(0.72 0.15 335));
   --ring: light-dark(oklch(0.52 0.16 250 / 0.45), oklch(0.68 0.14 250 / 0.5));
 
   /*

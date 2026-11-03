@@ -189,6 +189,7 @@ const taskFields = z.object({
     "กรุณาเลือกผู้รับผิดชอบอย่างน้อยหนึ่งคน / Choose at least one assignee",
   ),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
+  category: z.enum(["SOFTWARE", "DOCUMENT", "OTHER"]).default("OTHER"),
   /// Planned schedule. Both ends are optional, but if both are given the
   /// start cannot fall after the end.
   startDate: optionalDate,

@@ -66,6 +66,7 @@ const EDITABLE_FIELDS = [
   "title",
   "description",
   "priority",
+  "category",
   "startDate",
   "dueDate",
   "completionNote",

@@ -50,6 +50,7 @@ export type CalendarTask = {
   title: string;
   status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+  category: "SOFTWARE" | "DOCUMENT" | "OTHER";
   /** "YYYY-MM-DD" in Asia/Bangkok, bucketed server-side. */
   dayKey: string;
   /** Who it belongs to, summarised — see peopleSummary in lib/trips.ts. */
@@ -75,6 +76,7 @@ export type CalendarSpan = {
       kind: "task";
       code: string;
       status: CalendarTask["status"];
+      category: CalendarTask["category"];
       assigneeNames: string;
       href: string;
     }
@@ -94,12 +96,12 @@ type TaskSpan = Extract<CalendarSpan, { kind: "task" }>;
 const SPAN_LANES = 3;
 /**
  * Where the bars sit in a 4rem cell, in px: the first lane just under the day
- * number, each next one a bar and a 2px gap lower. Three end at 46px, clear of
- * the marks at the foot (52px). A taller bar or a fourth lane needs a taller
- * cell — in both pages, or the month turn jumps.
+ * number, each next one a bar and a 1px gap lower. Three end at 44px, clear of
+ * the marks at the foot, whose 12px "+n" starts at 46px. A taller bar or a
+ * fourth lane needs a taller cell — in both pages, or the month turn jumps.
  */
-const SPAN_TOP = 26;
-const SPAN_STEP = 8;
+const SPAN_TOP = 24;
+const SPAN_STEP = 7;
 
 /**
  * A lane for every span, so a task keeps one height across every week it
@@ -131,11 +133,49 @@ function laneSpans(spans: CalendarSpan[]): Map<string, number> {
   return laneOf;
 }
 
-/** A trip's bar wears the trip's state, the same colour as its dots. */
-function spanColor(span: CalendarSpan, todayKey: string): string {
+/** The open-task bar colours, tokens in globals.css. */
+const SPAN_HUES = ["var(--span-1)", "var(--span-2)", "var(--span-3)", "var(--span-4)"];
+
+/**
+ * A colour for every task's bar such that no two sharing a day share one —
+ * the greedy pass laneSpans makes, over colours instead of lanes. Taken in
+ * order of start, which on runs of days is optimal: a clash needs five tasks
+ * on one day, and then the "+n" is already hiding one of them.
+ */
+function hueSpans(spans: CalendarSpan[]): Map<string, string> {
+  const placed: { span: CalendarSpan; hue: number }[] = [];
+  const hueOf = new Map<string, string>();
+
+  for (const span of [...spans].sort((a, b) => a.from.localeCompare(b.from))) {
+    if (span.kind !== "task") continue;
+    const taken = new Set(
+      placed
+        .filter(({ span: other }) => !(other.to < span.from || other.from > span.to))
+        .map(({ hue }) => hue),
+    );
+    let hue = SPAN_HUES.findIndex((_, index) => !taken.has(index));
+    if (hue === -1) hue = placed.length % SPAN_HUES.length;
+    placed.push({ span, hue });
+    hueOf.set(span.id, SPAN_HUES[hue] ?? TONE_COLOR.open);
+  }
+
+  return hueOf;
+}
+
+/**
+ * A trip's bar wears the trip's state, the same colour as its dots. A task's
+ * says overdue or done when it is; open, it wears its own colour so the runs
+ * that overlap can be told apart.
+ */
+function spanColor(
+  span: CalendarSpan,
+  todayKey: string,
+  hueOf: Map<string, string>,
+): string {
   if (span.kind === "trip") return TRIP_TONE[span.state].color;
   if (span.status === "COMPLETED") return TONE_COLOR.done;
-  return TONE_COLOR[span.to < todayKey ? "overdue" : "open"];
+  if (span.to < todayKey) return TONE_COLOR.overdue;
+  return hueOf.get(span.id) ?? TONE_COLOR.open;
 }
 
 /**
@@ -240,9 +280,9 @@ export function TaskCalendar({
   month,
   monthLabel,
   todayKey,
-  tasks,
-  spans,
-  trips,
+  tasks: allTasks,
+  spans: allSpans,
+  trips: allTrips,
   prevHref,
   nextHref,
   todayHref,
@@ -326,6 +366,23 @@ export function TaskCalendar({
     todayKey.startsWith(monthPrefix) ? todayKey : null,
   );
 
+  // One kind of work at a time. Pure narrowing over what the server already
+  // sent — everyone may read all of it, so there is nothing to enforce here.
+  const [filter, setFilterState] = useState<WorkFilter>(lastFilter);
+  const setFilter = (next: WorkFilter) => {
+    lastFilter = next;
+    setFilterState(next);
+    setLit(null);
+  };
+  const tasks =
+    filter === "ALL" ? allTasks : allTasks.filter((task) => task.category === filter);
+  const trips = filter === "ALL" || filter === "TRIP" ? allTrips : [];
+  const spans = allSpans.filter(
+    (span) =>
+      filter === "ALL" ||
+      (span.kind === "trip" ? filter === "TRIP" : span.category === filter),
+  );
+
   const [lit, setLit] = useState<string | null>(null);
   const light = (id: string) => (on: boolean) =>
     setLit((current) => (on ? id : current === id ? null : current));
@@ -399,6 +456,9 @@ export function TaskCalendar({
   const monthFirst = dayKeyOf({ year, month }, 1);
   const monthLast = dayKeyOf({ year, month }, daysInMonth);
   const laneOf = laneSpans(spans);
+  // From every span, not the filtered ones: a task keeps its colour whichever
+  // kind of work is on show.
+  const hueOf = hueSpans(allSpans);
   const bars: {
     span: CalendarSpan;
     lane: number;
@@ -431,19 +491,23 @@ export function TaskCalendar({
       namesByDay.set(key, [...(namesByDay.get(key) ?? []), name]);
     }
 
-    if (lane >= SPAN_LANES) {
+    const drawn = lane < SPAN_LANES;
+    if (!drawn) {
       for (let day = first; day <= last; day += 1) {
         const key = dayKeyOf({ year, month }, day);
         hiddenByDay.set(key, (hiddenByDay.get(key) ?? 0) + 1);
       }
-      continue;
-    }
-
-    const color = spanColor(span, todayKey);
-    for (let day = first; day <= last; day += 1) {
-      const key = dayKeyOf({ year, month }, day);
-      const tint = tintByDay.get(key);
-      if (!tint || tint.lane > lane) tintByDay.set(key, { lane, color });
+      // Past the lanes a span has no bar, except while it is the one being
+      // pointed at: then it is drawn over the first lane, which has dimmed
+      // with the rest, rather than lighting up nothing.
+      if (span.id !== lit) continue;
+    } else {
+      const color = spanColor(span, todayKey, hueOf);
+      for (let day = first; day <= last; day += 1) {
+        const key = dayKeyOf({ year, month }, day);
+        const tint = tintByDay.get(key);
+        if (!tint || tint.lane > lane) tintByDay.set(key, { lane, color });
+      }
     }
 
     for (let start = first; start <= last; ) {
@@ -452,7 +516,7 @@ export function TaskCalendar({
       const end = Math.min(last, start + 6 - col);
       bars.push({
         span,
-        lane,
+        lane: drawn ? lane : 0,
         row: Math.floor(cell / 7),
         col,
         length: end - start + 1,
@@ -463,7 +527,7 @@ export function TaskCalendar({
     }
   }
 
-  // The days of whatever note or row the pointer is on, ringed on the grid.
+  // The days of whatever note or row the pointer is on; the rest fade.
   // Keyed as spans are: a task's id, or "trip:" and the trip's.
   const litDays = new Set<string>();
   if (lit) {
@@ -505,6 +569,21 @@ export function TaskCalendar({
         <h3 className="me-auto text-base font-semibold tracking-tight">
           {shownLabel}
         </h3>
+        {/* The width sits on a wrapper: `.input` is unlayered and sets its own. */}
+        <div className="w-36">
+          <select
+            className="input"
+            aria-label={t("calendar.filter")}
+            value={filter}
+            onChange={(event) => setFilter(event.target.value as WorkFilter)}
+          >
+            <option value="ALL">{t("calendar.filterAll")}</option>
+            <option value="SOFTWARE">{t("category.SOFTWARE")}</option>
+            <option value="DOCUMENT">{t("category.DOCUMENT")}</option>
+            <option value="OTHER">{t("category.OTHER")}</option>
+            <option value="TRIP">{t("calendar.filterTrips")}</option>
+          </select>
+        </div>
         <Link
           href={todayHref}
           scroll={false}
@@ -576,7 +655,14 @@ export function TaskCalendar({
               ...dayTrips
                 .filter((trip) => trip.isEnd)
                 .map((trip) => TRIP_TONE[trip.state].color),
-              ...dayTasks.map((task) => TONE_COLOR[toneOf(task, todayKey)]),
+              // An open deadline wears its bar's colour, so the dot and the
+              // run it ends read as one task.
+              ...dayTasks.map((task) => {
+                const tone = toneOf(task, todayKey);
+                return tone === "open"
+                  ? (hueOf.get(task.taskId) ?? TONE_COLOR.open)
+                  : TONE_COLOR[tone];
+              }),
             ];
             // What the cell cannot show: dots past what fits, and spans past
             // the lanes drawn under it. Two dots once there is a count, so the
@@ -603,7 +689,7 @@ export function TaskCalendar({
                 title={names?.join("\n")}
                 data-day={key}
                 data-target={moving ? (dragOver === key ? "over" : "open") : undefined}
-                className="day-cell relative flex min-h-16 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs transition-colors"
+                className="day-cell relative flex min-h-16 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs transition-[background-color,opacity]"
                 style={{
                   // Ink rather than brand blue: an open span's bar is brand
                   // blue, and it vanished across a selected day.
@@ -618,11 +704,10 @@ export function TaskCalendar({
                   border: `1px solid ${
                     isToday && !isSelected ? "var(--brand)" : "transparent"
                   }`,
-                  // A gap before the ring, so it still shows round the selected
-                  // day, which is filled the same ink.
-                  boxShadow: litDays.has(key)
-                    ? "0 0 0 2px var(--surface), 0 0 0 4px var(--text)"
-                    : undefined,
+                  // The other days fade rather than these being ringed: a run
+                  // of days reads as one block that way, where a frame round
+                  // each cell turned a week of them into a row of boxes.
+                  opacity: lit && !litDays.has(key) ? 0.3 : undefined,
                 }}
                 {...dropHandlers(key)}
               >
@@ -677,7 +762,10 @@ export function TaskCalendar({
               className="pointer-events-none absolute inset-0 grid grid-cols-7 gap-1"
               style={{ gridTemplateRows: "repeat(6, minmax(0, 1fr))" }}
             >
-              {bars.map((bar) => (
+              {/* The lit span last, so it lies on top of any bar it shares a lane with. */}
+              {[...bars]
+                .sort((a, b) => Number(a.span.id === lit) - Number(b.span.id === lit))
+                .map((bar) => (
                 <span
                   key={`${bar.span.id}-${bar.row}`}
                   className={`h-1.5 self-start transition-opacity ${bar.opens ? "ms-1.5 rounded-s-full" : ""} ${
@@ -687,7 +775,7 @@ export function TaskCalendar({
                     gridRow: bar.row + 1,
                     gridColumn: `${bar.col + 1} / span ${bar.length}`,
                     marginTop: `${SPAN_TOP + bar.lane * SPAN_STEP}px`,
-                    background: barFill(spanColor(bar.span, todayKey), bar.span.kind),
+                    background: barFill(spanColor(bar.span, todayKey, hueOf), bar.span.kind),
                     opacity: lit === null ? 0.75 : lit === bar.span.id ? 1 : 0.2,
                   }}
                 />
@@ -929,7 +1017,7 @@ export function TaskCalendar({
                       >
                         <span
                           className="mt-2 h-1 w-3 shrink-0 rounded-full"
-                          style={{ background: spanColor(span, todayKey) }}
+                          style={{ background: spanColor(span, todayKey, hueOf) }}
                         />
                         <span className="min-w-0">
                           <span className="flex min-w-0 items-baseline gap-2">
@@ -999,7 +1087,13 @@ function Legend({ hasTasks, hasTrips }: { hasTasks: boolean; hasTrips: boolean }
     >
       {hasTasks &&
         group(t("calendar.legendTasks"), "task", [
-          { color: TONE_COLOR.open, label: t("calendar.legendOpen") },
+          {
+            // Every open-task colour in one swatch: which is which is per task.
+            color: `linear-gradient(90deg, ${SPAN_HUES.map(
+              (hue, i) => `${hue} ${i * 25}% ${(i + 1) * 25}%`,
+            ).join(", ")})`,
+            label: t("calendar.legendOpen"),
+          },
           { color: TONE_COLOR.overdue, label: t("calendar.legendOverdue") },
           { color: TONE_COLOR.done, label: t("status.COMPLETED") },
           { color: TONE_COLOR.start, label: t("calendar.marksStart") },
@@ -1112,7 +1206,7 @@ function StickyNote({
   index: number;
   lifted?: boolean;
   /**
-   * Whether the calendar is ringing this note's days, and the switch for it:
+   * Whether the calendar is lighting this note's days, and the switch for it:
    * a mouse resting on the note, focus inside it, or a finger tapping it.
    */
   lit?: boolean;
@@ -1400,6 +1494,17 @@ let lastMonthShown: string | null = null;
 
 /** The month a turn was started toward, so its arrival settles rather than turns. */
 let previewedMonth: string | null = null;
+
+type WorkFilter = "ALL" | CalendarTask["category"] | "TRIP";
+
+/**
+ * The kind of work on show, kept across remounts for the reason
+ * `lastMonthShown` is: the calendar is a fresh instance every month, and a
+ * filter that reset on every page turn would have to be chosen again each
+ * time. Only ever written from a change on the client, so the server and a
+ * fresh page load — the renders hydration compares — both see "ALL".
+ */
+let lastFilter: WorkFilter = "ALL";
 
 /** How long a page takes to slide — matches `.calendar-page` in globals.css. */
 const PAGE_TURN_MS = 400;

@@ -137,6 +137,21 @@ export function TaskForm({
             <option value="URGENT">{t("priority.URGENT")}</option>
           </select>
         </div>
+        <div>
+          <label className="label" htmlFor={`category-${id}`}>
+            {t("tasks.category")}
+          </label>
+          <select
+            id={`category-${id}`}
+            name="category"
+            className="input"
+            defaultValue={task?.category ?? "OTHER"}
+          >
+            <option value="SOFTWARE">{t("category.SOFTWARE")}</option>
+            <option value="DOCUMENT">{t("category.DOCUMENT")}</option>
+            <option value="OTHER">{t("category.OTHER")}</option>
+          </select>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
