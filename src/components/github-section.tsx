@@ -1,17 +1,17 @@
-import { SlideRow } from "@/components/slide-row";
+import { ScrollFade } from "@/components/scroll-fade";
 import { getGithubOverview } from "@/lib/github";
 import { getLocale, getTranslations } from "@/lib/i18n/server";
 import { getHiddenRepos } from "@/lib/settings/server";
 
-/** One track: a repo box is a single link, so there are no parts to align. */
-const BOX_ROWS = 1;
-
 /**
- * The organisation's GitHub profile and its public repositories, as one band.
+ * The organisation's GitHub profile and its public repositories, in the
+ * dashboard's side column. The repos run downwards and scroll inside the box:
+ * in the wide gutter the box stretches to the bottom of the screen (see
+ * DashboardAside), and stacked above the content it is capped instead.
  *
  * The caller gates it on `github.enabled` before rendering, so a switched-off
  * section never reaches GitHub. It renders in the page's own pass rather than
- * behind a Suspense boundary: SlideRow measures itself after every render, and
+ * behind a Suspense boundary: the scroller measures itself after every render, and
  * inside a streamed boundary that measurement re-rendered forever. The fetch's
  * timeout in lib/github.ts is what keeps a slow GitHub from holding the page.
  */
@@ -42,7 +42,7 @@ export async function GithubSection() {
   });
 
   return (
-    <section className="panel space-y-4">
+    <section className="panel flex flex-col gap-4 min-[90rem]:min-h-56">
       <header className="space-y-1">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 className="text-lg font-semibold tracking-tight">
@@ -91,73 +91,68 @@ export async function GithubSection() {
           {t("github.empty")}
         </p>
       ) : (
-        <SlideRow
-          label={t("github.title")}
-          rows={BOX_ROWS}
-          heading={
-            <div
-              className="text-xs font-medium uppercase tracking-wide"
-              style={{ color: "var(--text-muted)" }}
-            >
-              {repos.length} {t("github.repos")}
-            </div>
-          }
-        >
-          {repos.map((repo) => (
-            <a
-              key={repo.name}
-              href={repo.html_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={t("github.viewOnGithub")}
-              className="card card-link slide-card row-span-full p-3"
-            >
-              {/* .card-link sets display: block, so the layout lives on a
-                  wrapper inside the link — see Conventions in CLAUDE.md. */}
-              <div className="flex h-full flex-col gap-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="truncate font-medium">{repo.name}</span>
-                  {repo.archived && (
-                    <span
-                      className="badge shrink-0"
-                      style={{ background: "var(--surface-muted)", color: "var(--text-muted)" }}
-                    >
-                      {t("github.archived")}
-                    </span>
-                  )}
-                  {repo.fork && (
-                    <span
-                      className="badge shrink-0"
-                      style={{ background: "var(--surface-muted)", color: "var(--text-muted)" }}
-                    >
-                      {t("github.fork")}
-                    </span>
-                  )}
+        /* Beside stale work (two columns), the list is lifted out of flow so
+           it adds no height and the stale box decides the row — the off-site
+           panel's trick beside the calendar. In the wide gutter it fills what
+           the column leaves; stacked alone it is simply capped. */
+        <div className="min-h-0 flex-1 @xl:relative @xl:min-h-32 min-[90rem]:flex min-[90rem]:flex-col">
+          <ScrollFade className="-m-1 max-h-80 space-y-2 p-1 @xl:absolute @xl:inset-0 @xl:max-h-none min-[90rem]:max-h-none min-[90rem]:min-h-0 min-[90rem]:flex-1">
+            {repos.map((repo) => (
+              <a
+                key={repo.name}
+                href={repo.html_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={t("github.viewOnGithub")}
+                className="card card-link p-3"
+              >
+                {/* .card-link sets display: block, so the layout lives on a
+                    wrapper inside the link — see Conventions in CLAUDE.md. */}
+                <div className="flex h-full flex-col gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-medium">{repo.name}</span>
+                    {repo.archived && (
+                      <span
+                        className="badge shrink-0"
+                        style={{ background: "var(--surface-muted)", color: "var(--text-muted)" }}
+                      >
+                        {t("github.archived")}
+                      </span>
+                    )}
+                    {repo.fork && (
+                      <span
+                        className="badge shrink-0"
+                        style={{ background: "var(--surface-muted)", color: "var(--text-muted)" }}
+                      >
+                        {t("github.fork")}
+                      </span>
+                    )}
+                  </div>
+
+                  <p
+                    className="line-clamp-2 text-sm"
+                    style={{ color: repo.description ? undefined : "var(--text-muted)" }}
+                  >
+                    {repo.description || t("github.noDescription")}
+                  </p>
+
+                  <p
+                    className="mt-auto flex flex-wrap gap-x-3 text-xs"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    {repo.language && <span>{repo.language}</span>}
+                    <span>★ {repo.stargazers_count}</span>
+                    {repo.pushed_at && (
+                      <span>
+                        {t("github.pushed")} {date.format(new Date(repo.pushed_at))}
+                      </span>
+                    )}
+                  </p>
                 </div>
-
-                <p
-                  className="line-clamp-2 text-sm"
-                  style={{ color: repo.description ? undefined : "var(--text-muted)" }}
-                >
-                  {repo.description || t("github.noDescription")}
-                </p>
-
-                <p
-                  className="mt-auto flex flex-wrap gap-x-3 text-xs"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  {repo.language && <span>{repo.language}</span>}
-                  <span>★ {repo.stargazers_count}</span>
-                  {repo.pushed_at && (
-                    <span>
-                      {t("github.pushed")} {date.format(new Date(repo.pushed_at))}
-                    </span>
-                  )}
-                </p>
-              </div>
-            </a>
-          ))}
-        </SlideRow>
+              </a>
+            ))}
+          </ScrollFade>
+        </div>
       )}
     </section>
   );

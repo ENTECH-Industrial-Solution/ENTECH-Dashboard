@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
+import { edgesCut } from "@/components/scroll-fade";
 import { useTranslations } from "@/lib/i18n/client";
 
 /**
@@ -68,6 +69,7 @@ export function SlideRow({
   const t = useTranslations();
   const rail = useRef<HTMLDivElement>(null);
   const [reach, setReach] = useState({ back: false, forward: false });
+  const [cut, setCut] = useState({ back: false, forward: false });
   const motion = useRef({ left: 0, settle: 0 });
 
   const measure = useCallback(() => {
@@ -82,6 +84,15 @@ export function SlideRow({
     // fresh object every time would re-render forever.
     setReach((prev) =>
       prev.back === back && prev.forward === forward ? prev : { back, forward },
+    );
+
+    // The edges soften only where a card is actually cut by them; the arrows
+    // above still say whether there is more.
+    const { back: cutBack, forward: cutForward } = edgesCut(el, "x");
+    setCut((prev) =>
+      prev.back === cutBack && prev.forward === cutForward
+        ? prev
+        : { back: cutBack, forward: cutForward },
     );
   }, []);
 
@@ -179,24 +190,23 @@ export function SlideRow({
           tabIndex={0}
           role="group"
           aria-label={label}
-          data-back={reach.back}
-          data-forward={reach.forward}
+          data-back={cut.back}
+          data-forward={cut.forward}
           className={`scroll-bare slide-rail grid snap-x snap-mandatory gap-x-3 overflow-x-auto ${padding}`}
           style={{ gridTemplateRows: `repeat(${rows}, auto)`, gridAutoColumns: autoColumns }}
         >
           {children}
         </div>
-        <EdgeBlur side="left" shown={reach.back} />
-        <EdgeBlur side="right" shown={reach.forward} />
+        <EdgeBlur side="left" shown={cut.back} />
+        <EdgeBlur side="right" shown={cut.forward} />
       </div>
     </div>
   );
 }
 
 /**
- * The rail's edge going soft where there is more beyond it — a third cue on
- * top of the part-visible card and the arrows, and the one that says *which*
- * way. Stacked layers, each blurring a little more behind a mask that moves a
+ * The rail's edge going soft where a card runs past it — a third cue on top
+ * of the part-visible card and the arrows, and the one that says *which* way. Stacked layers, each blurring a little more behind a mask that moves a
  * step further out, so the blur deepens towards the edge rather than starting
  * at a line. Adapted from Progressive Blur in motion-primitives by ibelick
  * (MIT). It ignores the pointer, so the card under it still takes a click.

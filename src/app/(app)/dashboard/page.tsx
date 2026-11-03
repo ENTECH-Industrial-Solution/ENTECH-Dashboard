@@ -56,6 +56,34 @@ export default async function DashboardPage({
   );
 }
 
+/**
+ * The side column, the same for both views. In the wide gutter it is exactly
+ * the screen's height and the last box stretches to its bottom, so the column
+ * ends where the screen does at any height. Stacked above the content on a
+ * narrower screen, stale work and GitHub sit side by side once there is room
+ * for two (the aside is a container, so this asks the column, not the
+ * viewport) — the wide gutter is too narrow for that, so there they stack.
+ */
+function DashboardAside({
+  summary,
+  stale,
+  github,
+}: {
+  summary: React.ReactNode;
+  stale: React.ReactNode;
+  github: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-4 min-[90rem]:flex min-[90rem]:h-full min-[90rem]:flex-col min-[90rem]:space-y-0 min-[90rem]:gap-4">
+      {summary}
+      <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 min-[90rem]:flex min-[90rem]:min-h-0 min-[90rem]:flex-1 min-[90rem]:flex-col min-[90rem]:[&>:last-child]:flex-1">
+        {stale}
+        {github}
+      </div>
+    </div>
+  );
+}
+
 /** Admin view: the workforce, one frame per person. */
 async function PeopleOverview({ user, cal }: { user: SessionUser; cal?: string }) {
   const [t, settings] = await Promise.all([getTranslations(), getSettings()]);
@@ -79,15 +107,17 @@ async function PeopleOverview({ user, cal }: { user: SessionUser; cal?: string }
     <PageShell
       className="space-y-8"
       aside={
-        <div className="space-y-4">
-          {summary && (
-            <SummaryTiles summary={summary} people={showPeople ? workloads : undefined} />
-          )}
-          <StaleTasks tasks={stale.tasks} total={stale.total} linkTo="person" />
-        </div>
+        <DashboardAside
+          summary={
+            summary && (
+              <SummaryTiles summary={summary} people={showPeople ? workloads : undefined} />
+            )
+          }
+          stale={<StaleTasks tasks={stale.tasks} total={stale.total} linkTo="person" />}
+          github={settings["github.enabled"] && <GithubSection />}
+        />
       }
     >
-      {settings["github.enabled"] && <GithubSection />}
 
       <ScheduleRow
         user={user}
@@ -150,13 +180,13 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
     <PageShell
       className="space-y-8"
       aside={
-        <div className="space-y-4">
-          {summary && <SummaryTiles summary={summary} />}
-          <StaleTasks tasks={stale.tasks} total={stale.total} linkTo="anchor" />
-        </div>
+        <DashboardAside
+          summary={summary && <SummaryTiles summary={summary} />}
+          stale={<StaleTasks tasks={stale.tasks} total={stale.total} linkTo="anchor" />}
+          github={settings["github.enabled"] && <GithubSection />}
+        />
       }
     >
-      {settings["github.enabled"] && <GithubSection />}
 
       <ScheduleRow
         user={user}

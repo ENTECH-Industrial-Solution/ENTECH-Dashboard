@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 
+import { ScrollFade } from "@/components/scroll-fade";
 import { SlideRow } from "@/components/slide-row";
 import {
   TripActions,
@@ -73,9 +74,9 @@ export async function AwayPanel({
    * two panels ending at different lines. So the heading stays put, and the
    * groups scroll under it — `min-h-0` is what lets the scrolling child actually
    * shrink, since a flex item defaults to min-height:auto and would otherwise
-   * refuse to be smaller than its content. `scroll-bare` hides the bar itself;
-   * the cards clipped against the panel's bottom edge are the cue that there is
-   * more, so no gutter is reserved for one.
+   * refuse to be smaller than its content. `ScrollFade` hides the bar and fades
+   * whichever edge cuts a box, which is the cue that there is more, so no gutter
+   * is reserved for one.
    *
    * `h-full`, deliberately, and not a `max-h-full` that would let a quiet week
    * draw a short panel: the two columns are meant to end on the same line, and
@@ -105,7 +106,7 @@ export async function AwayPanel({
           {t("trips.allIn")}
         </p>
       ) : (
-        <div className="scroll-bare min-h-0 flex-1 space-y-4 overflow-y-auto">
+        <ScrollFade className="min-h-0 flex-1 space-y-4">
           {outNow.length > 0 && (
             <Group
               label={t("trips.outToday")}
@@ -134,7 +135,7 @@ export async function AwayPanel({
               user={user}
             />
           )}
-        </div>
+        </ScrollFade>
       )}
     </section>
   );
@@ -227,7 +228,7 @@ async function Group({
             </div>
 
             <div className="row-start-2 pt-3">
-              <TripHeadline trip={row} />
+              <TripHeadline trip={row} clamp />
             </div>
 
             {/* Renders nothing until the trip is closed out, so the row is a
@@ -243,7 +244,7 @@ async function Group({
               className="row-start-4 mt-3 border-t border-dashed pt-3"
               style={{ borderColor: "var(--border)" }}
             >
-              <TripPeople travellers={row.travellers} />
+              <TripPeople travellers={row.travellers} clamp />
             </header>
 
             {/* Decided here, on the server, from the session — the buttons are

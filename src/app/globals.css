@@ -286,7 +286,7 @@ body {
   }
 }
 
-/* `EdgeBlur` in slide-row.tsx: the soft edge of a rail with more beyond it.
+/* `EdgeBlur` in slide-row.tsx: the soft edge of a rail where a card is cut.
    Fades rather than snapping when the rail reaches its end — and the fade is
    on each layer, never on `.edge-blur` itself: a parent below full opacity
    becomes the layers' backdrop root, leaving them nothing behind to blur. */
@@ -523,7 +523,7 @@ body {
 .slide-rail {
   grid-auto-flow: column;
   grid-auto-columns: minmax(min(100%, clamp(17.5rem, 85%, 20rem)), 1fr);
-  /* The content fades out under `EdgeBlur` where there is more beyond it.
+  /* The content fades out under `EdgeBlur` where a card is cut by the edge.
      Blur alone left the clipped card's border standing as a hard line at the
      rail's edge — nothing past the clip is drawn, so there is nothing there to
      blur. Fading it to transparent dissolves the cut into the panel. Each
@@ -566,6 +566,45 @@ body {
 }
 .slide-card {
   scroll-snap-align: start;
+}
+
+/* `ScrollFade`: the vertical twin of the rail's fade, on whichever edge cuts
+   something. Same registered-length trick, so it eases rather than snaps. */
+.scroll-fade {
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--fade-top),
+    #000 calc(100% - var(--fade-bottom)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--fade-top),
+    #000 calc(100% - var(--fade-bottom)),
+    transparent
+  );
+  transition: --fade-top var(--dur-base) var(--ease-out),
+    --fade-bottom var(--dur-base) var(--ease-out);
+}
+.scroll-fade[data-back="true"] {
+  --fade-top: 3rem;
+}
+.scroll-fade[data-forward="true"] {
+  --fade-bottom: 3rem;
+}
+@property --fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
 }
 
 /*
