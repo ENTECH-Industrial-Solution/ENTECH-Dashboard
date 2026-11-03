@@ -17,6 +17,7 @@ import {
 
 import { diffFields } from "./diff";
 import { checkPeople, peopleDelta } from "./people";
+import { checkProject } from "./project-link";
 import { fieldErrorsFrom, runAction, type ActionState } from "./types";
 
 /**
@@ -64,6 +65,7 @@ const EDITABLE_FIELDS = [
   "longitude",
   "mapUrl",
   "pinId",
+  "projectId",
   "startDate",
   "endDate",
   "startTime",
@@ -153,13 +155,15 @@ export async function createFieldTripAction(
 
     // Sent together, so checking the pin costs no wall clock on top of
     // checking the travellers — one round trip's latency for both.
-    const [travellers, pin] = await Promise.all([
+    const [travellers, pin, project] = await Promise.all([
       checkTravellers(employeeIds),
       findPin(parsed.data.pinId),
+      checkProject(parsed.data.projectId),
     ]);
 
     if (!travellers.ok) return travellers.error;
     if (parsed.data.pinId !== null && pin === null) return PIN_NOT_FOUND;
+    if (!project.ok) return project.error;
 
     await db.$transaction(async (tx) => {
       const trip = await tx.fieldTrip.create({
@@ -187,6 +191,7 @@ export async function createFieldTripAction(
             endDate: trip.endDate.toISOString(),
             pinId: trip.pinId,
             pinLabel: pin?.label ?? null,
+            project: project.code,
             selfScheduled,
           },
         },
@@ -240,13 +245,15 @@ export async function updateFieldTripAction(
       };
     }
 
-    const [travellers, pin] = await Promise.all([
+    const [travellers, pin, project] = await Promise.all([
       checkTravellers(employeeIds),
       findPin(data.pinId),
+      checkProject(data.projectId, before.projectId),
     ]);
     if (!travellers.ok) return travellers.error;
 
     if (data.pinId !== null && pin === null) return PIN_NOT_FOUND;
+    if (!project.ok) return project.error;
 
     /*
      * The traveller list, diffed by hand because `diffFields` compares single

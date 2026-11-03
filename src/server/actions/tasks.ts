@@ -20,6 +20,7 @@ import {
 
 import { diffFields } from "./diff";
 import { checkPeople, peopleDelta } from "./people";
+import { checkProject } from "./project-link";
 import { fieldErrorsFrom, runAction, type ActionState } from "./types";
 
 /**
@@ -67,6 +68,7 @@ const EDITABLE_FIELDS = [
   "description",
   "priority",
   "category",
+  "projectId",
   "startDate",
   "dueDate",
   "completionNote",
@@ -101,11 +103,15 @@ export async function createTaskAction(
     const assigneeIds = user.role === "ADMIN" ? requested : [user.id];
     const selfAssigned = assigneeIds.length === 1 && assigneeIds[0] === user.id;
 
-    const people = await checkPeople(assigneeIds, {
-      field: "assigneeIds",
-      message: "ไม่สามารถมอบหมายงานให้บัญชีที่ถูกระงับหรือไม่มีอยู่ / Cannot assign to a missing or inactive account",
-    });
+    const [people, project] = await Promise.all([
+      checkPeople(assigneeIds, {
+        field: "assigneeIds",
+        message: "ไม่สามารถมอบหมายงานให้บัญชีที่ถูกระงับหรือไม่มีอยู่ / Cannot assign to a missing or inactive account",
+      }),
+      checkProject(taskData.projectId),
+    ]);
     if (!people.ok) return people.error;
+    if (!project.ok) return project.error;
 
     await db.$transaction(async (tx) => {
       const code = await nextTaskCode(tx);
@@ -143,6 +149,7 @@ export async function createTaskAction(
             code: task.code,
             title: task.title,
             assignees: people.codes,
+            project: project.code,
             selfAssigned,
           },
         },
@@ -190,11 +197,16 @@ export async function updateTaskAction(
 
     // Reassigning onto a suspended account would strand the work somewhere
     // nobody can sign in to reach, exactly as it would at creation.
-    const people = await checkPeople(assigneeIds, {
-      field: "assigneeIds",
-      message: "ไม่สามารถมอบหมายงานให้บัญชีที่ถูกระงับหรือไม่มีอยู่ / Cannot assign to a missing or inactive account",
-    });
+    const [people, project] = await Promise.all([
+      checkPeople(assigneeIds, {
+        field: "assigneeIds",
+        message: "ไม่สามารถมอบหมายงานให้บัญชีที่ถูกระงับหรือไม่มีอยู่ / Cannot assign to a missing or inactive account",
+      }),
+      // A closed project is still a valid answer for a task already in it.
+      checkProject(data.projectId, before.projectId),
+    ]);
     if (!people.ok) return people.error;
+    if (!project.ok) return project.error;
 
     /*
      * The assignee list is absent from EDITABLE_FIELDS on purpose: diffFields
@@ -300,7 +312,7 @@ async function commitTaskEdit({
 }: {
   admin: SessionUser;
   before: { id: string; code: string; status: string };
-  data: Prisma.TaskUpdateInput;
+  data: Prisma.TaskUncheckedUpdateInput;
   changes: ReturnType<typeof diffFields>;
 }) {
   await db.$transaction(async (tx) => {

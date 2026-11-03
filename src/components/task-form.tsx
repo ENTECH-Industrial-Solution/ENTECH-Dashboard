@@ -1,6 +1,7 @@
 "use client";
 
 import { PeoplePicker, type Person } from "@/components/people-picker";
+import { ProjectPicker } from "@/components/project-picker";
 import { Alert, FieldError, SubmitButton } from "@/components/ui";
 import type { TaskCardData } from "@/components/task-card";
 import { useTranslations } from "@/lib/i18n/client";
@@ -153,6 +154,8 @@ export function TaskForm({
           </select>
         </div>
       </div>
+
+      <ProjectPicker id={id} current={task?.project} error={errors.projectId} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>

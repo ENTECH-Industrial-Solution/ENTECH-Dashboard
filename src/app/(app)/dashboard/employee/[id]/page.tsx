@@ -6,6 +6,8 @@ import { CardGrid } from "@/components/card-grid";
 import { Avatar } from "@/components/avatar";
 import { LinkPending } from "@/components/nav-progress";
 import { PageShell } from "@/components/page-shell";
+import { ProfilePhotoForm } from "@/components/profile-photo-form";
+import { ProjectOptionsProvider } from "@/components/project-picker";
 import { ScheduleRow } from "@/components/schedule-row";
 import { SelfWorkCreator } from "@/components/self-work-creator";
 import { SummaryTiles } from "@/components/summary-tiles";
@@ -15,6 +17,7 @@ import { TripHistory } from "@/components/trip-history";
 import { EmptyState } from "@/components/ui";
 import { requireUser } from "@/lib/auth/rbac";
 import { formatDateTime, getLocale, getTranslations } from "@/lib/i18n/server";
+import { photoOf } from "@/lib/pictures";
 import { serialiseTask } from "@/lib/serialise";
 import { getSettings } from "@/lib/settings/server";
 import {
@@ -23,6 +26,7 @@ import {
   getCompletedTasks,
   getCustomerPinOptions,
   getEmployeeProfile,
+  getProjectOptions,
   getTaskSummary,
 } from "@/server/queries";
 
@@ -62,7 +66,7 @@ export default async function EmployeeTasksPage({
   // Only your own page carries the trip form, so only it pays for the pins.
   const pinsEnabled = isSelf && tripsEnabled && settings["customer.enabled"];
 
-  const [active, completed, summary, assignees, pins] = await Promise.all([
+  const [active, completed, summary, assignees, pins, projects] = await Promise.all([
     getActiveTasks(user, id),
     getCompletedTasks(user, { limit: 200, assigneeId: id }),
     settings["dashboard.showSummary"]
@@ -70,156 +74,166 @@ export default async function EmployeeTasksPage({
       : Promise.resolve(null),
     isAdmin ? getAssignableEmployees() : Promise.resolve([]),
     pinsEnabled ? getCustomerPinOptions() : Promise.resolve([]),
+    // For the forms on this page: the admin's editors and your own creator.
+    isAdmin || isSelf ? getProjectOptions() : Promise.resolve([]),
   ]);
 
   const subtitle = [profile.department, profile.position].filter(Boolean).join(" · ");
 
   return (
-    <PageShell className="space-y-8">
-      <div>
-        <Link
-          href="/dashboard"
-          className="text-sm"
-          style={{ color: "var(--text-muted)" }}
-        >
-          ← {t("dashboard.back")}
-          <LinkPending />
-        </Link>
-      </div>
-
-      <header className="card flex flex-wrap items-start gap-4 p-5">
-        <Avatar fullName={profile.fullName} size="lg" muted={!profile.isActive} />
-
-        <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h1 className="text-lg font-semibold tracking-tight">{profile.fullName}</h1>
-            {profile.id === user.id && (
-              <span
-                className="badge"
-                style={{ background: "var(--brand-soft)", color: "var(--brand)" }}
-              >
-                {t("common.you")}
-              </span>
-            )}
-            {profile.role === "ADMIN" && (
-              <span
-                className="badge"
-                style={{ background: "var(--surface-muted)", color: "var(--text-muted)" }}
-              >
-                {t("nav.admin")}
-              </span>
-            )}
-            <span
-              className="badge"
-              style={
-                profile.isActive
-                  ? { background: "var(--success-soft)", color: "var(--success)" }
-                  : { background: "var(--danger-soft)", color: "var(--danger)" }
-              }
-            >
-              {profile.isActive ? t("employees.active") : t("employees.inactive")}
-            </span>
-          </div>
-
-          <div className="font-mono text-sm" style={{ color: "var(--text-muted)" }}>
-            {profile.employeeCode}
-          </div>
-
-          <dl
-            className="flex flex-wrap gap-x-5 gap-y-1 pt-1 text-xs"
+    <ProjectOptionsProvider options={projects}>
+      <PageShell className="space-y-8">
+        <div>
+          <Link
+            href="/dashboard"
+            className="text-sm"
             style={{ color: "var(--text-muted)" }}
           >
-            {subtitle && (
-              <div className="flex gap-1">
-                <dt>{t("employees.department")}:</dt>
-                <dd style={{ color: "var(--text)" }}>{subtitle}</dd>
-              </div>
-            )}
-            {profile.email && (
-              <div className="flex gap-1">
-                <dt>{t("employees.email")}:</dt>
-                <dd style={{ color: "var(--text)" }}>{profile.email}</dd>
-              </div>
-            )}
-            <div className="flex gap-1">
-              <dt>{t("employees.lastLogin")}:</dt>
-              <dd style={{ color: "var(--text)" }}>
-                {profile.lastLoginAt
-                  ? formatDateTime(profile.lastLoginAt, locale)
-                  : t("employees.never")}
-              </dd>
-            </div>
-          </dl>
+            ← {t("dashboard.back")}
+            <LinkPending />
+          </Link>
         </div>
-      </header>
 
-      {summary && <SummaryTiles summary={summary} />}
-
-      <ScheduleRow
-        user={user}
-        cal={cal}
-        basePath={`/dashboard/employee/${profile.id}`}
-        assigneeId={profile.id}
-        linkTasksTo="anchor"
-      />
-
-      <TaskSection title={t("tasks.active")} hint={t("tasks.activeHint")}>
-        {/* On your own page only — the same button the employee board has,
-            since for an admin this page *is* their personal board. Someone
-            else's page gets no button: assigning work to another person is
-            /admin/tasks' job, with the assignee chosen rather than pinned. */}
-        {isSelf && (
-          <SelfWorkCreator
-            self={{
-              id: user.id,
-              employeeCode: user.employeeCode,
-              fullName: user.fullName,
-              department: user.department,
-            }}
-            tripsEnabled={tripsEnabled}
-            pins={pins}
+        <header className="card flex flex-wrap items-start gap-4 p-5">
+          <Avatar
+            fullName={profile.fullName}
+            size="lg"
+            muted={!profile.isActive}
+            photo={photoOf(profile.id, profile.photo)}
           />
-        )}
 
-        {active.length === 0 ? (
-          <EmptyState label={t("tasks.empty")} />
-        ) : (
-          <CardGrid>
-            {active.map((task) => (
-              <ActiveTaskCard
-                key={task.id}
-                task={serialiseTask(task)}
-                canMutate={isAdmin || task.assignees.some((a) => a.employee.id === user.id)}
-                isAdmin={isAdmin}
-                assignees={assignees}
-              />
-            ))}
-          </CardGrid>
-        )}
-      </TaskSection>
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <h1 className="text-lg font-semibold tracking-tight">{profile.fullName}</h1>
+              {profile.id === user.id && (
+                <span
+                  className="badge"
+                  style={{ background: "var(--brand-soft)", color: "var(--brand)" }}
+                >
+                  {t("common.you")}
+                </span>
+              )}
+              {profile.role === "ADMIN" && (
+                <span
+                  className="badge"
+                  style={{ background: "var(--surface-muted)", color: "var(--text-muted)" }}
+                >
+                  {t("nav.admin")}
+                </span>
+              )}
+              <span
+                className="badge"
+                style={
+                  profile.isActive
+                    ? { background: "var(--success-soft)", color: "var(--success)" }
+                    : { background: "var(--danger-soft)", color: "var(--danger)" }
+                }
+              >
+                {profile.isActive ? t("employees.active") : t("employees.inactive")}
+              </span>
+            </div>
 
-      <TaskSection
-        title={t("tasks.history")}
-        hint={t("tasks.historyHint")}
-        footnote={completed.length > 0 ? t("tasks.historyLocked") : undefined}
-      >
-        {completed.length === 0 ? (
-          <EmptyState label={t("tasks.empty")} />
-        ) : (
-          <CardGrid>
-            {completed.map((task) => (
-              <CompletedTaskCard
-                key={task.id}
-                task={serialiseTask(task)}
-                isAdmin={isAdmin}
-                assignees={assignees}
-              />
-            ))}
-          </CardGrid>
-        )}
-      </TaskSection>
+            <div className="font-mono text-sm" style={{ color: "var(--text-muted)" }}>
+              {profile.employeeCode}
+            </div>
 
-      <TripHistory employeeId={profile.id} />
-    </PageShell>
+            <dl
+              className="flex flex-wrap gap-x-5 gap-y-1 pt-1 text-xs"
+              style={{ color: "var(--text-muted)" }}
+            >
+              {subtitle && (
+                <div className="flex gap-1">
+                  <dt>{t("employees.department")}:</dt>
+                  <dd style={{ color: "var(--text)" }}>{subtitle}</dd>
+                </div>
+              )}
+              {profile.email && (
+                <div className="flex gap-1">
+                  <dt>{t("employees.email")}:</dt>
+                  <dd style={{ color: "var(--text)" }}>{profile.email}</dd>
+                </div>
+              )}
+              <div className="flex gap-1">
+                <dt>{t("employees.lastLogin")}:</dt>
+                <dd style={{ color: "var(--text)" }}>
+                  {profile.lastLoginAt
+                    ? formatDateTime(profile.lastLoginAt, locale)
+                    : t("employees.never")}
+                </dd>
+              </div>
+            </dl>
+            {isSelf && <ProfilePhotoForm current={photoOf(profile.id, profile.photo)} />}
+          </div>
+        </header>
+
+        {summary && <SummaryTiles summary={summary} />}
+
+        <ScheduleRow
+          user={user}
+          cal={cal}
+          basePath={`/dashboard/employee/${profile.id}`}
+          assigneeId={profile.id}
+          linkTasksTo="anchor"
+        />
+
+        <TaskSection title={t("tasks.active")} hint={t("tasks.activeHint")}>
+          {/* On your own page only — the same button the employee board has,
+              since for an admin this page *is* their personal board. Someone
+              else's page gets no button: assigning work to another person is
+              /admin/tasks' job, with the assignee chosen rather than pinned. */}
+          {isSelf && (
+            <SelfWorkCreator
+              self={{
+                id: user.id,
+                employeeCode: user.employeeCode,
+                fullName: user.fullName,
+                department: user.department,
+              }}
+              tripsEnabled={tripsEnabled}
+              pins={pins}
+            />
+          )}
+
+          {active.length === 0 ? (
+            <EmptyState label={t("tasks.empty")} />
+          ) : (
+            <CardGrid>
+              {active.map((task) => (
+                <ActiveTaskCard
+                  key={task.id}
+                  task={serialiseTask(task)}
+                  canMutate={isAdmin || task.assignees.some((a) => a.employee.id === user.id)}
+                  isAdmin={isAdmin}
+                  assignees={assignees}
+                />
+              ))}
+            </CardGrid>
+          )}
+        </TaskSection>
+
+        <TaskSection
+          title={t("tasks.history")}
+          hint={t("tasks.historyHint")}
+          footnote={completed.length > 0 ? t("tasks.historyLocked") : undefined}
+        >
+          {completed.length === 0 ? (
+            <EmptyState label={t("tasks.empty")} />
+          ) : (
+            <CardGrid>
+              {completed.map((task) => (
+                <CompletedTaskCard
+                  key={task.id}
+                  task={serialiseTask(task)}
+                  isAdmin={isAdmin}
+                  assignees={assignees}
+                />
+              ))}
+            </CardGrid>
+          )}
+        </TaskSection>
+
+        <TripHistory employeeId={profile.id} />
+      </PageShell>
+    </ProjectOptionsProvider>
   );
 }

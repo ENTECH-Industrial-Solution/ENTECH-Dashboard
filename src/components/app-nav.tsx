@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { Avatar } from "@/components/avatar";
 import { BrandWordmark } from "@/components/brand";
 import { LocaleSwitch } from "@/components/locale-switch";
 import { LinkPending, NavProgressBar } from "@/components/nav-progress";
@@ -24,12 +25,19 @@ type NavLink = { href: string; key: TranslationKey };
 // drift apart on where it goes.
 const CUSTOMERS_LINK: NavLink = { href: "/customers", key: "nav.customers" };
 
-const EMPLOYEE_LINKS: NavLink[] = [{ href: "/dashboard", key: "nav.dashboard" }];
+// Projects are readable by everyone, like the board, so both roles carry it.
+const PROJECTS_LINK: NavLink = { href: "/projects", key: "nav.projects" };
+
+const EMPLOYEE_LINKS: NavLink[] = [
+  { href: "/dashboard", key: "nav.dashboard" },
+  PROJECTS_LINK,
+];
 
 // Field trips live inside the all-tasks page rather than a page of their own:
 // assigning a trip is assigning work, so it starts from the same button.
 const ADMIN_LINKS: NavLink[] = [
   { href: "/dashboard", key: "nav.dashboard" },
+  PROJECTS_LINK,
   { href: "/admin/tasks", key: "nav.allTasks" },
   { href: "/admin/employees", key: "nav.employees" },
   { href: "/admin/audit", key: "nav.audit" },
@@ -98,7 +106,7 @@ export function AppNav({ user }: { user: SessionUser }) {
   // page — /customers calls the same guard itself. See SETTING_IMPACT.
   const base = user.role === "ADMIN" ? ADMIN_LINKS : EMPLOYEE_LINKS;
   const links = settings["customer.enabled"]
-    ? [...base.slice(0, 1), CUSTOMERS_LINK, ...base.slice(1)]
+    ? [...base.slice(0, 2), CUSTOMERS_LINK, ...base.slice(2)]
     : base;
 
   const isActive = (href: string) =>
@@ -209,12 +217,22 @@ export function AppNav({ user }: { user: SessionUser }) {
         </nav>
 
         <div className="col-start-3 flex items-center justify-end gap-3">
-          <div className="hidden text-end whitespace-nowrap 2xl:block">
-            <div className="text-sm leading-tight">{user.fullName}</div>
-            <div className="text-xs leading-tight" style={{ color: "var(--text-muted)" }}>
-              {user.employeeCode} · {roleLabel}
+          {/* Your own face and name, linking to your own page — where your
+              picture is changed. The name joins it only where there is room. */}
+          <Link
+            href={`/dashboard/employee/${user.id}`}
+            className="hidden items-center gap-2 xl:flex"
+            title={`${user.employeeCode} — ${user.fullName}`}
+          >
+            <div className="hidden text-end whitespace-nowrap 2xl:block">
+              <div className="text-sm leading-tight">{user.fullName}</div>
+              <div className="text-xs leading-tight" style={{ color: "var(--text-muted)" }}>
+                {user.employeeCode} · {roleLabel}
+              </div>
             </div>
-          </div>
+            <Avatar fullName={user.fullName} size="sm" photo={user.photo} />
+            <LinkPending />
+          </Link>
 
           <div className="hidden items-center gap-3 xl:flex">
             <ThemeSwitch />
@@ -251,15 +269,19 @@ export function AppNav({ user }: { user: SessionUser }) {
       <Collapse open={open} id="app-menu" className="xl:hidden">
         <div className="border-t">
           <div className="mx-auto w-full max-w-[88rem] space-y-3 px-4 py-3 sm:px-6">
-            <div>
-              <div className="text-sm leading-tight">{user.fullName}</div>
-              <div
-                className="text-xs leading-tight"
-                style={{ color: "var(--text-muted)" }}
-              >
-                {user.employeeCode} · {roleLabel}
+            <Link href={`/dashboard/employee/${user.id}`} className="flex items-center gap-3">
+              <Avatar fullName={user.fullName} photo={user.photo} />
+              <div>
+                <div className="text-sm leading-tight">{user.fullName}</div>
+                <div
+                  className="text-xs leading-tight"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  {user.employeeCode} · {roleLabel}
+                </div>
               </div>
-            </div>
+              <LinkPending />
+            </Link>
 
             {/* Full-width rows rather than the bar's chips: on a phone the
                 thing being tapped should be the whole line, not the label. */}

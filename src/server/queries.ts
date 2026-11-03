@@ -1,10 +1,11 @@
 import "server-only";
 
-import { Prisma, type CustomerStatus } from "@prisma/client";
+import { Prisma, type CustomerStatus, type TaskStatus } from "@prisma/client";
 
 import { CUSTOMER_STATUSES } from "@/lib/customers";
 import { db } from "@/lib/db";
 import { dayStart, monthBounds, todayKey, type YearMonth } from "@/lib/calendar";
+import { employeePhotoSrc, photoOf } from "@/lib/pictures";
 import { getSettings } from "@/lib/settings/server";
 import type { SessionUser } from "@/lib/auth/session";
 
@@ -25,6 +26,9 @@ const ASSIGNEE_SELECT = {
   select: { employee: { select: { id: true, employeeCode: true, fullName: true } } },
 } as const;
 
+/** Enough of a project to draw a chip linking to it. */
+const PROJECT_SELECT = { select: { id: true, code: true, name: true } } as const;
+
 const taskSelect = {
   id: true,
   code: true,
@@ -42,6 +46,7 @@ const taskSelect = {
   createdAt: true,
   assignees: ASSIGNEE_SELECT,
   createdBy: { select: { employeeCode: true, fullName: true } },
+  project: PROJECT_SELECT,
 } as const;
 
 /**
@@ -132,6 +137,11 @@ const TASK_ASSIGNEE_TABLE = Prisma.sql`app."TaskAssignee"`;
 const AUDIT_TABLE = Prisma.sql`app."AuditLog"`;
 const TASK_EVENT_TABLE = Prisma.sql`app."TaskEvent"`;
 const EMPLOYEE_TABLE = Prisma.sql`app."Employee"`;
+const PROJECT_TABLE = Prisma.sql`app."Project"`;
+const EMPLOYEE_PHOTO_TABLE = Prisma.sql`app."EmployeePhoto"`;
+
+/** Whether a person has a picture, and its version — never the bytes. */
+const PHOTO_SELECT = { select: { updatedAt: true } } as const;
 
 /**
  * A trip's three states, as SQL, matching what the cards and the actions mean
@@ -250,6 +260,7 @@ export async function getTasksInMonth(
       startDate: true,
       dueDate: true,
       assignees: ASSIGNEE_SELECT,
+      project: PROJECT_SELECT,
     },
     orderBy: [{ dueDate: "asc" }, { priority: "desc" }, { code: "asc" }],
   });
@@ -286,7 +297,9 @@ const fieldTripSelect = {
   /// renders of the same trip reads as a change to the trip.
   travellers: {
     select: {
-      employee: { select: { id: true, employeeCode: true, fullName: true } },
+      employee: {
+        select: { id: true, employeeCode: true, fullName: true, photo: PHOTO_SELECT },
+      },
     },
     orderBy: { employee: { employeeCode: "asc" } },
   },
@@ -295,9 +308,22 @@ const fieldTripSelect = {
   /// locationName and coordinates are what it is displayed from — this says
   /// "and that place is on the board", nothing more.
   pin: { select: { id: true, label: true } },
+  project: PROJECT_SELECT,
 } as const;
 
-export type TripTraveller = { id: string; employeeCode: string; fullName: string };
+export type TripTraveller = {
+  id: string;
+  employeeCode: string;
+  fullName: string;
+  photo: string | null;
+};
+
+/** A person as a select returns them, to a person with a picture URL. */
+function withPhoto<T extends { id: string; photo: { updatedAt: Date } | null }>(
+  person: T,
+): Omit<T, "photo"> & { photo: string | null } {
+  return { ...person, photo: photoOf(person.id, person.photo) };
+}
 
 /**
  * Drops the pairing rows and leaves the people.
@@ -308,9 +334,13 @@ export type TripTraveller = { id: string; employeeCode: string; fullName: string
  * people exactly as `trip.employee` was a person.
  */
 function flattenTravellers<
-  T extends { travellers: { employee: TripTraveller }[] },
+  T extends {
+    travellers: {
+      employee: Omit<TripTraveller, "photo"> & { photo: { updatedAt: Date } | null };
+    }[];
+  },
 >(trip: T): Omit<T, "travellers"> & { travellers: TripTraveller[] } {
-  return { ...trip, travellers: trip.travellers.map((t) => t.employee) };
+  return { ...trip, travellers: trip.travellers.map((t) => withPhoto(t.employee)) };
 }
 
 export type FieldTripListItem = Awaited<ReturnType<typeof getFieldTrips>>[number];
@@ -555,8 +585,10 @@ export type StaleTask = {
 /**
  * Started or blocked tasks nobody has moved for STALE_TASK_DAYS — the ones the
  * overdue count cannot see, because they have no due date or it is still
- * ahead. "Moved" means a TaskEvent: every status change, edit and reopen
- * writes one, so its absence is exactly "nobody has touched this".
+ * ahead. "Moved" means a TaskEvent other than UPDATED: a status change, a
+ * comment, a reopen. An UPDATED event is an admin's bookkeeping — filing the
+ * task into a project, renaming it, shifting its dates — and none of that is
+ * the work moving, so counting it let a tidy-up hide every stale task.
  *
  * One round trip: the total rides on each row through a window function
  * rather than costing a second count query. Narrowed by assigneeScopeSql like
@@ -595,7 +627,7 @@ export async function getStaleTasks(
     CROSS JOIN LATERAL (
       SELECT COALESCE(max(ev."createdAt"), s."createdAt") AS "at"
       FROM ${TASK_EVENT_TABLE} ev
-      WHERE ev."taskId" = s."id"
+      WHERE ev."taskId" = s."id" AND ev."type" <> 'UPDATED'
     ) a
     WHERE s."status" IN ('IN_PROGRESS', 'BLOCKED') AND a."at" < ${cutoff}
     ORDER BY a."at" ASC
@@ -636,6 +668,7 @@ export type EmployeeWorkload = {
   position: string | null;
   role: "ADMIN" | "EMPLOYEE";
   isActive: boolean;
+  photo: string | null;
   /**
    * Task statuses, and task-only: a field trip has no TODO or BLOCKED to be in.
    */
@@ -678,6 +711,7 @@ export async function getEmployeeWorkloads(
       position: true,
       role: true,
       isActive: true,
+      photo: PHOTO_SELECT,
     },
     orderBy: [{ isActive: "desc" }, { employeeCode: "asc" }],
   });
@@ -766,7 +800,7 @@ export async function getEmployeeWorkloads(
     const blocked = Number(w?.blocked ?? 0);
 
     return {
-      ...e,
+      ...withPhoto(e),
       // The three status counts stay task-only: they name TaskStatus values,
       // and a trip has no TODO/BLOCKED to be in. `active` is the total, so it
       // is no longer their sum — see EmployeeWorkload.
@@ -973,6 +1007,7 @@ export async function getEmployeeProfile(user: SessionUser, employeeId: string) 
       isActive: true,
       lastLoginAt: true,
       createdAt: true,
+      photo: PHOTO_SELECT,
     },
   });
 }
@@ -1105,4 +1140,212 @@ export async function getCustomerPins(limit = 500) {
     orderBy: { createdAt: "desc" },
     take: limit,
   });
+}
+
+export type ProjectSummary = {
+  id: string;
+  code: string;
+  name: string;
+  scope: string | null;
+  startDate: Date | null;
+  endDate: Date | null;
+  closedAt: Date | null;
+  /** Set when the project has a picture; it versions the picture's URL. */
+  imageUpdatedAt: Date | null;
+  /** Tasks plus trips that were not cancelled, as the summary strip counts. */
+  total: number;
+  done: number;
+  overdue: number;
+  /** Started (or blocked) and not late: the rest of the open work is "not started". */
+  active: number;
+  /** Open tasks, for the stack of notes on the card. */
+  openTasks: number;
+  /** Up to MAX_PROJECT_NOTES of them: late first, then started, then the nearest due. */
+  notes: ProjectNote[];
+  people: { id: string; employeeCode: string; fullName: string; photo: string | null }[];
+};
+
+export type ProjectNote = {
+  id: string;
+  code: string;
+  title: string;
+  status: TaskStatus;
+  late: boolean;
+  assignees: { fullName: string }[];
+};
+
+/** How many open tasks a project card carries as notes; past this it says "+n". */
+const MAX_PROJECT_NOTES = 20;
+
+/**
+ * Every project with its progress, in one round trip.
+ *
+ * A project's name and scope are readable by everyone. The *numbers* are not
+ * widened by that: they count only the work the caller may count, through the
+ * same `assigneeScopeSql` / `travellerScopeSql` the summary strip uses, so an
+ * employee's card says how far along *their* part of the job is and an admin's
+ * says the whole of it. The people come from the same rows.
+ *
+ * The three numbers use the predicates `getTaskSummary()` counts with —
+ * `taskOverdue`, `tripOverdue`, cancelled trips counting as nothing — so a
+ * project's "late" never disagrees with the strip's.
+ *
+ * `id` narrows to one project, for its own page.
+ */
+export async function getProjectSummaries(
+  user: SessionUser,
+  { openOnly = false, id }: { openOnly?: boolean; id?: string } = {},
+): Promise<ProjectSummary[]> {
+  const boundary = dayStart(todayKey());
+  const filters = [
+    ...(openOnly ? [Prisma.sql`p."closedAt" IS NULL`] : []),
+    ...(id ? [Prisma.sql`p."id" = ${id}`] : []),
+  ];
+  const where = filters.length
+    ? Prisma.sql`WHERE ${Prisma.join(filters, " AND ")}`
+    : Prisma.empty;
+
+  type Row = Omit<ProjectSummary, "people"> & {
+    people: (Omit<ProjectSummary["people"][number], "photo"> & { photoAt: string | null })[];
+  };
+  const rows = await db.$queryRaw<Row[]>`
+    WITH t AS (
+      SELECT "id", "projectId", code, title, status, "dueDate", "createdAt"
+      FROM ${TASK_TABLE} ${assigneeScopeSql(user)}
+    ),
+    f AS (
+      SELECT "id", "projectId", "cancelledAt", "startedAt", "completedAt", "endDate"
+      FROM ${TRIP_TABLE} ${travellerScopeSql(user)}
+    ),
+    work AS (
+      SELECT "projectId",
+        count(*) AS total,
+        count(*) FILTER (WHERE status = 'COMPLETED') AS done,
+        count(*) FILTER (WHERE ${taskOverdue(boundary)}) AS overdue,
+        count(*) FILTER (
+          WHERE status IN ('IN_PROGRESS', 'BLOCKED') AND NOT COALESCE((${taskOverdue(boundary)}), false)
+        ) AS active
+      FROM t WHERE "projectId" IS NOT NULL GROUP BY 1
+      UNION ALL
+      SELECT "projectId",
+        count(*),
+        count(*) FILTER (WHERE ${TRIP_COMPLETED}),
+        count(*) FILTER (WHERE ${tripOverdue(boundary)}),
+        count(*) FILTER (
+          WHERE "startedAt" IS NOT NULL AND "completedAt" IS NULL
+            AND NOT COALESCE((${tripOverdue(boundary)}), false)
+        )
+      FROM f WHERE "projectId" IS NOT NULL AND "cancelledAt" IS NULL GROUP BY 1
+    ),
+    notes AS (
+      SELECT "projectId", "id", code, title, status,
+        COALESCE((${taskOverdue(boundary)}), false) AS late,
+        row_number() OVER (
+          PARTITION BY "projectId"
+          ORDER BY COALESCE((${taskOverdue(boundary)}), false) DESC,
+            status IN ('IN_PROGRESS', 'BLOCKED') DESC,
+            "dueDate" ASC NULLS LAST, "createdAt" DESC
+        ) AS rn,
+        count(*) OVER (PARTITION BY "projectId") AS open
+      FROM t WHERE "projectId" IS NOT NULL AND status <> 'COMPLETED'
+    ),
+    people AS (
+      SELECT DISTINCT x."projectId", e."id", e."employeeCode", e."fullName", ph."updatedAt" AS "photoAt"
+      FROM (
+        SELECT t."projectId", ta."employeeId"
+        FROM t JOIN ${TASK_ASSIGNEE_TABLE} ta ON ta."taskId" = t."id"
+        UNION
+        SELECT f."projectId", tt."employeeId"
+        FROM f JOIN ${TRIP_TRAVELLER_TABLE} tt ON tt."fieldTripId" = f."id"
+        WHERE f."cancelledAt" IS NULL
+      ) x
+      JOIN ${EMPLOYEE_TABLE} e ON e."id" = x."employeeId"
+      LEFT JOIN ${EMPLOYEE_PHOTO_TABLE} ph ON ph."employeeId" = e."id"
+      WHERE x."projectId" IS NOT NULL
+    )
+    SELECT p."id", p."code", p."name", p."scope", p."startDate", p."endDate", p."closedAt",
+      p."imageUpdatedAt",
+      -- int, not the bigint sum() returns: bigint does not cross into a client component.
+      COALESCE((SELECT sum(w.total) FROM work w WHERE w."projectId" = p."id"), 0)::int AS total,
+      COALESCE((SELECT sum(w.done) FROM work w WHERE w."projectId" = p."id"), 0)::int AS done,
+      COALESCE((SELECT sum(w.overdue) FROM work w WHERE w."projectId" = p."id"), 0)::int AS overdue,
+      COALESCE((SELECT sum(w.active) FROM work w WHERE w."projectId" = p."id"), 0)::int AS active,
+      COALESCE((SELECT max(n.open) FROM notes n WHERE n."projectId" = p."id"), 0)::int AS "openTasks",
+      COALESCE((
+        SELECT json_agg(json_build_object(
+          'id', n."id", 'code', n.code, 'title', n.title, 'status', n.status, 'late', n.late,
+          'assignees', (
+            SELECT COALESCE(json_agg(json_build_object('fullName', e."fullName") ORDER BY e."fullName"), '[]'::json)
+            FROM ${TASK_ASSIGNEE_TABLE} ta JOIN ${EMPLOYEE_TABLE} e ON e."id" = ta."employeeId"
+            WHERE ta."taskId" = n."id"
+          )
+        ) ORDER BY n.rn)
+        FROM notes n WHERE n."projectId" = p."id" AND n.rn <= ${MAX_PROJECT_NOTES}
+      ), '[]'::json) AS notes,
+      COALESCE((
+        SELECT json_agg(json_build_object(
+          'id', pp."id", 'employeeCode', pp."employeeCode", 'fullName', pp."fullName",
+          'photoAt', pp."photoAt"
+        ) ORDER BY pp."employeeCode")
+        FROM people pp WHERE pp."projectId" = p."id"
+      ), '[]'::json) AS people
+    FROM ${PROJECT_TABLE} p
+    ${where}
+    ORDER BY p."closedAt" DESC NULLS FIRST, p."position", p."createdAt"
+  `;
+  // json_agg hands the timestamp back as a string; the URL is built from it here.
+  return rows.map((row) => ({
+    ...row,
+    people: row.people.map(({ photoAt, ...person }) => ({
+      ...person,
+      photo: photoAt ? employeePhotoSrc(person.id, photoAt) : null,
+    })),
+  }));
+}
+
+/** The open projects, for the pickers on the task and trip forms. */
+export async function getProjectOptions() {
+  return db.project.findMany({
+    where: { closedAt: null },
+    select: { id: true, code: true, name: true },
+    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+  });
+}
+
+/**
+ * Everything on one project's page: its tasks and trips. Narrowed exactly as
+ * the dashboard narrows the same rows — open tasks by `assigneeScope`, the
+ * finished ones by the `dashboard.sharedHistory` rule `getCompletedTasks()`
+ * applies, trips by nobody — so a project page shows nothing the dashboard
+ * would not.
+ */
+export async function getProjectWork(user: SessionUser, projectId: string) {
+  const settings = await getSettings();
+  const [active, completed, trips] = await Promise.all([
+    db.task.findMany({
+      where: { projectId, status: { not: "COMPLETED" }, ...assigneeScope(user) },
+      select: taskSelect,
+      orderBy: [
+        { priority: "desc" },
+        { dueDate: { sort: "asc", nulls: "last" } },
+        { createdAt: "desc" },
+      ],
+    }),
+    db.task.findMany({
+      where: {
+        projectId,
+        status: "COMPLETED",
+        ...(settings["dashboard.sharedHistory"] ? {} : assigneeScope(user)),
+      },
+      select: taskSelect,
+      orderBy: { completedAt: "desc" },
+    }),
+    db.fieldTrip.findMany({
+      where: { projectId },
+      select: fieldTripSelect,
+      orderBy: { startDate: "asc" },
+    }),
+  ]);
+
+  return { active, completed, trips: trips.map(flattenTravellers) };
 }

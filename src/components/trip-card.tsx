@@ -7,6 +7,7 @@ import { Avatar } from "@/components/avatar";
 import { MiniMap } from "@/components/map-embed";
 import { Reveal, Swap } from "@/components/motion";
 import { LinkPending } from "@/components/nav-progress";
+import { ProjectChip } from "@/components/project-chip";
 import { VideoPlayer } from "@/components/video-embed";
 import { tripHours } from "@/lib/calendar";
 import { Alert, SubmitButton } from "@/components/ui";
@@ -241,6 +242,11 @@ export function TripHeadline({
           {trip.startedAt &&
             ` · ${t("trips.startedAt")} ${formatMoment(trip.startedAt)}`}
         </div>
+        {trip.project && (
+          <div className="mt-1.5 min-w-0">
+            <ProjectChip project={trip.project} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -283,7 +289,7 @@ export function TripPeople({
             style={ring}
             title={`${person.employeeCode} — ${person.fullName}`}
           >
-            <Avatar fullName={person.fullName} />
+            <Avatar fullName={person.fullName} photo={person.photo} />
           </span>
         ))}
         {more > 0 && (

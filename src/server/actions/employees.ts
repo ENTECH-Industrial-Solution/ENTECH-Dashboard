@@ -369,6 +369,7 @@ export async function deleteEmployeeAction(
             createdFieldTrips: true,
             createdCustomerPins: true,
             createdCustomers: true,
+            createdProjects: true,
             ownedCustomers: true,
             taskEvents: true,
             auditLogs: true,
@@ -408,7 +409,9 @@ export async function deleteEmployeeAction(
       // sentence naming what has to move. Customer.ownerId is deliberately
       // absent: it is SetNull, so an unclaimed lead cannot pin an account.
       employee._count.createdCustomerPins +
-      employee._count.createdCustomers;
+      employee._count.createdCustomers +
+      // Projects they opened, on the same Restrict terms.
+      employee._count.createdProjects;
 
     if (held > 0) {
       return {

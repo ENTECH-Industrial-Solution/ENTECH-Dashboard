@@ -51,7 +51,7 @@ export async function EmployeeFrame({
       style={workload.isActive ? undefined : { opacity: 0.7 }}
     >
       <div className="flex items-start gap-3">
-        <Avatar fullName={workload.fullName} muted={!workload.isActive} />
+        <Avatar fullName={workload.fullName} muted={!workload.isActive} photo={workload.photo} />
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

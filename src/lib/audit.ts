@@ -26,6 +26,7 @@ export type AuditAction =
   /// employee.updated because "who is ENT-0002 now" is a question someone
   /// reading the trail backwards has to be able to answer.
   | "employee.code.changed"
+  | "employee.photo.changed"
   /// The third and last action that destroys its row. Only ever reachable for
   /// an account that is already deactivated and that no task, trip, or event
   /// still points at — the snapshot in its metadata is what survives, minus
@@ -62,6 +63,11 @@ export type AuditAction =
   /// be answerable without unpacking a diff.
   | "customer.status.changed"
   | "customer.deleted"
+  | "project.created"
+  | "project.updated"
+  | "project.closed"
+  | "project.reopened"
+  | "project.moved"
   | "settings.changed";
 
 export async function writeAudit(

@@ -18,6 +18,7 @@ import { Alert, PriorityBadge, StatusBadge, SubmitButton } from "@/components/ui
 import { dayKeyOf, monthGrid, monthOf, monthParam, shiftMonth, type YearMonth } from "@/lib/calendar";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
 import type { Locale, TranslationKey } from "@/lib/i18n/dictionaries";
+import type { ProjectRef } from "@/lib/projects";
 import { rescheduleTaskAction } from "@/server/actions/tasks";
 import { idleState } from "@/server/actions/types";
 
@@ -51,6 +52,7 @@ export type CalendarTask = {
   status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   category: "SOFTWARE" | "DOCUMENT" | "OTHER";
+  project: ProjectRef | null;
   /** "YYYY-MM-DD" in Asia/Bangkok, bucketed server-side. */
   dayKey: string;
   /** Who it belongs to, summarised — see peopleSummary in lib/trips.ts. */
@@ -69,6 +71,7 @@ export type CalendarSpan = {
   id: string;
   /** A task's title or a trip's purpose: what a day's tooltip names. */
   title: string;
+  project: ProjectRef | null;
   from: string;
   to: string;
 } & (
@@ -197,6 +200,7 @@ export type CalendarTrip = {
   /** The trip behind this day, shared by every day of it. */
   tripId: string;
   purpose: string;
+  project: ProjectRef | null;
   dayKey: string;
   /**
    * The trip's first or last day. Only those carry a dot, as a task's start
@@ -374,13 +378,35 @@ export function TaskCalendar({
     setFilterState(next);
     setLit(null);
   };
-  const tasks =
-    filter === "ALL" ? allTasks : allTasks.filter((task) => task.category === filter);
-  const trips = filter === "ALL" || filter === "TRIP" ? allTrips : [];
+  // And one project at a time, from the projects this month's work is in.
+  const projects = [
+    ...new Map(
+      [...allTasks, ...allTrips]
+        .flatMap((entry) => (entry.project ? [entry.project] : []))
+        .map((project) => [project.id, project]),
+    ).values(),
+  ].sort((a, b) => a.code.localeCompare(b.code));
+  const [projectFilter, setProjectFilterState] = useState(lastProjectFilter);
+  // A project chosen last month that has no work in this one shows everything
+  // rather than an empty grid under a select that cannot say why.
+  const projectId = projects.some((p) => p.id === projectFilter) ? projectFilter : "ALL";
+  const setProjectFilter = (next: string) => {
+    lastProjectFilter = next;
+    setProjectFilterState(next);
+    setLit(null);
+  };
+  const inProject = (entry: { project: ProjectRef | null }) =>
+    projectId === "ALL" || entry.project?.id === projectId;
+
+  const tasks = allTasks.filter(
+    (task) => (filter === "ALL" || task.category === filter) && inProject(task),
+  );
+  const trips = filter === "ALL" || filter === "TRIP" ? allTrips.filter(inProject) : [];
   const spans = allSpans.filter(
     (span) =>
-      filter === "ALL" ||
-      (span.kind === "trip" ? filter === "TRIP" : span.category === filter),
+      (filter === "ALL" ||
+        (span.kind === "trip" ? filter === "TRIP" : span.category === filter)) &&
+      inProject(span),
   );
 
   const [lit, setLit] = useState<string | null>(null);
@@ -584,6 +610,23 @@ export function TaskCalendar({
             <option value="TRIP">{t("calendar.filterTrips")}</option>
           </select>
         </div>
+        {projects.length > 0 && (
+          <div className="w-40">
+            <select
+              className="input"
+              aria-label={t("projects.field")}
+              value={projectId}
+              onChange={(event) => setProjectFilter(event.target.value)}
+            >
+              <option value="ALL">{t("projects.allProjects")}</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.code} · {project.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <Link
           href={todayHref}
           scroll={false}
@@ -1505,6 +1548,9 @@ type WorkFilter = "ALL" | CalendarTask["category"] | "TRIP";
  * fresh page load — the renders hydration compares — both see "ALL".
  */
 let lastFilter: WorkFilter = "ALL";
+
+/** The project on show, kept across remounts on the same terms. */
+let lastProjectFilter = "ALL";
 
 /** How long a page takes to slide — matches `.calendar-page` in globals.css. */
 const PAGE_TURN_MS = 400;

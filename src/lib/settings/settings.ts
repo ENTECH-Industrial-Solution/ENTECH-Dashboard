@@ -32,6 +32,7 @@ export const SETTING_KEYS = [
   "dashboard.showSummary",
   "dashboard.showCalendar",
   "dashboard.showPeople",
+  "dashboard.showProjects",
   "dashboard.sharedHistory",
   "fieldTrip.enabled",
   "fieldTrip.showMap",
@@ -58,6 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
   "dashboard.showSummary": true,
   "dashboard.showCalendar": true,
   "dashboard.showPeople": true,
+  "dashboard.showProjects": true,
   "dashboard.sharedHistory": true,
   "fieldTrip.enabled": true,
   "fieldTrip.showMap": true,
@@ -107,6 +109,10 @@ export const SETTING_LABELS: Record<
     label: "settings.showPeople",
     hint: "settings.showPeopleHint",
   },
+  "dashboard.showProjects": {
+    label: "settings.showProjects",
+    hint: "settings.showProjectsHint",
+  },
   "dashboard.sharedHistory": {
     label: "settings.sharedHistory",
     hint: "settings.sharedHistoryHint",
@@ -150,6 +156,8 @@ export const SETTING_IMPACT: Record<SettingKey, SettingImpact> = {
   "dashboard.showSummary": "reads",
   "dashboard.showCalendar": "reads",
   "dashboard.showPeople": "reads",
+  // The band's one aggregate query is skipped; /projects itself stays open.
+  "dashboard.showProjects": "reads",
   "dashboard.sharedHistory": "access",
   "fieldTrip.enabled": "reads",
   "fieldTrip.showMap": "display",
@@ -199,6 +207,7 @@ export const SETTING_GROUPS: readonly {
       "dashboard.showSummary",
       "dashboard.showCalendar",
       "dashboard.showPeople",
+      "dashboard.showProjects",
       "dashboard.sharedHistory",
     ],
   },

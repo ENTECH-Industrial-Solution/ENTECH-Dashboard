@@ -72,6 +72,22 @@ const untouchedOrUrl = z
   .optional()
   .transform((v) => (v === undefined ? undefined : v === "" ? null : v));
 
+/**
+ * The project a task or trip belongs to. On a create form an absent key and a
+ * blank one both mean "in no project"; on an edit form the key is only left
+ * alone when it was never sent, so a form that does not draw the picker cannot
+ * silently take work out of its project.
+ */
+const optionalProjectId = z
+  .union([z.string().trim().cuid(), z.literal("")])
+  .nullish()
+  .transform((v) => (isBlank(v) ? null : v));
+
+const untouchedOrProjectId = z
+  .union([z.string().trim().cuid(), z.literal("")])
+  .optional()
+  .transform((v) => (v === undefined ? undefined : v === "" ? null : v));
+
 export const loginSchema = z.object({
   employeeCode: employeeCodeSchema,
   // Deliberately not passwordSchema: existing passwords must not be rejected by
@@ -190,13 +206,14 @@ const taskFields = z.object({
   ),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
   category: z.enum(["SOFTWARE", "DOCUMENT", "OTHER"]).default("OTHER"),
+  projectId: optionalProjectId,
   /// Planned schedule. Both ends are optional, but if both are given the
   /// start cannot fall after the end.
   startDate: optionalDate,
   dueDate: optionalDate,
 });
 
-const scheduleIsOrdered = (d: z.infer<typeof taskFields>) =>
+const scheduleIsOrdered = (d: Pick<z.infer<typeof taskFields>, "startDate" | "dueDate">) =>
   !d.startDate || !d.dueDate || d.startDate <= d.dueDate;
 
 const SCHEDULE_ORDER = {
@@ -220,6 +237,7 @@ export const createTaskSchema = taskFields.refine(scheduleIsOrdered, SCHEDULE_OR
 export const updateTaskSchema = taskFields
   .extend({
     taskId: z.string().cuid(),
+    projectId: untouchedOrProjectId,
     completionNote: untouchedOrText(5000),
     proofUrl: untouchedOrUrl,
   })
@@ -313,6 +331,7 @@ const fieldTripFields = z.object({
     .union([z.string().trim().cuid(), z.literal("")])
     .nullish()
     .transform((v) => (isBlank(v) ? null : v)),
+  projectId: optionalProjectId,
   startDate: requiredDate,
   endDate: requiredDate,
   startTime: optionalTime,
@@ -320,7 +339,8 @@ const fieldTripFields = z.object({
   note: optionalText(2000),
 });
 
-type FieldTripInput = z.infer<typeof fieldTripFields>;
+// Without projectId, which the edit schema redefines as "untouched or set".
+type FieldTripInput = Omit<z.infer<typeof fieldTripFields>, "projectId">;
 
 const endsAfterItStarts = (d: FieldTripInput) => d.startDate <= d.endDate;
 
@@ -365,6 +385,7 @@ export const createFieldTripSchema = fieldTripFields
 export const updateFieldTripSchema = fieldTripFields
   .extend({
     fieldTripId: z.string().cuid(),
+    projectId: untouchedOrProjectId,
     completionNote: untouchedOrText(5000),
     proofUrl: untouchedOrUrl,
   })
@@ -414,6 +435,38 @@ export const completeFieldTripSchema = z.object({
   completionNote: optionalText(5000),
   proofUrl: optionalUrl,
 });
+
+/**
+ * A project's content. Name is the only thing it cannot be without; the scope
+ * is the point of the feature but a project may be opened before anyone has
+ * written it down.
+ */
+const projectFields = z
+  .object({
+    name: z.string().trim().min(1, "กรุณากรอกชื่อโปรเจกต์ / A name is required").max(200),
+    scope: optionalText(5000),
+    startDate: optionalDate,
+    endDate: optionalDate,
+  });
+
+const projectIsOrdered = (d: z.infer<typeof projectFields>) =>
+  !d.startDate || !d.endDate || d.startDate <= d.endDate;
+
+const PROJECT_ORDER = {
+  message: "วันสิ้นสุดต้องไม่ก่อนวันเริ่ม / The end date cannot precede the start",
+  path: ["endDate"],
+};
+
+export const createProjectSchema = projectFields.refine(projectIsOrdered, PROJECT_ORDER);
+
+export const updateProjectSchema = projectFields
+  .extend({ projectId: z.string().cuid() })
+  .refine(projectIsOrdered, PROJECT_ORDER);
+
+/** Closing or reopening. A reason is not demanded: nothing is lost either way. */
+export const projectIdSchema = z.object({ projectId: z.string().cuid() });
+
+export const moveProjectSchema = projectIdSchema.extend({ direction: z.enum(["up", "down"]) });
 
 /** One UI switch on the admin settings page. */
 export const settingSchema = z.object({

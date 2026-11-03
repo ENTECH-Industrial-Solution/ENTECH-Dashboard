@@ -259,8 +259,10 @@ three tiles go side by side on a **container** query (`@xl:`) rather than a
 viewport one.
 
 `StaleTasks` sits under it in the same column. It lists tasks that are in
-progress or blocked and have had no `TaskEvent` for `STALE_TASK_DAYS` (14). The
-read, `getStaleTasks()`, is one raw query that narrows through
+progress or blocked and have had no `TaskEvent` for `STALE_TASK_DAYS` (14).
+`UPDATED` events do not count: an admin filing a task into a project or
+fixing its title is bookkeeping, not the work moving, and counting it made a
+tidy-up empty the list. The read, `getStaleTasks()`, is one raw query that narrows through
 `assigneeScopeSql` and takes the total from a window `count(*) OVER ()`, so it
 costs a single round trip.
 
@@ -612,6 +614,61 @@ again as tall.
 
 `#trip-<id>` lands on the box itself, and `.trip-anchor:target` is what rings
 it — the same anchor `TripCard` carries on `/admin/tasks`.
+
+### Projects
+
+`Project` groups tasks and trips into one job, so somebody can read what the
+job covers (`scope`) and how far along it is in one place. `Task.projectId` and
+`FieldTrip.projectId` are optional and `SetNull`, for the reason
+`FieldTrip.pinId` is: a task or trip is history and never goes because its
+grouping did. Codes are `PRJ-####` from the same `Counter` table as tasks.
+
+A project has **no status of its own** beyond `closedAt`. Progress is derived
+from the work in it, never typed in, so it cannot disagree with that work.
+Creating, editing, closing and reordering are admin-only and audited
+(`project.created/updated/closed/reopened/moved`); there is **no delete**, and
+closing can be undone. `position` is the order the band and `/projects` share:
+a new project takes one past the largest so it lands at the end, and the ← →
+under each open card on `/projects` renumbers the open ones in one statement. Closing hides a project from the band and the pickers and touches
+nothing in it. `checkProject()` refuses putting work into a closed project but
+allows leaving work where it is, so editing a task in a finished job still
+works. `deleteEmployeeAction` counts `createdProjects` (Restrict).
+
+**Visibility follows the rows, not the project.** A project's name and scope are
+readable by everyone signed in. Its numbers are not widened by that:
+`getProjectSummaries()` counts through `assigneeScopeSql` / `travellerScopeSql`
+with the same predicates as `getTaskSummary()`, so an employee's card shows
+their share of the job and an admin's the whole of it. `getProjectWork()` lists
+the tasks the way the dashboard does (open ones by `assigneeScope`, finished
+ones by the `dashboard.sharedHistory` rule, trips by nobody), so
+`/projects/[id]` is a second way into rows the viewer could already read, never
+a wider one. The summaries are one raw query for the whole list.
+
+The band above the calendar is gated on `dashboard.showProjects` (`reads`). An
+employee's band shows only projects they have work in. The form pickers read
+the open projects from `ProjectOptionsProvider`, which each page with a form
+publishes once, instead of a prop drilled through every card. The edit schemas
+read an absent `projectId` as "unchanged", so a form without the picker cannot
+take work out of its project.
+
+### Pictures
+
+A project and a person can each carry one picture. The app has no object
+storage and the CSP opens no host for one, so the bytes live in Postgres and
+are served same-origin by two route handlers, `/projects/[id]/image` and
+`/dashboard/employee/[id]/photo`, each checking the session itself. A
+project's sits in three columns on `Project`; a person's has its own table,
+`EmployeePhoto`, because the session lookup reads the employee row on every
+request and must never carry bytes. Reads select the timestamp only, and
+`src/lib/pictures.ts` turns it into a versioned URL, so a response is cached
+for good and a new picture is a new URL.
+
+`PictureField` shrinks the file to 256px in the browser before the form
+posts; `readImageChange()` accepts PNG, JPEG or WebP by magic bytes, never by
+name, and never SVG, which can carry script. Only you can set your own picture
+(`setOwnPhotoAction` takes the id from the session); a project's is an
+admin's, on the project form. The audit trail records that a picture changed,
+never its bytes.
 
 ### The customer map
 
@@ -1290,6 +1347,9 @@ every new one has to declare which of the three it is:
   `getCompletedTasks()` in the query layer. Enforce these in
   `src/server/queries.ts` or the action, never only in the component.
 
+`dashboard.showProjects` skips the project band's one aggregate read; the
+`/projects` pages stay open either way.
+
 `dashboard.showPeople` governs the per-person frames *and* the capsules in the
 summary strip, because `getEmployeeWorkloads()` is the one read behind both;
 splitting them into two switches would have left one of them unable to save the
@@ -1388,7 +1448,7 @@ it forever. So:
   which also means no live session is cut off mid-request;
 - nothing may still reference it — assigned or created tasks, trips travelled or
   scheduled, customer pins or leads they filed. Those keys are
-  `onDelete: Restrict` and would refuse anyway; counting first turns a database
+  `onDelete: Restrict` and would refuse anyway (projects they created count too); counting first turns a database
   error into a sentence naming what to move. `Customer.ownerId` is deliberately
   *not* counted: it is `SetNull`, so an unclaimed lead cannot pin an account
   in place;

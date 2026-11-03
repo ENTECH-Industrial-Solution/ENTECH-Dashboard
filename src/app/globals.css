@@ -1073,6 +1073,137 @@ body {
   }
 }
 
+/*
+ * A project card's open tasks as a pile of notes (`NoteStack`). The drawer is
+ * an ordinary scroller over one empty slot per note; the pile is pinned over
+ * it (sticky, pulling its own height back out of flow), and the component
+ * publishes the scroll as `--p`, in notes. Each note is `--d = index − --p`
+ * from the one you are on:
+ *
+ *   d > 0   still to come: below, one note's height apart, the next peeking;
+ *   d = 0   the one you are on, in full;
+ *   d < 0   flipped past: filed above, `--strip` apart — enough to read the
+ *           code and the title's first line — for the last `--pile` of them,
+ *           closed up at the top beyond that.
+ *
+ * One formula, continuous in `--p`, so a note slides from one role to the
+ * next as you scroll. `min(--p, --pile)` is how far the note you are on has
+ * been pushed down by the pile above it, so at the start it sits at the top.
+ */
+.note-stack {
+  --note-h: 5.25rem;
+  --strip: 2.95rem;
+  --pile: 2;
+  --peek: 1.25rem;
+  --pad: 0.45rem;
+  --adv: calc(var(--note-h) + 0.5rem);
+  position: relative;
+  /* Centred in whatever room it has: the middle of its column beside the
+     details, the middle of the card's width underneath them. */
+  place-self: center;
+  inline-size: 100%;
+  max-inline-size: 18rem;
+}
+.note-drawer {
+  --p: 0;
+  /* Only as tall as the pile it can ever hold: one note alone needs no room
+     for a pile above it or a peek below it. */
+  --stack-h: calc(
+    min(var(--n) - 1, var(--pile)) * var(--strip) + var(--note-h) + min(var(--n) - 1, 1) *
+      var(--peek) + 2 * var(--pad)
+  );
+  block-size: var(--stack-h);
+  overflow-y: auto;
+  scroll-snap-type: y proximity;
+}
+.note-pile {
+  position: sticky;
+  inset-block-start: 0;
+  block-size: var(--stack-h);
+  margin-block-end: calc(-1 * var(--stack-h));
+  /* Clips the notes still to come; the padding round the paper keeps the
+     tilt and the shadow clear of that edge. */
+  overflow: hidden;
+}
+/* One scroll step per note; the last slot is the whole drawer tall, so the
+   scroll ends exactly on the last note. */
+.stack-slot {
+  block-size: var(--adv);
+  scroll-snap-align: start;
+}
+.stack-slot:last-child {
+  block-size: var(--stack-h);
+}
+.stack-note {
+  --paper: oklch(0.95 0.085 100);
+  --tilt: -1deg;
+  --d: calc(var(--k) - var(--p));
+  --y: calc(
+    min(var(--p), var(--pile)) * var(--strip) + max(var(--d), 0) * var(--adv) +
+      max(min(var(--d), 0), -1 * var(--pile)) * var(--strip)
+  );
+  /* Paper is paper in either theme, as on the calendar's notes. */
+  color-scheme: light;
+  color: var(--text);
+  position: absolute;
+  inset-inline: 0.4rem;
+  inset-block-start: var(--pad);
+  block-size: var(--note-h);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--paper);
+  border-radius: 2px;
+  rotate: var(--tilt);
+  transform: translateY(var(--y));
+  box-shadow:
+    0 6px 10px -6px oklch(0 0 0 / 0.4),
+    0 1px 2px oklch(0 0 0 / 0.16);
+  transition:
+    translate var(--dur-base) var(--ease-out),
+    rotate var(--dur-base) var(--ease-out),
+    scale var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+/* Pointing at a filed note lifts it clear of the one covering it. */
+@media (hover: hover) {
+  .stack-note:hover {
+    z-index: 10;
+    translate: 0 -0.35rem;
+    rotate: 0deg;
+    scale: 1.04;
+    box-shadow:
+      0 14px 22px -10px oklch(0 0 0 / 0.45),
+      0 2px 4px oklch(0 0 0 / 0.14);
+  }
+}
+.stack-note:nth-child(3n + 2) {
+  --tilt: 1.4deg;
+}
+.stack-note:nth-child(3n) {
+  --tilt: -2deg;
+}
+.stack-note[data-paper="blue"] {
+  --paper: oklch(0.9 0.05 230);
+}
+.stack-note[data-paper="pink"] {
+  --paper: oklch(0.9 0.05 5);
+}
+.stack-more {
+  position: absolute;
+  inset-inline-end: -0.4rem;
+  inset-block-end: -0.5rem;
+  z-index: 5;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--text-muted);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
 /* --- theme switch --------------------------------------------------------- */
 
 /*
