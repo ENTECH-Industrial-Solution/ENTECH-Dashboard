@@ -178,6 +178,12 @@ export const dictionary = {
   },
   "calendar.moveDue": { th: "ย้ายกำหนดส่ง", en: "Move due date" },
   "calendar.moveStart": { th: "ย้ายวันเริ่มงาน", en: "Move start date" },
+  "calendar.legendTasks": { th: "งาน", en: "Tasks" },
+  "calendar.legendTrips": { th: "ทริป", en: "Trips" },
+  "calendar.legendOpen": { th: "ยังไม่เสร็จ", en: "Open" },
+  "calendar.legendOverdue": { th: "เลยกำหนด", en: "Overdue" },
+  "calendar.notDrawn": { th: "ไม่ได้แสดงเป็นเส้น", en: "not drawn as a bar" },
+  "calendar.tripPrefix": { th: "ทริป", en: "Trip" },
 
   "dashboard.byPerson": { th: "งานรายบุคคล", en: "By employee" },
   "dashboard.byPersonHint": {

@@ -58,22 +58,37 @@ export type CalendarTask = {
 };
 
 /**
- * A task's planned run, from its start date to its due date, drawn as a bar
- * across the days between. The two ends keep their own `CalendarTask` entries;
- * this is only the stretch joining them. `from` and `to` are the task's real
+ * A run of days drawn as a bar across them: a task's planned run from its
+ * start date to its due date, or a multi-day trip. The days keep their own
+ * entries; this is only the stretch joining them. `from` and `to` are the real
  * dates, not clipped to the month, so a bar can tell an end from a page edge.
  */
 export type CalendarSpan = {
-  /** The task's id: a task has one span. */
+  /** Unique across both kinds: a task or a trip has one span. */
   id: string;
-  code: string;
+  /** A task's title or a trip's purpose: what a day's tooltip names. */
   title: string;
-  status: CalendarTask["status"];
   from: string;
   to: string;
-  assigneeNames: string;
-  href: string;
-};
+} & (
+  | {
+      kind: "task";
+      code: string;
+      status: CalendarTask["status"];
+      assigneeNames: string;
+      href: string;
+    }
+  | {
+      /**
+       * Bar only. A trip already has a note on every day it covers, so the
+       * day's "running through" list leaves it out.
+       */
+      kind: "trip";
+      state: CalendarTrip["state"];
+    }
+);
+
+type TaskSpan = Extract<CalendarSpan, { kind: "task" }>;
 
 /** Bars stacked in a day; more than this and the day's "+n" counts them. */
 const SPAN_LANES = 3;
@@ -93,9 +108,11 @@ const SPAN_STEP = 8;
  * overlaps; the day keys compare as strings.
  */
 function laneSpans(spans: CalendarSpan[]): Map<string, number> {
+  const done = (span: CalendarSpan) =>
+    (span.kind === "task" ? span.status : span.state) === "COMPLETED";
   const ordered = [...spans].sort(
     (a, b) =>
-      Number(a.status === "COMPLETED") - Number(b.status === "COMPLETED") ||
+      Number(done(a)) - Number(done(b)) ||
       a.from.localeCompare(b.from) ||
       b.to.localeCompare(a.to),
   );
@@ -114,9 +131,21 @@ function laneSpans(spans: CalendarSpan[]): Map<string, number> {
   return laneOf;
 }
 
-function spanTone(span: CalendarSpan, todayKey: string): Tone {
-  if (span.status === "COMPLETED") return "done";
-  return span.to < todayKey ? "overdue" : "open";
+/** A trip's bar wears the trip's state, the same colour as its dots. */
+function spanColor(span: CalendarSpan, todayKey: string): string {
+  if (span.kind === "trip") return TRIP_TONE[span.state].color;
+  if (span.status === "COMPLETED") return TONE_COLOR.done;
+  return TONE_COLOR[span.to < todayKey ? "overdue" : "open"];
+}
+
+/**
+ * Dashed for a trip, solid for a task. The shape says which kind, the colour
+ * which state: a finished trip and a finished task are both green.
+ */
+function barFill(color: string, kind: CalendarSpan["kind"]): string {
+  return kind === "trip"
+    ? `repeating-linear-gradient(90deg, ${color} 0 6px, transparent 6px 9px)`
+    : color;
 }
 
 /**
@@ -125,8 +154,15 @@ function spanTone(span: CalendarSpan, todayKey: string): Tone {
  */
 export type CalendarTrip = {
   id: string;
+  /** The trip behind this day, shared by every day of it. */
+  tripId: string;
   purpose: string;
   dayKey: string;
+  /**
+   * The trip's first or last day. Only those carry a dot, as a task's start
+   * and due days do; the bar and the tint already cover the days between.
+   */
+  isEnd: boolean;
   /** Who is going, summarised — see peopleSummary in lib/trips.ts. */
   personName: string;
   locationName: string;
@@ -290,6 +326,10 @@ export function TaskCalendar({
     todayKey.startsWith(monthPrefix) ? todayKey : null,
   );
 
+  const [lit, setLit] = useState<string | null>(null);
+  const light = (id: string) => (on: boolean) =>
+    setLit((current) => (on ? id : current === id ? null : current));
+
   const tasksByDay = groupByDay(tasks);
   const tripsByDay = groupByDay(trips);
 
@@ -372,12 +412,24 @@ export function TaskCalendar({
   // The colour a day's tile takes from the spans over it: the lowest lane's,
   // which is the bar drawn nearest the day number.
   const tintByDay = new Map<string, { lane: number; color: string }>();
+  // What runs over each day, hidden lanes included, for the cell's tooltip:
+  // the bars ignore the pointer so they cannot answer for themselves.
+  const namesByDay = new Map<string, string[]>();
 
   for (const span of spans) {
     if (span.to < monthFirst || span.from > monthLast) continue;
     const lane = laneOf.get(span.id) ?? 0;
     const first = span.from < monthFirst ? 1 : Number(span.from.slice(8));
     const last = span.to > monthLast ? daysInMonth : Number(span.to.slice(8));
+
+    const name =
+      span.kind === "task"
+        ? `${span.code} ${span.title}`
+        : `${t("calendar.tripPrefix")}: ${span.title}`;
+    for (let day = first; day <= last; day += 1) {
+      const key = dayKeyOf({ year, month }, day);
+      namesByDay.set(key, [...(namesByDay.get(key) ?? []), name]);
+    }
 
     if (lane >= SPAN_LANES) {
       for (let day = first; day <= last; day += 1) {
@@ -387,7 +439,7 @@ export function TaskCalendar({
       continue;
     }
 
-    const color = TONE_COLOR[spanTone(span, todayKey)];
+    const color = spanColor(span, todayKey);
     for (let day = first; day <= last; day += 1) {
       const key = dayKeyOf({ year, month }, day);
       const tint = tintByDay.get(key);
@@ -411,13 +463,29 @@ export function TaskCalendar({
     }
   }
 
+  // The days of whatever note or row the pointer is on, ringed on the grid.
+  // Keyed as spans are: a task's id, or "trip:" and the trip's.
+  const litDays = new Set<string>();
+  if (lit) {
+    for (const task of tasks) if (task.taskId === lit) litDays.add(task.dayKey);
+    for (const trip of trips) if (`trip:${trip.tripId}` === lit) litDays.add(trip.dayKey);
+    const litSpan = spans.find((span) => span.id === lit);
+    for (let day = 1; litSpan && day <= daysInMonth; day += 1) {
+      const key = dayKeyOf({ year, month }, day);
+      if (key >= litSpan.from && key <= litSpan.to) litDays.add(key);
+    }
+  }
+
   const selectedTasks = selected ? (tasksByDay.get(selected) ?? []) : [];
   const dueCount = selectedTasks.filter((task) => task.kind === "due").length;
   const startCount = selectedTasks.length - dueCount;
   const selectedTrips = selected ? (tripsByDay.get(selected) ?? []) : [];
   // Strictly between the ends: the start and due days already carry a note.
   const selectedSpans = selected
-    ? spans.filter((span) => span.from < selected && span.to > selected)
+    ? spans.filter(
+        (span): span is TaskSpan =>
+          span.kind === "task" && span.from < selected && span.to > selected,
+      )
     : [];
   const nothingThisMonth =
     tasks.length === 0 && trips.length === 0 && spans.length === 0;
@@ -426,7 +494,7 @@ export function TaskCalendar({
     month: "short",
     timeZone: "UTC",
   });
-  const spanRange = (span: CalendarSpan) =>
+  const spanRange = (span: TaskSpan) =>
     `${shortDay.format(new Date(`${span.from}T00:00:00Z`))} – ${shortDay.format(
       new Date(`${span.to}T00:00:00Z`),
     )}`;
@@ -505,13 +573,19 @@ export function TaskCalendar({
 
             // Trips first: where someone is affects everything else that day.
             const dots = [
-              ...dayTrips.map((trip) => TRIP_TONE[trip.state].color),
+              ...dayTrips
+                .filter((trip) => trip.isEnd)
+                .map((trip) => TRIP_TONE[trip.state].color),
               ...dayTasks.map((task) => TONE_COLOR[toneOf(task, todayKey)]),
             ];
-            // What the cell cannot show: dots past three, and spans past the
-            // lanes drawn under it.
-            const extra = Math.max(dots.length - 3, 0) + (hiddenByDay.get(key) ?? 0);
+            // What the cell cannot show: dots past what fits, and spans past
+            // the lanes drawn under it. Two dots once there is a count, so the
+            // dots and a legible "+n" still fit a phone-width cell together.
+            const hidden = hiddenByDay.get(key) ?? 0;
+            const shownDots = dots.slice(0, dots.length > 3 || hidden > 0 ? 2 : 3);
+            const extra = dots.length - shownDots.length + hidden;
             const tint = tintByDay.get(key);
+            const names = namesByDay.get(key);
 
             return (
               <button
@@ -519,10 +593,14 @@ export function TaskCalendar({
                 type="button"
                 // While a task is being moved, a day is a destination rather
                 // than a selection.
-                onClick={() =>
-                  moving ? pointAt(moving, key) : setSelected(isSelected ? null : key)
-                }
+                onClick={() => {
+                  // The notes are about to be replaced, and an unmount fires no blur.
+                  setLit(null);
+                  if (moving) pointAt(moving, key);
+                  else setSelected(isSelected ? null : key);
+                }}
                 aria-pressed={isSelected}
+                title={names?.join("\n")}
                 data-day={key}
                 data-target={moving ? (dragOver === key ? "over" : "open") : undefined}
                 className="day-cell relative flex min-h-16 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-xs transition-colors"
@@ -540,6 +618,11 @@ export function TaskCalendar({
                   border: `1px solid ${
                     isToday && !isSelected ? "var(--brand)" : "transparent"
                   }`,
+                  // A gap before the ring, so it still shows round the selected
+                  // day, which is filled the same ink.
+                  boxShadow: litDays.has(key)
+                    ? "0 0 0 2px var(--surface), 0 0 0 4px var(--text)"
+                    : undefined,
                 }}
                 {...dropHandlers(key)}
               >
@@ -548,11 +631,11 @@ export function TaskCalendar({
                   {day}
                 </span>
 
-                {(dots.length > 0 || extra > 0) && (
+                {(shownDots.length > 0 || extra > 0) && (
                   // One line at the foot of the cell, never wrapped: a second
                   // line on a phone-width cell would land on the span bars.
                   <span className="day-marks mt-auto flex items-center justify-center gap-0.5 whitespace-nowrap">
-                    {dots.slice(0, 3).map((color, dotIndex) => (
+                    {shownDots.map((color, dotIndex) => (
                       <span
                         key={dotIndex}
                         className="h-1.5 w-1.5 rounded-full"
@@ -565,7 +648,7 @@ export function TaskCalendar({
                     ))}
                     {extra > 0 && (
                       <span
-                        className="text-[0.625rem] leading-none"
+                        className="text-xs leading-none"
                         style={{
                           color: isSelected
                             ? "var(--surface)"
@@ -597,15 +680,15 @@ export function TaskCalendar({
               {bars.map((bar) => (
                 <span
                   key={`${bar.span.id}-${bar.row}`}
-                  className={`h-1.5 self-start ${bar.opens ? "ms-1.5 rounded-s-full" : ""} ${
+                  className={`h-1.5 self-start transition-opacity ${bar.opens ? "ms-1.5 rounded-s-full" : ""} ${
                     bar.closes ? "me-1.5 rounded-e-full" : ""
                   }`}
                   style={{
                     gridRow: bar.row + 1,
                     gridColumn: `${bar.col + 1} / span ${bar.length}`,
                     marginTop: `${SPAN_TOP + bar.lane * SPAN_STEP}px`,
-                    background: TONE_COLOR[spanTone(bar.span, todayKey)],
-                    opacity: 0.75,
+                    background: barFill(spanColor(bar.span, todayKey), bar.span.kind),
+                    opacity: lit === null ? 0.75 : lit === bar.span.id ? 1 : 0.2,
                   }}
                 />
               ))}
@@ -615,6 +698,13 @@ export function TaskCalendar({
             </div>
           )}
       </div>
+
+      {!nothingThisMonth && (
+        <Legend
+          hasTasks={tasks.length > 0 || spans.some((span) => span.kind === "task")}
+          hasTrips={trips.length > 0}
+        />
+      )}
 
       <div className="space-y-2 border-t pt-3">
         {/* A turn in progress: the notes belong to the month leaving, and a
@@ -697,7 +787,13 @@ export function TaskCalendar({
                   const tone = TRIP_TONE[trip.state];
 
                   return (
-                    <StickyNote key={trip.id} id={trip.id} index={index}>
+                    <StickyNote
+                      key={trip.id}
+                      id={trip.id}
+                      index={index}
+                      lit={lit === `trip:${trip.tripId}`}
+                      onLight={light(`trip:${trip.tripId}`)}
+                    >
                       <span
                         className="inline-flex items-center gap-1 text-xs"
                         style={{ color: tone.color }}
@@ -734,6 +830,8 @@ export function TaskCalendar({
                     id={task.id}
                     index={selectedTrips.length + index}
                     lifted={moving?.id === task.id}
+                    lit={lit === task.taskId}
+                    onLight={light(task.taskId)}
                     drag={
                       canReschedule
                         ? {
@@ -824,10 +922,14 @@ export function TaskCalendar({
                       <Link
                         href={span.href}
                         className="flex min-w-0 items-start gap-2 rounded-md px-1 py-1 text-sm hover:underline"
+                        onMouseEnter={() => light(span.id)(true)}
+                        onMouseLeave={() => light(span.id)(false)}
+                        onFocus={() => light(span.id)(true)}
+                        onBlur={() => light(span.id)(false)}
                       >
                         <span
                           className="mt-2 h-1 w-3 shrink-0 rounded-full"
-                          style={{ background: TONE_COLOR[spanTone(span, todayKey)] }}
+                          style={{ background: spanColor(span, todayKey) }}
                         />
                         <span className="min-w-0">
                           <span className="flex min-w-0 items-baseline gap-2">
@@ -845,6 +947,9 @@ export function TaskCalendar({
                           >
                             {spanRange(span)}
                             {showAssignee && ` · ${span.assigneeNames}`}
+                            {/* Past the lanes: counted in the day's "+n" only. */}
+                            {(laneOf.get(span.id) ?? 0) >= SPAN_LANES &&
+                              ` · ${t("calendar.notDrawn")}`}
                           </span>
                         </span>
                         <LinkPending />
@@ -858,6 +963,57 @@ export function TaskCalendar({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * What the colours and the two bar shapes mean, on one wrapping line. The
+ * dots wear the same colours as the bars, so one key serves both.
+ */
+function Legend({ hasTasks, hasTrips }: { hasTasks: boolean; hasTrips: boolean }) {
+  const t = useTranslations();
+  const group = (
+    label: string,
+    kind: CalendarSpan["kind"],
+    items: { color: string; label: string }[],
+  ) => (
+    <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span className="font-medium">{label}</span>
+      {items.map((item) => (
+        <span key={item.label} className="inline-flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="h-1.5 w-4 rounded-full"
+            style={{ background: barFill(item.color, kind) }}
+          />
+          {item.label}
+        </span>
+      ))}
+    </span>
+  );
+
+  return (
+    <p
+      className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs"
+      style={{ color: "var(--text-muted)" }}
+    >
+      {hasTasks &&
+        group(t("calendar.legendTasks"), "task", [
+          { color: TONE_COLOR.open, label: t("calendar.legendOpen") },
+          { color: TONE_COLOR.overdue, label: t("calendar.legendOverdue") },
+          { color: TONE_COLOR.done, label: t("status.COMPLETED") },
+          { color: TONE_COLOR.start, label: t("calendar.marksStart") },
+        ])}
+      {hasTrips &&
+        group(
+          t("calendar.legendTrips"),
+          "trip",
+          (["SCHEDULED", "ON_SITE", "COMPLETED"] as const).map((state) => ({
+            color: TRIP_TONE[state].color,
+            label: t(TRIP_TONE[state].label),
+          })),
+        )}
+    </p>
   );
 }
 
@@ -946,6 +1102,8 @@ function StickyNote({
   id,
   index,
   lifted = false,
+  lit = false,
+  onLight,
   drag,
   children,
 }: {
@@ -953,6 +1111,12 @@ function StickyNote({
   id: string;
   index: number;
   lifted?: boolean;
+  /**
+   * Whether the calendar is ringing this note's days, and the switch for it:
+   * a mouse resting on the note, focus inside it, or a finger tapping it.
+   */
+  lit?: boolean;
+  onLight?: (on: boolean) => void;
   drag?: {
     code: string;
     onLift: () => void;
@@ -999,7 +1163,12 @@ function StickyNote({
     return () => el.removeEventListener("touchmove", block);
   }, [drag]);
 
+  // A finger has no hover, so for it a tap is the switch; read by onClick,
+  // which does not say what pressed it.
+  const pressedBy = useRef<string>("mouse");
+
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    pressedBy.current = event.pointerType;
     if (!drag || event.pointerType === "mouse") return;
     const el = note.current;
     if (!el) return;
@@ -1078,6 +1247,22 @@ function StickyNote({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={release}
+        // Pointer events rather than mouse ones: a phone fakes mouseenter on
+        // every tap, which would light the note just before the tap unlit it.
+        onPointerEnter={(event) => {
+          if (event.pointerType === "mouse") onLight?.(true);
+        }}
+        onPointerLeave={(event) => {
+          if (event.pointerType === "mouse") onLight?.(false);
+        }}
+        onFocus={onLight && (() => onLight(true))}
+        onBlur={onLight && (() => onLight(false))}
+        onClick={(event) => {
+          if (pressedBy.current === "mouse") return;
+          // The link and the move button keep their own jobs.
+          if ((event.target as Element).closest("a, button")) return;
+          onLight?.(!lit);
+        }}
         onContextMenu={drag ? (event) => { if (hold.current) event.preventDefault(); } : undefined}
       >
         {fastener}
