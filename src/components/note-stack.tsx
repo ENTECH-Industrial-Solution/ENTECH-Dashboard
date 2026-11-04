@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 
+import { useTranslations } from "@/lib/i18n/client";
 import { peopleSummary } from "@/lib/trips";
 import type { ProjectNote } from "@/server/queries";
 
@@ -15,7 +16,7 @@ function noteTone(note: ProjectNote) {
 }
 
 /**
- * A project's open notes as a pile you scroll through, like flipping through
+ * A project's open tasks and trips as a pile of notes you scroll through, like flipping through
  * folders: the note you are on in full, the next one peeking out below it, and
  * the last two you flipped past filed above it with their code and title still
  * showing. Further back than that the pile closes up.
@@ -32,6 +33,7 @@ function noteTone(note: ProjectNote) {
  * renders.
  */
 export function NoteStack({ notes, more }: { notes: ProjectNote[]; more: number }) {
+  const t = useTranslations();
   const ref = useRef<HTMLDivElement>(null);
 
   function onScroll() {
@@ -56,15 +58,19 @@ export function NoteStack({ notes, more }: { notes: ProjectNote[]; more: number 
         <div className="note-pile">
           {notes.map((note, i) => (
             <div
-              key={note.id}
+              key={`${note.kind}-${note.id}`}
               className="stack-note"
               data-paper={PAPERS[i % PAPERS.length]}
               style={{ "--k": i } as React.CSSProperties}
             >
               <div className="flex items-center gap-1.5 font-mono text-[0.65rem]">
-                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: noteTone(note) }} />
+                {/* A trip is a diamond, as on the project map; a task a dot. */}
+                <span
+                  className={`h-2 w-2 shrink-0 ${note.kind === "trip" ? "rotate-45 rounded-[1px]" : "rounded-full"}`}
+                  style={{ background: noteTone(note) }}
+                />
                 <span className="truncate" style={{ color: "var(--text-muted)" }}>
-                  {note.code}
+                  {note.code ?? t("calendar.tripPrefix")}
                 </span>
               </div>
               <p className="line-clamp-2 text-xs font-medium leading-snug break-words">
@@ -82,7 +88,7 @@ export function NoteStack({ notes, more }: { notes: ProjectNote[]; more: number 
           ))}
         </div>
         {notes.map((note) => (
-          <div key={note.id} className="stack-slot" />
+          <div key={`${note.kind}-${note.id}`} className="stack-slot" />
         ))}
       </div>
       {more > 0 && <span className="stack-more">+{more}</span>}

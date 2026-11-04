@@ -8,7 +8,7 @@ import { Alert, FieldError, SubmitButton } from "@/components/ui";
 import { useTranslations } from "@/lib/i18n/client";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
 import { coordinatesFromMapUrl, isShortMapUrl } from "@/lib/maps";
-import type { ProjectRef } from "@/lib/projects";
+import type { PartRef, ProjectRef } from "@/lib/projects";
 import { resolveMapLinkAction } from "@/server/actions/places";
 
 /**
@@ -63,6 +63,8 @@ export type FieldTripRow = {
   pin: { id: string; label: string | null } | null;
   /** The project this trip is part of, if any. */
   project: ProjectRef | null;
+  /** The sub-project inside it, if the trip is filed under one. */
+  part: PartRef | null;
   /** Built on the server by src/lib/maps.ts. */
   mapHref: string;
   mapEmbedSrc: string;
@@ -218,7 +220,13 @@ export function TripForm({
 
         {/* `empty:hidden` so a page with no open projects leaves no gap. */}
         <div className="empty:hidden sm:col-span-2">
-          <ProjectPicker id={id} current={trip?.project} error={errors.projectId} />
+          <ProjectPicker
+        id={id}
+        current={trip?.project}
+        currentPart={trip?.part}
+        error={errors.projectId}
+        partError={errors.partId}
+      />
         </div>
 
         <div>

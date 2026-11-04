@@ -10,6 +10,7 @@ import {
   completeFieldTripSchema,
   createFieldTripSchema,
   deleteFieldTripSchema,
+  fileFieldTripPartSchema,
   formDataToObject,
   startFieldTripSchema,
   updateFieldTripSchema,
@@ -17,7 +18,7 @@ import {
 
 import { diffFields } from "./diff";
 import { checkPeople, peopleDelta } from "./people";
-import { checkProject } from "./project-link";
+import { checkPart, checkProject } from "./project-link";
 import { fieldErrorsFrom, runAction, type ActionState } from "./types";
 
 /**
@@ -66,6 +67,7 @@ const EDITABLE_FIELDS = [
   "mapUrl",
   "pinId",
   "projectId",
+  "partId",
   "startDate",
   "endDate",
   "startTime",
@@ -155,15 +157,18 @@ export async function createFieldTripAction(
 
     // Sent together, so checking the pin costs no wall clock on top of
     // checking the travellers — one round trip's latency for both.
-    const [travellers, pin, project] = await Promise.all([
+    const [travellers, pin, project, part] = await Promise.all([
       checkTravellers(employeeIds),
       findPin(parsed.data.pinId),
       checkProject(parsed.data.projectId),
+      checkPart(tripData),
     ]);
 
     if (!travellers.ok) return travellers.error;
     if (parsed.data.pinId !== null && pin === null) return PIN_NOT_FOUND;
     if (!project.ok) return project.error;
+    if (!part.ok) return part.error;
+    tripData.partId = part.partId ?? null;
 
     await db.$transaction(async (tx) => {
       const trip = await tx.fieldTrip.create({
@@ -245,15 +250,18 @@ export async function updateFieldTripAction(
       };
     }
 
-    const [travellers, pin, project] = await Promise.all([
+    const [travellers, pin, project, part] = await Promise.all([
       checkTravellers(employeeIds),
       findPin(data.pinId),
       checkProject(data.projectId, before.projectId),
+      checkPart(data, before),
     ]);
     if (!travellers.ok) return travellers.error;
 
     if (data.pinId !== null && pin === null) return PIN_NOT_FOUND;
     if (!project.ok) return project.error;
+    if (!part.ok) return part.error;
+    data.partId = part.partId;
 
     /*
      * The traveller list, diffed by hand because `diffFields` compares single
@@ -313,6 +321,64 @@ export async function updateFieldTripAction(
             // Worth its own key rather than being inferred from the timestamps:
             // "this edit touched a finished trip" is what someone auditing the
             // archive is scanning for.
+            archived: before.completedAt !== null,
+            changes,
+          },
+        },
+        tx,
+      );
+    });
+
+    revalidateTripViews();
+    return { status: "success", message: "บันทึกแล้ว / Saved" };
+  });
+}
+
+/**
+ * Filing a trip under a sub-project, or taking it out of one, from the project
+ * map — the `partId` edit `updateFieldTripAction` makes, with its checks and
+ * its audit row, for a caller that holds an id rather than the whole form.
+ */
+export async function fileFieldTripPartAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAction(async () => {
+    const admin = await assertAdmin();
+    const parsed = fileFieldTripPartSchema.safeParse(formDataToObject(formData));
+    if (!parsed.success) {
+      return { status: "error", message: "ข้อมูลไม่ถูกต้อง / Invalid input" };
+    }
+
+    const { fieldTripId, partId } = parsed.data;
+    const before = await db.fieldTrip.findUnique({ where: { id: fieldTripId } });
+    if (!before) {
+      return { status: "error", message: "ไม่พบรายการ / Trip not found" };
+    }
+    if (before.cancelledAt) {
+      return {
+        status: "error",
+        message: "รายการนี้ถูกยกเลิกแล้ว / This trip has been cancelled",
+      };
+    }
+
+    const part = await checkPart({ partId }, before);
+    if (!part.ok) return part.error;
+    const data = { partId: part.partId };
+
+    const changes = diffFields(EDITABLE_FIELDS, before, data);
+    if (Object.keys(changes).length === 0) return { status: "success" };
+
+    await db.$transaction(async (tx) => {
+      await tx.fieldTrip.update({ where: { id: fieldTripId }, data });
+      await writeAudit(
+        {
+          actor: admin,
+          action: "fieldTrip.updated",
+          entityType: "FieldTrip",
+          entityId: fieldTripId,
+          metadata: {
+            location: before.locationName,
             archived: before.completedAt !== null,
             changes,
           },

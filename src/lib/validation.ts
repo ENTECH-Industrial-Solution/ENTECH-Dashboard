@@ -207,6 +207,8 @@ const taskFields = z.object({
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
   category: z.enum(["SOFTWARE", "DOCUMENT", "OTHER"]).default("OTHER"),
   projectId: optionalProjectId,
+  /// The sub-project inside that project; checkPart() ties the two together.
+  partId: optionalProjectId,
   /// Planned schedule. Both ends are optional, but if both are given the
   /// start cannot fall after the end.
   startDate: optionalDate,
@@ -238,6 +240,7 @@ export const updateTaskSchema = taskFields
   .extend({
     taskId: z.string().cuid(),
     projectId: untouchedOrProjectId,
+    partId: untouchedOrProjectId,
     completionNote: untouchedOrText(5000),
     proofUrl: untouchedOrUrl,
   })
@@ -332,6 +335,7 @@ const fieldTripFields = z.object({
     .nullish()
     .transform((v) => (isBlank(v) ? null : v)),
   projectId: optionalProjectId,
+  partId: optionalProjectId,
   startDate: requiredDate,
   endDate: requiredDate,
   startTime: optionalTime,
@@ -339,8 +343,8 @@ const fieldTripFields = z.object({
   note: optionalText(2000),
 });
 
-// Without projectId, which the edit schema redefines as "untouched or set".
-type FieldTripInput = Omit<z.infer<typeof fieldTripFields>, "projectId">;
+// Without projectId and partId, which the edit schema redefines as "untouched or set".
+type FieldTripInput = Omit<z.infer<typeof fieldTripFields>, "projectId" | "partId">;
 
 const endsAfterItStarts = (d: FieldTripInput) => d.startDate <= d.endDate;
 
@@ -386,6 +390,7 @@ export const updateFieldTripSchema = fieldTripFields
   .extend({
     fieldTripId: z.string().cuid(),
     projectId: untouchedOrProjectId,
+    partId: untouchedOrProjectId,
     completionNote: untouchedOrText(5000),
     proofUrl: untouchedOrUrl,
   })
@@ -467,6 +472,40 @@ export const updateProjectSchema = projectFields
 export const projectIdSchema = z.object({ projectId: z.string().cuid() });
 
 export const moveProjectSchema = projectIdSchema.extend({ direction: z.enum(["up", "down"]) });
+
+const partName = z
+  .string()
+  .trim()
+  .min(1, "กรุณากรอกชื่อโปรเจกต์ย่อย / A name is required")
+  .max(120);
+
+/** A sub-project is a name inside one project, and nothing else. */
+export const createPartSchema = projectIdSchema.extend({
+  name: partName,
+  /** The sub-project to put it inside; absent or "" for a loose one, connected to nothing yet. */
+  parentId: optionalProjectId,
+});
+
+/**
+ * Where a sub-project goes on the map: inside another one (its id), directly
+ * under the project ("root"), or off on its own with no line ("loose").
+ */
+export const movePartSchema = z.object({
+  partId: z.string().cuid(),
+  to: z.union([z.enum(["root", "loose"]), z.string().cuid()]),
+});
+
+export const renamePartSchema = z.object({ partId: z.string().cuid(), name: partName });
+
+/** Deleting one only ungroups its work, so no reason is demanded. */
+export const partIdSchema = z.object({ partId: z.string().cuid() });
+
+/** Filing one task or trip under a sub-project from the map; "" takes it out of one. */
+export const fileTaskPartSchema = z.object({ taskId: z.string().cuid(), partId: optionalProjectId });
+export const fileFieldTripPartSchema = z.object({
+  fieldTripId: z.string().cuid(),
+  partId: optionalProjectId,
+});
 
 /** One UI switch on the admin settings page. */
 export const settingSchema = z.object({

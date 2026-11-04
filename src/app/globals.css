@@ -46,6 +46,14 @@
   --span-3: light-dark(oklch(0.55 0.1 200), oklch(0.74 0.11 200));
   --span-4: light-dark(oklch(0.55 0.17 335), oklch(0.72 0.15 335));
   --ring: light-dark(oklch(0.52 0.16 250 / 0.45), oklch(0.68 0.14 250 / 0.5));
+  /* Branch colours for the project map. Hues kept clear of the status set
+     (brand blue, success green, warning amber, danger red), since a leaf's
+     dot already says its status and a branch must not seem to. */
+  --branch-1: light-dark(oklch(0.55 0.17 300), oklch(0.72 0.14 300));
+  --branch-2: light-dark(oklch(0.55 0.1 195), oklch(0.74 0.11 195));
+  --branch-3: light-dark(oklch(0.58 0.17 350), oklch(0.74 0.14 350));
+  --branch-4: light-dark(oklch(0.5 0.15 275), oklch(0.7 0.13 275));
+  --branch-5: light-dark(oklch(0.55 0.11 120), oklch(0.75 0.13 120));
 
   /*
    * Motion. Three durations and one curve, shared with `components/motion.tsx`

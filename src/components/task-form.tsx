@@ -155,7 +155,13 @@ export function TaskForm({
         </div>
       </div>
 
-      <ProjectPicker id={id} current={task?.project} error={errors.projectId} />
+      <ProjectPicker
+        id={id}
+        current={task?.project}
+        currentPart={task?.part}
+        error={errors.projectId}
+        partError={errors.partId}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>

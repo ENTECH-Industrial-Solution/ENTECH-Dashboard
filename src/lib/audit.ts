@@ -68,6 +68,12 @@ export type AuditAction =
   | "project.closed"
   | "project.reopened"
   | "project.moved"
+  | "project.part.created"
+  | "project.part.renamed"
+  /// Moved inside another sub-project, or back up to the project.
+  | "project.part.moved"
+  /// Carries the codes of the tasks and trips it ungrouped: nothing else will.
+  | "project.part.deleted"
   | "settings.changed";
 
 export async function writeAudit(
