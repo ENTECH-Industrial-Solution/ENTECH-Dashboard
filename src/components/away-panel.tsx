@@ -249,8 +249,10 @@ async function Group({
 
             {/* Decided here, on the server, from the session — the buttons are
                 a reflection of the rule, never the thing enforcing it. Asked of
-                the trip's travellers: anyone on it may run it. */}
-            <div className="row-start-5 pt-3">
+                the trip's travellers: anyone on it may run it. `self-end` sits
+                them on the box's foot, so a box with fewer buttons than its
+                neighbour still ends on the same line. */}
+            <div className="row-start-5 self-end pt-3">
               <TripActions
                 trip={row}
                 canRun={canRunFieldTrip(user, {

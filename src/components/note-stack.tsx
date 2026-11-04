@@ -24,8 +24,12 @@ function noteTone(note: ProjectNote) {
  * over a column of empty slots, one per note. All this component does is
  * publish how far that column has scrolled, in notes, as `--p`, and the CSS
  * places each note from it. The value is written straight onto the element
- * rather than through state, so a scroll re-renders nothing. Before hydration
- * `--p` is 0, which is the first note in full.
+ * rather than through state, so a scroll re-renders nothing.
+ *
+ * It opens filed up — the last note in full under the pile — and scrolling
+ * *down* spreads it out, so the scroll is read backwards: the top of the
+ * drawer is the last note, `--p = n − 1`, which is also what the server
+ * renders.
  */
 export function NoteStack({ notes, more }: { notes: ProjectNote[]; more: number }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -34,7 +38,7 @@ export function NoteStack({ notes, more }: { notes: ProjectNote[]; more: number 
     const el = ref.current;
     const slot = el?.querySelector<HTMLElement>(".stack-slot");
     if (!el || !slot) return;
-    el.style.setProperty("--p", String(el.scrollTop / slot.offsetHeight));
+    el.style.setProperty("--p", String(notes.length - 1 - el.scrollTop / slot.offsetHeight));
   }
 
   return (
@@ -43,7 +47,12 @@ export function NoteStack({ notes, more }: { notes: ProjectNote[]; more: number 
       className="note-stack"
       style={{ "--n": notes.length } as React.CSSProperties}
     >
-      <div ref={ref} className="note-drawer scroll-bare" onScroll={onScroll}>
+      <div
+        ref={ref}
+        className="note-drawer scroll-bare"
+        style={{ "--p": notes.length - 1 } as React.CSSProperties}
+        onScroll={onScroll}
+      >
         <div className="note-pile">
           {notes.map((note, i) => (
             <div
