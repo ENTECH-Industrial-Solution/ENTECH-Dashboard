@@ -10,7 +10,7 @@ import { Alert, PriorityBadge, StatusBadge, SubmitButton } from "@/components/ui
 import { dueState } from "@/lib/calendar";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
 import { useSettings } from "@/lib/settings/client";
-import type { ProjectRef } from "@/lib/projects";
+import type { PartRef, ProjectRef } from "@/lib/projects";
 import { idleState } from "@/server/actions/types";
 import {
   completeTaskAction,
@@ -41,6 +41,8 @@ export type TaskCardData = {
   createdBy: { employeeCode: string; fullName: string };
   /** The project this task is part of, if any. */
   project: ProjectRef | null;
+  /** The sub-project inside it, if the task is filed under one. */
+  part: PartRef | null;
 };
 
 function useFormatter() {

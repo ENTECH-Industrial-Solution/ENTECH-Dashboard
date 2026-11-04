@@ -208,6 +208,11 @@ model Task {
   projectId String?
   project   Project? @relation("ProjectTasks", fields: [projectId], references: [id], onDelete: SetNull)
 
+  /// The sub-project inside that project, when it is filed into one. See
+  /// ProjectPart: it must belong to `projectId`, which the actions enforce.
+  partId String?
+  part   ProjectPart? @relation("PartTasks", fields: [partId], references: [id], onDelete: SetNull)
+
   /// Who the work belongs to. Any number, and they are equals — see
   /// TaskAssignee. "At least one" is a rule the database cannot state, so it
   /// lives in createTaskSchema / updateTaskSchema.
@@ -237,6 +242,7 @@ model Task {
   @@index([status, dueDate])
   @@index([completedAt])
   @@index([projectId])
+  @@index([partId])
 }
 
 /// Who a task is assigned to. The whole model is its primary key, on the same
@@ -369,6 +375,10 @@ model FieldTrip {
   projectId String?
   project   Project? @relation("ProjectTrips", fields: [projectId], references: [id], onDelete: SetNull)
 
+  /// The sub-project inside that project, as on Task. See ProjectPart.
+  partId String?
+  part   ProjectPart? @relation("PartTrips", fields: [partId], references: [id], onDelete: SetNull)
+
   /// A pasted Google Maps place link, for when it is more precise than a name
   /// search. Only Google Maps hosts pass validation before this is stored.
   mapUrl String?
@@ -418,6 +428,7 @@ model FieldTrip {
   @@index([startDate, endDate])
   @@index([pinId])
   @@index([projectId])
+  @@index([partId])
 }
 
 /// A job that is bigger than one task: a name, what it covers, and the tasks
@@ -478,10 +489,65 @@ model Project {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tasks Task[]      @relation("ProjectTasks")
-  trips FieldTrip[] @relation("ProjectTrips")
+  tasks Task[]        @relation("ProjectTasks")
+  trips FieldTrip[]   @relation("ProjectTrips")
+  parts ProjectPart[]
 
   @@index([closedAt])
+}
+
+/// A sub-project: a named branch inside one project, which tasks and trips in
+/// that project can be filed under. It is what the project page's spider
+/// diagram branches on — project in the middle, sub-projects around it, the
+/// work hanging off each.
+///
+/// Deliberately light: no code, no status, no dates, no picture. Progress is
+/// derived from the work under it exactly as a project's is, so there is
+/// nothing to type in that could disagree with that work.
+///
+/// "A part's work is in the part's project" is a rule the database cannot
+/// state across two nullable columns; `checkPart()` in the actions enforces it,
+/// and moving work to another project drops its part.
+///
+/// Unlike a project, a part may be deleted (admin, audited): it is a grouping,
+/// not a record of a job, and Task.partId / FieldTrip.partId are SetNull so a
+/// delete only ungroups the work. Restrict towards the project, though nothing
+/// deletes a project today.
+model ProjectPart {
+  id String @id @default(cuid())
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  name String
+
+  /// The sub-project this one sits inside, or null for one directly under the
+  /// project. Same project, and never its own ancestor — neither is something
+  /// the database can state, so `checkParent()` in the actions does. SetNull
+  /// is only the floor: deletePartAction lifts children to the deleted part's
+  /// own parent first, so a delete takes one level out rather than flattening.
+  parentId String?
+  parent   ProjectPart?  @relation("PartTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children ProjectPart[] @relation("PartTree")
+
+  /// Not yet placed on the project's map: no line to the project or to another
+  /// part, so the board draws it loose until somebody connects it. A new part
+  /// starts this way. It is still the project's part — work can be filed in it
+  /// and it counts everywhere — this is only where the map puts it. Only a
+  /// part with no parent can float; a CHECK in the migration says so.
+  floating Boolean @default(false)
+
+  /// Order around the diagram, smallest first; a new part takes one past the largest.
+  position Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks Task[]      @relation("PartTasks")
+  trips FieldTrip[] @relation("PartTrips")
+
+  @@index([projectId])
+  @@index([parentId])
 }
 
 /// Who is on a trip. The whole model is its primary key: a person is on a trip

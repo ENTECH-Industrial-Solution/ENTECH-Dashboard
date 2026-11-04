@@ -6,6 +6,7 @@ import { CUSTOMER_STATUSES } from "@/lib/customers";
 import { db } from "@/lib/db";
 import { dayStart, monthBounds, todayKey, type YearMonth } from "@/lib/calendar";
 import { employeePhotoSrc, photoOf } from "@/lib/pictures";
+import type { PartNode, ProjectOption } from "@/lib/projects";
 import { getSettings } from "@/lib/settings/server";
 import type { SessionUser } from "@/lib/auth/session";
 
@@ -29,6 +30,9 @@ const ASSIGNEE_SELECT = {
 /** Enough of a project to draw a chip linking to it. */
 const PROJECT_SELECT = { select: { id: true, code: true, name: true } } as const;
 
+/** The sub-project a task or trip is filed under, for its form and the diagram. */
+const PART_SELECT = { select: { id: true, name: true } } as const;
+
 const taskSelect = {
   id: true,
   code: true,
@@ -47,6 +51,7 @@ const taskSelect = {
   assignees: ASSIGNEE_SELECT,
   createdBy: { select: { employeeCode: true, fullName: true } },
   project: PROJECT_SELECT,
+  part: PART_SELECT,
 } as const;
 
 /**
@@ -139,6 +144,7 @@ const TASK_EVENT_TABLE = Prisma.sql`app."TaskEvent"`;
 const EMPLOYEE_TABLE = Prisma.sql`app."Employee"`;
 const PROJECT_TABLE = Prisma.sql`app."Project"`;
 const EMPLOYEE_PHOTO_TABLE = Prisma.sql`app."EmployeePhoto"`;
+const PROJECT_PART_TABLE = Prisma.sql`app."ProjectPart"`;
 
 /** Whether a person has a picture, and its version — never the bytes. */
 const PHOTO_SELECT = { select: { updatedAt: true } } as const;
@@ -309,6 +315,7 @@ const fieldTripSelect = {
   /// "and that place is on the board", nothing more.
   pin: { select: { id: true, label: true } },
   project: PROJECT_SELECT,
+  part: PART_SELECT,
 } as const;
 
 export type TripTraveller = {
@@ -1158,23 +1165,32 @@ export type ProjectSummary = {
   overdue: number;
   /** Started (or blocked) and not late: the rest of the open work is "not started". */
   active: number;
-  /** Open tasks, for the stack of notes on the card. */
-  openTasks: number;
+  /** Open tasks and trips (neither cancelled nor completed), for the stack of notes on the card. */
+  openWork: number;
   /** Up to MAX_PROJECT_NOTES of them: late first, then started, then the nearest due. */
   notes: ProjectNote[];
   people: { id: string; employeeCode: string; fullName: string; photo: string | null }[];
+  /** Its sub-projects in diagram order, each with its parent — readable like the project's own name. */
+  parts: (PartNode & { floating: boolean })[];
 };
 
+/**
+ * One note on a project card: an open task, or an open trip. A trip has no
+ * code, and its `status` is read off its timestamps the way `tripState()`
+ * reads them — `IN_PROGRESS` once on site, `TODO` before — so the pile sorts
+ * and colours both kinds by one rule. `assignees` are a trip's travellers.
+ */
 export type ProjectNote = {
+  kind: "task" | "trip";
   id: string;
-  code: string;
+  code: string | null;
   title: string;
   status: TaskStatus;
   late: boolean;
   assignees: { fullName: string }[];
 };
 
-/** How many open tasks a project card carries as notes; past this it says "+n". */
+/** How many open tasks and trips a project card carries as notes; past this it says "+n". */
 const MAX_PROJECT_NOTES = 20;
 
 /**
@@ -1214,7 +1230,8 @@ export async function getProjectSummaries(
       FROM ${TASK_TABLE} ${assigneeScopeSql(user)}
     ),
     f AS (
-      SELECT "id", "projectId", "cancelledAt", "startedAt", "completedAt", "endDate"
+      SELECT "id", "projectId", purpose, "cancelledAt", "startedAt", "completedAt", "endDate",
+        "createdAt"
       FROM ${TRIP_TABLE} ${travellerScopeSql(user)}
     ),
     work AS (
@@ -1237,17 +1254,26 @@ export async function getProjectSummaries(
         )
       FROM f WHERE "projectId" IS NOT NULL AND "cancelledAt" IS NULL GROUP BY 1
     ),
+    -- Open tasks and open trips, as one pile: a trip is due on its last day.
+    open_work AS (
+      SELECT "projectId", "id", 'task' AS kind, code, title, status::text AS status,
+        COALESCE((${taskOverdue(boundary)}), false) AS late, "dueDate" AS due, "createdAt"
+      FROM t WHERE "projectId" IS NOT NULL AND status <> 'COMPLETED'
+      UNION ALL
+      SELECT "projectId", "id", 'trip', NULL, purpose,
+        CASE WHEN "startedAt" IS NOT NULL THEN 'IN_PROGRESS' ELSE 'TODO' END,
+        COALESCE((${tripOverdue(boundary)}), false), "endDate", "createdAt"
+      FROM f WHERE "projectId" IS NOT NULL AND "cancelledAt" IS NULL AND "completedAt" IS NULL
+    ),
     notes AS (
-      SELECT "projectId", "id", code, title, status,
-        COALESCE((${taskOverdue(boundary)}), false) AS late,
+      SELECT *,
         row_number() OVER (
           PARTITION BY "projectId"
-          ORDER BY COALESCE((${taskOverdue(boundary)}), false) DESC,
-            status IN ('IN_PROGRESS', 'BLOCKED') DESC,
-            "dueDate" ASC NULLS LAST, "createdAt" DESC
+          ORDER BY late DESC, status IN ('IN_PROGRESS', 'BLOCKED') DESC,
+            due ASC NULLS LAST, "createdAt" DESC
         ) AS rn,
         count(*) OVER (PARTITION BY "projectId") AS open
-      FROM t WHERE "projectId" IS NOT NULL AND status <> 'COMPLETED'
+      FROM open_work
     ),
     people AS (
       SELECT DISTINCT x."projectId", e."id", e."employeeCode", e."fullName", ph."updatedAt" AS "photoAt"
@@ -1270,14 +1296,20 @@ export async function getProjectSummaries(
       COALESCE((SELECT sum(w.done) FROM work w WHERE w."projectId" = p."id"), 0)::int AS done,
       COALESCE((SELECT sum(w.overdue) FROM work w WHERE w."projectId" = p."id"), 0)::int AS overdue,
       COALESCE((SELECT sum(w.active) FROM work w WHERE w."projectId" = p."id"), 0)::int AS active,
-      COALESCE((SELECT max(n.open) FROM notes n WHERE n."projectId" = p."id"), 0)::int AS "openTasks",
+      COALESCE((SELECT max(n.open) FROM notes n WHERE n."projectId" = p."id"), 0)::int AS "openWork",
       COALESCE((
         SELECT json_agg(json_build_object(
-          'id', n."id", 'code', n.code, 'title', n.title, 'status', n.status, 'late', n.late,
+          'kind', n.kind, 'id', n."id", 'code', n.code, 'title', n.title, 'status', n.status,
+          'late', n.late,
           'assignees', (
             SELECT COALESCE(json_agg(json_build_object('fullName', e."fullName") ORDER BY e."fullName"), '[]'::json)
-            FROM ${TASK_ASSIGNEE_TABLE} ta JOIN ${EMPLOYEE_TABLE} e ON e."id" = ta."employeeId"
-            WHERE ta."taskId" = n."id"
+            FROM (
+              SELECT ta."employeeId" FROM ${TASK_ASSIGNEE_TABLE} ta
+              WHERE n.kind = 'task' AND ta."taskId" = n."id"
+              UNION ALL
+              SELECT tt."employeeId" FROM ${TRIP_TRAVELLER_TABLE} tt
+              WHERE n.kind = 'trip' AND tt."fieldTripId" = n."id"
+            ) who JOIN ${EMPLOYEE_TABLE} e ON e."id" = who."employeeId"
           )
         ) ORDER BY n.rn)
         FROM notes n WHERE n."projectId" = p."id" AND n.rn <= ${MAX_PROJECT_NOTES}
@@ -1288,7 +1320,12 @@ export async function getProjectSummaries(
           'photoAt', pp."photoAt"
         ) ORDER BY pp."employeeCode")
         FROM people pp WHERE pp."projectId" = p."id"
-      ), '[]'::json) AS people
+      ), '[]'::json) AS people,
+      COALESCE((
+        SELECT json_agg(json_build_object('id', pa."id", 'name', pa."name", 'parentId', pa."parentId", 'floating', pa."floating")
+          ORDER BY pa."position", pa."createdAt")
+        FROM ${PROJECT_PART_TABLE} pa WHERE pa."projectId" = p."id"
+      ), '[]'::json) AS parts
     FROM ${PROJECT_TABLE} p
     ${where}
     ORDER BY p."closedAt" DESC NULLS FIRST, p."position", p."createdAt"
@@ -1303,11 +1340,19 @@ export async function getProjectSummaries(
   }));
 }
 
-/** The open projects, for the pickers on the task and trip forms. */
-export async function getProjectOptions() {
+/** The open projects and their sub-projects, for the pickers on the task and trip forms. */
+export async function getProjectOptions(): Promise<ProjectOption[]> {
   return db.project.findMany({
     where: { closedAt: null },
-    select: { id: true, code: true, name: true },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      parts: {
+        select: { id: true, name: true, parentId: true },
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+      },
+    },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
   });
 }

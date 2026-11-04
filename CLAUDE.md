@@ -359,7 +359,9 @@ are the record of when things happened, and editing them would be forging it.
 
 `deleteTaskAction`, `deleteFieldTripAction`, `deleteEmployeeAction`,
 `deleteCustomerPinAction` and `deleteCustomerAction` are the **only hard deletes
-in the application** — everything else is kept. All of them are admin-only and
+of records in the application** — everything else is kept. (`deletePartAction`
+also deletes a row, but a sub-project is a grouping, not a record: it only
+ungroups its work. See "Projects".) All of them are admin-only and
 all of them demand a written reason. The first two are offered to neither an
 assignee nor a traveller: someone deleting their own assigned work is the one
 case this must not make easy. All three demand a written reason, because once they run there is
@@ -643,6 +645,46 @@ the tasks the way the dashboard does (open ones by `assigneeScope`, finished
 ones by the `dashboard.sharedHistory` rule, trips by nobody), so
 `/projects/[id]` is a second way into rows the viewer could already read, never
 a wider one. The summaries are one raw query for the whole list.
+
+**Sub-projects.** `ProjectPart` is a name inside one project, and
+`Task.partId` / `FieldTrip.partId` file work under it (`SetNull`). It has no
+code, status or dates; progress stays derived. "A part's work is in the part's
+project" is the rule the database cannot state, so `checkPart()` in
+`project-link.ts` says it for every create and update: an id must name a part
+of the project the record will be in, and moving a record to another project
+drops its part. The picker shows a project's parts under the project select,
+and `partId` is in both `EDITABLE_FIELDS`. Parts are admin-only and audited
+(`project.part.created/renamed/moved/deleted`); a delete's audit row lists the codes
+it ungrouped. Their names ride in `getProjectSummaries()` as `parts`, so the
+dashboard's pickers and the project page cost no extra round trip.
+
+Parts **nest**: `ProjectPart.parentId` is a self-relation (`SetNull`), null
+meaning directly under the project. `checkParent()` in `actions/projects.ts`
+is the rule the database cannot state — a parent must be in the same project
+and must not be the part itself or anything inside it — and both
+`createPartAction` and `movePartAction` go through it. Deleting a part lifts
+its children to its own parent rather than orphaning them to the top, and the
+audit row lists them. Work filed under a part stays filed under exactly that
+part; nesting is grouping, it rolls nothing up. `partTree()` in `lib/projects.ts`
+is the one tree walk, and the picker indents by it.
+
+`/projects/[id]` draws them as a spider diagram (`ProjectMindMap`) on a
+pannable whiteboard: the project in the middle, parts around it, nested parts
+and the work hanging off each, and unfiled work lying loose underneath. Its leaves are built from `getProjectWork()`, the same rows the
+lists below draw, so it widens nothing; cancelled trips are left off. Nodes are
+HTML in a grid and the lines one SVG measured from them, so the same component
+is a two-sided map from `lg` and a one-column tree below it. Branch colours are
+`--branch-1..5`, hues kept clear of the status colours; a nested part wears its
+top-level ancestor's. For an admin on an open project the lines *are* the
+filing: a line drawn from a box's dot files work into a part, puts a part
+inside another, or (to the project) lifts it to the top; cutting a line
+lets go of whatever hung off it. A part let go of — and every part created on
+its own — is `floating`: still the project's, filing and counting as usual,
+but drawn loose with no line until somebody draws one. Only a part with no
+parent can float (a CHECK in the migration), and deleting a floating part
+leaves its children floating rather than wiring them to the project. Each is
+the same audited write the forms
+and `movePartAction` make — the board shows it at once and the server confirms.
 
 The band above the calendar is gated on `dashboard.showProjects` (`reads`). An
 employee's band shows only projects they have work in. The form pickers read

@@ -23,7 +23,7 @@ const PARTS = [
 
 /**
  * One project at a glance: what it is, how far along it is by status, who is
- * on it, and — beside that — its open tasks as a pile of notes (`NoteStack`),
+ * on it, and — beside that — its open tasks and trips as a pile of notes (`NoteStack`),
  * the one most in need of attention facing you, each signed with who is on
  * it, so a long list costs no more room than three.
  *
@@ -50,27 +50,7 @@ export function ProjectCard({
   locale: Locale;
   className?: string;
 }) {
-  const counts = {
-    done: project.done,
-    active: project.active,
-    overdue: project.overdue,
-    todo: Math.max(0, project.total - project.done - project.active - project.overdue),
-  };
-  const faces = project.people.slice(0, MAX_FACES);
-  const more = project.people.length - faces.length;
-  const moreNotes = project.openTasks - project.notes.length;
-  const date = new Intl.DateTimeFormat(locale === "th" ? "th-TH" : "en-GB", {
-    dateStyle: "medium",
-    timeZone: "Asia/Bangkok",
-  });
-  const range =
-    project.startDate && project.endDate
-      ? date.formatRange(project.startDate, project.endDate)
-      : project.startDate
-        ? `${t("projects.from")} ${date.format(project.startDate)}`
-        : project.endDate
-          ? `${t("projects.until")} ${date.format(project.endDate)}`
-          : null;
+  const moreNotes = project.openWork - project.notes.length;
 
   return (
     <Link
@@ -118,98 +98,12 @@ export function ProjectCard({
             </p>
           )}
 
-          <div className="mt-auto space-y-2.5 pt-2">
-            {project.total === 0 ? (
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                {t("projects.noWork")}
-              </p>
-            ) : (
-              <>
-                <div
-                  className="flex h-2 gap-0.5 overflow-hidden rounded-full"
-                  role="img"
-                  aria-label={`${project.done}/${project.total} ${t("projects.done")}`}
-                >
-                  {PARTS.map(
-                    (part) =>
-                      counts[part.key] > 0 && (
-                        <span
-                          key={part.key}
-                          className="h-full"
-                          style={{ flexGrow: counts[part.key], background: part.color }}
-                        />
-                      ),
-                  )}
-                </div>
-                <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums">
-                  <span>
-                    <span className="font-semibold">
-                      {project.done}/{project.total}
-                    </span>{" "}
-                    <span style={{ color: "var(--text-muted)" }}>{t("projects.done")}</span>
-                  </span>
-                  {PARTS.slice(1).map(
-                    (part) =>
-                      counts[part.key] > 0 && (
-                        <span
-                          key={part.key}
-                          className="inline-flex items-center gap-1"
-                          style={{
-                            color: part.key === "overdue" ? "var(--danger)" : "var(--text-muted)",
-                          }}
-                        >
-                          <span
-                            aria-hidden
-                            className="h-2 w-2 rounded-full"
-                            style={{ background: part.color }}
-                          />
-                          {t(`projects.${part.key}`)} {counts[part.key]}
-                        </span>
-                      ),
-                  )}
-                </p>
-              </>
-            )}
-
-            {(faces.length > 0 || range) && (
-              <div className="flex items-center gap-3">
-                {faces.length > 0 && (
-                  <div className="flex shrink-0 -space-x-1.5">
-                    {faces.map((person) => (
-                      <span
-                        key={person.id}
-                        className="rounded-full ring-2"
-                        style={{ "--tw-ring-color": "var(--surface)" } as React.CSSProperties}
-                        title={`${person.employeeCode} — ${person.fullName}`}
-                      >
-                        <Avatar fullName={person.fullName} size="sm" photo={person.photo} />
-                      </span>
-                    ))}
-                    {more > 0 && (
-                      <span
-                        aria-hidden
-                        className="flex h-7 w-7 items-center justify-center rounded-full text-[0.65rem] font-semibold ring-2"
-                        style={
-                          {
-                            "--tw-ring-color": "var(--surface)",
-                            background: "var(--surface-muted)",
-                            color: "var(--text-muted)",
-                          } as React.CSSProperties
-                        }
-                      >
-                        +{more}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {range && (
-                  <span className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
-                    {range}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
+          <ProjectProgress
+            project={project}
+            t={t}
+            locale={locale}
+            className="mt-auto space-y-2.5 pt-2"
+          />
         </div>
 
         {project.notes.length > 0 && (
@@ -217,5 +111,139 @@ export function ProjectCard({
         )}
       </div>
     </Link>
+  );
+}
+
+/**
+ * How far along a project is: the bar split by status, the counts under it,
+ * the faces of who is on it and the planned window. The card draws it under
+ * its name; the project's own page draws it in its header, where the notes
+ * would only repeat the map below it.
+ */
+export function ProjectProgress({
+  project,
+  t,
+  locale,
+  className = "",
+}: {
+  project: ProjectSummary;
+  t: Translate;
+  locale: Locale;
+  className?: string;
+}) {
+  const counts = {
+    done: project.done,
+    active: project.active,
+    overdue: project.overdue,
+    todo: Math.max(0, project.total - project.done - project.active - project.overdue),
+  };
+  const faces = project.people.slice(0, MAX_FACES);
+  const more = project.people.length - faces.length;
+  const date = new Intl.DateTimeFormat(locale === "th" ? "th-TH" : "en-GB", {
+    dateStyle: "medium",
+    timeZone: "Asia/Bangkok",
+  });
+  const range =
+    project.startDate && project.endDate
+      ? date.formatRange(project.startDate, project.endDate)
+      : project.startDate
+        ? `${t("projects.from")} ${date.format(project.startDate)}`
+        : project.endDate
+          ? `${t("projects.until")} ${date.format(project.endDate)}`
+          : null;
+
+  return (
+    <div className={className}>
+      {project.total === 0 ? (
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          {t("projects.noWork")}
+        </p>
+      ) : (
+        <>
+          <div
+            className="flex h-2 gap-0.5 overflow-hidden rounded-full"
+            role="img"
+            aria-label={`${project.done}/${project.total} ${t("projects.done")}`}
+          >
+            {PARTS.map(
+              (part) =>
+                counts[part.key] > 0 && (
+                  <span
+                    key={part.key}
+                    className="h-full"
+                    style={{ flexGrow: counts[part.key], background: part.color }}
+                  />
+                ),
+            )}
+          </div>
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums">
+            <span>
+              <span className="font-semibold">
+                {project.done}/{project.total}
+              </span>{" "}
+              <span style={{ color: "var(--text-muted)" }}>{t("projects.done")}</span>
+            </span>
+            {PARTS.slice(1).map(
+              (part) =>
+                counts[part.key] > 0 && (
+                  <span
+                    key={part.key}
+                    className="inline-flex items-center gap-1"
+                    style={{
+                      color: part.key === "overdue" ? "var(--danger)" : "var(--text-muted)",
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      className="h-2 w-2 rounded-full"
+                      style={{ background: part.color }}
+                    />
+                    {t(`projects.${part.key}`)} {counts[part.key]}
+                  </span>
+                ),
+            )}
+          </p>
+        </>
+      )}
+
+      {(faces.length > 0 || range) && (
+        <div className="flex items-center gap-3">
+          {faces.length > 0 && (
+            <div className="flex shrink-0 -space-x-1.5">
+              {faces.map((person) => (
+                <span
+                  key={person.id}
+                  className="rounded-full ring-2"
+                  style={{ "--tw-ring-color": "var(--surface)" } as React.CSSProperties}
+                  title={`${person.employeeCode} — ${person.fullName}`}
+                >
+                  <Avatar fullName={person.fullName} size="sm" photo={person.photo} />
+                </span>
+              ))}
+              {more > 0 && (
+                <span
+                  aria-hidden
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-[0.65rem] font-semibold ring-2"
+                  style={
+                    {
+                      "--tw-ring-color": "var(--surface)",
+                      background: "var(--surface-muted)",
+                      color: "var(--text-muted)",
+                    } as React.CSSProperties
+                  }
+                >
+                  +{more}
+                </span>
+              )}
+            </div>
+          )}
+          {range && (
+            <span className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
+              {range}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

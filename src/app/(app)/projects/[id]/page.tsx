@@ -5,14 +5,17 @@ import { notFound } from "next/navigation";
 import { CardGrid } from "@/components/card-grid";
 import { LinkPending } from "@/components/nav-progress";
 import { PageShell } from "@/components/page-shell";
-import { ProjectCard } from "@/components/project-card";
+import { ProjectProgress } from "@/components/project-card";
 import { ProjectAdminControls } from "@/components/project-form";
+import { ProjectMindMap, type MindBranch, type MindLeaf } from "@/components/project-mind-map";
+import { PartCreator } from "@/components/project-parts";
 import { ProjectOptionsProvider } from "@/components/project-picker";
 import { ActiveTaskCard, CompletedTaskCard } from "@/components/task-card";
 import { TaskSection } from "@/components/task-section";
 import { TripCard } from "@/components/trip-card";
 import { EmptyState } from "@/components/ui";
 import { canRunFieldTrip, requireUser } from "@/lib/auth/rbac";
+import { dueState, todayKey } from "@/lib/calendar";
 import { getLocale, getTranslations } from "@/lib/i18n/server";
 import { projectImageSrc } from "@/lib/pictures";
 import { serialiseTask, serialiseTrip } from "@/lib/serialise";
@@ -27,7 +30,8 @@ import {
 export const metadata: Metadata = { title: "โปรเจกต์ / Project" };
 
 /**
- * One project: its scope in full, its progress, and the work in it.
+ * One project: its scope and progress, a map of its sub-projects and the work
+ * in each, and the work itself.
  *
  * The tasks are narrowed exactly as the dashboard narrows them (see
  * getProjectWork), so this page is a second way into rows the viewer could
@@ -54,6 +58,69 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     dateStyle: "medium",
     timeZone: "Asia/Bangkok",
   });
+  const image = project.imageUpdatedAt
+    ? projectImageSrc(project.id, project.imageUpdatedAt)
+    : null;
+  const tripsShown = settings["fieldTrip.enabled"];
+
+  /*
+   * The map's leaves are the same rows the lists below draw, so it shows
+   * nothing the viewer could not already read. Cancelled trips are left off,
+   * as the calendar leaves them off: they did not happen.
+   */
+  const today = todayKey();
+  const filed: { partId: string | null; leaf: MindLeaf }[] = [
+    ...[...work.active, ...work.completed].map((task) => ({
+      partId: task.part?.id ?? null,
+      leaf: {
+        kind: "task" as const,
+        id: task.id,
+        code: task.code,
+        title: task.title,
+        status: task.status,
+        late:
+          task.status !== "COMPLETED" &&
+          task.dueDate !== null &&
+          dueState(task.dueDate, today) === "overdue",
+      },
+    })),
+    ...(tripsShown ? work.trips : [])
+      .filter((trip) => trip.cancelledAt === null)
+      .map((trip) => ({
+        partId: trip.part?.id ?? null,
+        leaf: {
+          kind: "trip" as const,
+          id: trip.id,
+          title: trip.purpose,
+          startedAt: trip.startedAt?.toISOString() ?? null,
+          completedAt: trip.completedAt?.toISOString() ?? null,
+          late: trip.completedAt === null && dueState(trip.endDate, today) === "overdue",
+        },
+      })),
+  ];
+  const partIds = new Set(project.parts.map((part) => part.id));
+  const unfiled = filed.filter((row) => row.partId === null || !partIds.has(row.partId));
+  const branches: MindBranch[] = [
+    ...project.parts.map((part) => ({
+      id: part.id,
+      name: part.name,
+      parentId: part.parentId,
+      floating: part.floating,
+      leaves: filed.filter((row) => row.partId === part.id).map((row) => row.leaf),
+    })),
+    ...(unfiled.length > 0
+      ? [
+          {
+            id: null,
+            name: t("parts.unfiled"),
+            parentId: null,
+            floating: false,
+            leaves: unfiled.map((row) => row.leaf),
+          },
+        ]
+      : []),
+  ];
+  const canEditParts = isAdmin && project.closedAt === null;
 
   return (
     <ProjectOptionsProvider options={options}>
@@ -64,8 +131,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             {t("projects.back")}
           </Link>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <section className="panel space-y-3 lg:col-span-2">
+          {/* One panel: what the project is on the left, how far along it is on
+              the right. The card's note pile is left off here — the map below
+              shows every task, filed by sub-project. */}
+          <section className="panel grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+            <div className="min-w-0 space-y-3">
               <div className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
                 {project.code}
                 {project.closedAt && ` · ${t("projects.closed")} ${date.format(project.closedAt)}`}
@@ -89,18 +159,38 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                     startDate: project.startDate?.toISOString() ?? null,
                     endDate: project.endDate?.toISOString() ?? null,
                     closedAt: project.closedAt?.toISOString() ?? null,
-                    imageSrc: project.imageUpdatedAt
-                      ? projectImageSrc(project.id, project.imageUpdatedAt)
-                      : null,
+                    imageSrc: image,
                   }}
                 />
               )}
-            </section>
+            </div>
 
-            {/* The same card the list draws, as the at-a-glance numbers. */}
-            <ProjectCard project={project} t={t} locale={locale} />
-          </div>
+            <div
+              className="flex flex-col gap-4 border-t pt-4 lg:border-t-0 lg:border-s lg:ps-6 lg:pt-0"
+              style={{ borderColor: "var(--border)" }}
+            >
+              {image && (
+                // eslint-disable-next-line @next/next/no-img-element -- our own same-origin route, already downscaled on upload
+                <img src={image} alt="" className="h-16 w-16 rounded-xl object-cover" />
+              )}
+              <ProjectProgress project={project} t={t} locale={locale} className="space-y-2.5" />
+            </div>
+          </section>
         </header>
+
+        <TaskSection title={t("projects.map")} hint={t("projects.mapHint")}>
+          {canEditParts && <PartCreator projectId={project.id} />}
+          {canEditParts && project.parts.length === 0 && (
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              {t("parts.noParts")}
+            </p>
+          )}
+          <ProjectMindMap
+            root={{ id: project.id, code: project.code, name: project.name, image }}
+            branches={branches}
+            editable={canEditParts}
+          />
+        </TaskSection>
 
         <TaskSection title={t("projects.activeTasks")}>
           {work.active.length === 0 ? (
@@ -120,7 +210,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           )}
         </TaskSection>
 
-        {settings["fieldTrip.enabled"] && work.trips.length > 0 && (
+        {tripsShown && work.trips.length > 0 && (
           <TaskSection title={t("projects.trips")}>
             <CardGrid>
               {work.trips.map((trip) => (

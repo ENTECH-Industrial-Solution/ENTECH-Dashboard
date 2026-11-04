@@ -190,8 +190,13 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
     showProjects ? Promise.resolve(null) : getProjectOptions(),
   ]);
 
-  // Only the three fields the picker needs cross into the client.
-  const options = (projects ?? openProjects ?? []).map(({ id, code, name }) => ({ id, code, name }));
+  // Only the fields the picker needs cross into the client.
+  const options = (projects ?? openProjects ?? []).map(({ id, code, name, parts }) => ({
+    id,
+    code,
+    name,
+    parts,
+  }));
 
   return (
     <ProjectOptionsProvider options={options}>

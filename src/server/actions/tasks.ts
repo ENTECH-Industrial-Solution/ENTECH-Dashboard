@@ -11,6 +11,7 @@ import {
   completeTaskSchema,
   createTaskSchema,
   deleteTaskSchema,
+  fileTaskPartSchema,
   formDataToObject,
   reopenTaskSchema,
   rescheduleTaskSchema,
@@ -20,7 +21,7 @@ import {
 
 import { diffFields } from "./diff";
 import { checkPeople, peopleDelta } from "./people";
-import { checkProject } from "./project-link";
+import { checkPart, checkProject } from "./project-link";
 import { fieldErrorsFrom, runAction, type ActionState } from "./types";
 
 /**
@@ -69,6 +70,7 @@ const EDITABLE_FIELDS = [
   "priority",
   "category",
   "projectId",
+  "partId",
   "startDate",
   "dueDate",
   "completionNote",
@@ -103,15 +105,18 @@ export async function createTaskAction(
     const assigneeIds = user.role === "ADMIN" ? requested : [user.id];
     const selfAssigned = assigneeIds.length === 1 && assigneeIds[0] === user.id;
 
-    const [people, project] = await Promise.all([
+    const [people, project, part] = await Promise.all([
       checkPeople(assigneeIds, {
         field: "assigneeIds",
         message: "ไม่สามารถมอบหมายงานให้บัญชีที่ถูกระงับหรือไม่มีอยู่ / Cannot assign to a missing or inactive account",
       }),
       checkProject(taskData.projectId),
+      checkPart(taskData),
     ]);
     if (!people.ok) return people.error;
     if (!project.ok) return project.error;
+    if (!part.ok) return part.error;
+    taskData.partId = part.partId ?? null;
 
     await db.$transaction(async (tx) => {
       const code = await nextTaskCode(tx);
@@ -197,16 +202,19 @@ export async function updateTaskAction(
 
     // Reassigning onto a suspended account would strand the work somewhere
     // nobody can sign in to reach, exactly as it would at creation.
-    const [people, project] = await Promise.all([
+    const [people, project, part] = await Promise.all([
       checkPeople(assigneeIds, {
         field: "assigneeIds",
         message: "ไม่สามารถมอบหมายงานให้บัญชีที่ถูกระงับหรือไม่มีอยู่ / Cannot assign to a missing or inactive account",
       }),
       // A closed project is still a valid answer for a task already in it.
       checkProject(data.projectId, before.projectId),
+      checkPart(data, before),
     ]);
     if (!people.ok) return people.error;
     if (!project.ok) return project.error;
+    if (!part.ok) return part.error;
+    data.partId = part.partId;
 
     /*
      * The assignee list is absent from EDITABLE_FIELDS on purpose: diffFields
@@ -296,6 +304,39 @@ export async function rescheduleTaskAction(
 
     await commitTaskEdit({ admin, before, data, changes });
     return { status: "success", message: "ย้ายวันแล้ว / Moved" };
+  });
+}
+
+/**
+ * Filing a task under a sub-project, or taking it out of one, from the
+ * project map: a line drawn or cut. The same edit `updateTaskAction` makes to
+ * `partId`, through the same `checkPart` and the same accounting, split out
+ * for the reason `rescheduleTaskAction` is — the map holds an id, not a form.
+ */
+export async function fileTaskPartAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return runAction(async () => {
+    const admin = await assertAdmin();
+    const parsed = fileTaskPartSchema.safeParse(formDataToObject(formData));
+    if (!parsed.success) {
+      return { status: "error", message: "ข้อมูลไม่ถูกต้อง / Invalid input" };
+    }
+
+    const { taskId, partId } = parsed.data;
+    const before = await db.task.findUnique({ where: { id: taskId } });
+    if (!before) return { status: "error", message: "ไม่พบงาน / Task not found" };
+
+    const part = await checkPart({ partId }, before);
+    if (!part.ok) return part.error;
+    const data = { partId: part.partId };
+
+    const changes = diffFields(EDITABLE_FIELDS, before, data);
+    if (Object.keys(changes).length === 0) return { status: "success" };
+
+    await commitTaskEdit({ admin, before, data, changes });
+    return { status: "success", message: "บันทึกแล้ว / Saved" };
   });
 }
 

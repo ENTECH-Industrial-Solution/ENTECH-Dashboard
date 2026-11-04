@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 
+import { useTranslations } from "@/lib/i18n/client";
 import { peopleSummary } from "@/lib/trips";
 import type { ProjectNote } from "@/server/queries";
 
@@ -15,7 +16,7 @@ function noteTone(note: ProjectNote) {
 }
 
 /**
- * A project's open notes as a pile you scroll through, like flipping through
+ * A project's open tasks and trips as a pile of notes you scroll through, like flipping through
  * folders: the note you are on in full, the next one peeking out below it, and
  * the last two you flipped past filed above it with their code and title still
  * showing. Further back than that the pile closes up.
@@ -24,17 +25,22 @@ function noteTone(note: ProjectNote) {
  * over a column of empty slots, one per note. All this component does is
  * publish how far that column has scrolled, in notes, as `--p`, and the CSS
  * places each note from it. The value is written straight onto the element
- * rather than through state, so a scroll re-renders nothing. Before hydration
- * `--p` is 0, which is the first note in full.
+ * rather than through state, so a scroll re-renders nothing.
+ *
+ * It opens filed up — the last note in full under the pile — and scrolling
+ * *down* spreads it out, so the scroll is read backwards: the top of the
+ * drawer is the last note, `--p = n − 1`, which is also what the server
+ * renders.
  */
 export function NoteStack({ notes, more }: { notes: ProjectNote[]; more: number }) {
+  const t = useTranslations();
   const ref = useRef<HTMLDivElement>(null);
 
   function onScroll() {
     const el = ref.current;
     const slot = el?.querySelector<HTMLElement>(".stack-slot");
     if (!el || !slot) return;
-    el.style.setProperty("--p", String(el.scrollTop / slot.offsetHeight));
+    el.style.setProperty("--p", String(notes.length - 1 - el.scrollTop / slot.offsetHeight));
   }
 
   return (
@@ -43,19 +49,28 @@ export function NoteStack({ notes, more }: { notes: ProjectNote[]; more: number 
       className="note-stack"
       style={{ "--n": notes.length } as React.CSSProperties}
     >
-      <div ref={ref} className="note-drawer scroll-bare" onScroll={onScroll}>
+      <div
+        ref={ref}
+        className="note-drawer scroll-bare"
+        style={{ "--p": notes.length - 1 } as React.CSSProperties}
+        onScroll={onScroll}
+      >
         <div className="note-pile">
           {notes.map((note, i) => (
             <div
-              key={note.id}
+              key={`${note.kind}-${note.id}`}
               className="stack-note"
               data-paper={PAPERS[i % PAPERS.length]}
               style={{ "--k": i } as React.CSSProperties}
             >
               <div className="flex items-center gap-1.5 font-mono text-[0.65rem]">
-                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: noteTone(note) }} />
+                {/* A trip is a diamond, as on the project map; a task a dot. */}
+                <span
+                  className={`h-2 w-2 shrink-0 ${note.kind === "trip" ? "rotate-45 rounded-[1px]" : "rounded-full"}`}
+                  style={{ background: noteTone(note) }}
+                />
                 <span className="truncate" style={{ color: "var(--text-muted)" }}>
-                  {note.code}
+                  {note.code ?? t("calendar.tripPrefix")}
                 </span>
               </div>
               <p className="line-clamp-2 text-xs font-medium leading-snug break-words">
@@ -73,7 +88,7 @@ export function NoteStack({ notes, more }: { notes: ProjectNote[]; more: number 
           ))}
         </div>
         {notes.map((note) => (
-          <div key={note.id} className="stack-slot" />
+          <div key={`${note.kind}-${note.id}`} className="stack-slot" />
         ))}
       </div>
       {more > 0 && <span className="stack-more">+{more}</span>}
