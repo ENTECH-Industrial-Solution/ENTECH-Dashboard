@@ -7,7 +7,9 @@ import { getHiddenRepos } from "@/lib/settings/server";
 const BOX_ROWS = 1;
 
 /**
- * The organisation's GitHub profile and its public repositories, as one band.
+ * The organisation's GitHub profile and its public repositories, in the
+ * dashboard's side column (see DashboardAside). The repos run sideways, one
+ * box at a time in the narrow gutter, with the rail's arrows to move along.
  *
  * The caller gates it on `github.enabled` before rendering, so a switched-off
  * section never reaches GitHub. It renders in the page's own pass rather than

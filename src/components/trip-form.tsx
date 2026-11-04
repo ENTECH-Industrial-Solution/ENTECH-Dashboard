@@ -3,10 +3,12 @@
 import { useRef, useState } from "react";
 
 import { PeoplePicker, type Person } from "@/components/people-picker";
+import { ProjectPicker } from "@/components/project-picker";
 import { Alert, FieldError, SubmitButton } from "@/components/ui";
 import { useTranslations } from "@/lib/i18n/client";
 import type { TranslationKey } from "@/lib/i18n/dictionaries";
 import { coordinatesFromMapUrl, isShortMapUrl } from "@/lib/maps";
+import type { ProjectRef } from "@/lib/projects";
 import { resolveMapLinkAction } from "@/server/actions/places";
 
 /**
@@ -54,10 +56,13 @@ export type FieldTripRow = {
    * a trip with no one on it. They are equals: any of them may start and
    * complete the trip, and it counts toward each of their workloads.
    */
-  travellers: TripPerson[];
+  // The photo rides along where the read had it; a face falls back to initials.
+  travellers: (TripPerson & { photo?: string | null })[];
   createdBy: { employeeCode: string; fullName: string };
   /** The customer pin this trip goes to, when it goes to one. */
   pin: { id: string; label: string | null } | null;
+  /** The project this trip is part of, if any. */
+  project: ProjectRef | null;
   /** Built on the server by src/lib/maps.ts. */
   mapHref: string;
   mapEmbedSrc: string;
@@ -209,6 +214,11 @@ export function TripForm({
               remove: "trips.removePerson",
             }}
           />
+        </div>
+
+        {/* `empty:hidden` so a page with no open projects leaves no gap. */}
+        <div className="empty:hidden sm:col-span-2">
+          <ProjectPicker id={id} current={trip?.project} error={errors.projectId} />
         </div>
 
         <div>

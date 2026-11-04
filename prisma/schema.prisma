@@ -49,6 +49,16 @@ enum TaskPriority {
   URGENT
 }
 
+/// What kind of work a task is, so the calendar can show one kind at a time.
+/// Closed for the reason CustomerSource is: a filter counts these, and free
+/// text would be forty spellings of "เอกสาร". Off-site work is not a value
+/// here — it is a FieldTrip, a different model.
+enum TaskCategory {
+  SOFTWARE
+  DOCUMENT
+  OTHER
+}
+
 enum TaskEventType {
   CREATED
   ASSIGNED
@@ -122,8 +132,35 @@ model Employee {
   createdCustomers    Customer[]    @relation("CustomerCreator")
   ownedCustomers      Customer[]    @relation("CustomerOwner")
 
+  /// Restrict, and counted by deleteEmployeeAction like the two above.
+  createdProjects Project[] @relation("ProjectCreator")
+
+  /// Their own picture, if they uploaded one. See EmployeePhoto.
+  photo EmployeePhoto?
+
   @@index([isActive, role])
   @@index([department])
+}
+
+/// A person's profile picture, set by that person from their own page.
+///
+/// Its own table rather than columns on Employee, and that is the point:
+/// the session lookup reads the employee row on every request, and plenty of
+/// reads take the whole row, so bytes there would ride along with all of them.
+/// Here they are read only by /dashboard/employee/[id]/photo, which serves them
+/// same-origin. Everything else selects `updatedAt`, which says a picture
+/// exists and versions its URL so a new one is never served from a cache.
+///
+/// Raster only, recognised by magic bytes (src/lib/pictures.ts). Cascade from
+/// the employee: the picture is theirs and is not evidence of anything, so it
+/// must not be what keeps an otherwise empty account from being deleted.
+model EmployeePhoto {
+  employeeId String   @id
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  image     Bytes
+  imageType String
+  updatedAt DateTime @updatedAt
 }
 
 model Session {
@@ -162,6 +199,15 @@ model Task {
   status      TaskStatus   @default(TODO)
   priority    TaskPriority @default(MEDIUM)
 
+  /// OTHER by default, because that is what every task predating the column
+  /// honestly is: nobody said. An admin sorts them out one edit at a time,
+  /// and each edit is in the trail like any other (EDITABLE_FIELDS).
+  category TaskCategory @default(OTHER)
+
+  /// The project this task is part of, when it is part of one. See Project.
+  projectId String?
+  project   Project? @relation("ProjectTasks", fields: [projectId], references: [id], onDelete: SetNull)
+
   /// Who the work belongs to. Any number, and they are equals — see
   /// TaskAssignee. "At least one" is a rule the database cannot state, so it
   /// lives in createTaskSchema / updateTaskSchema.
@@ -190,6 +236,7 @@ model Task {
 
   @@index([status, dueDate])
   @@index([completedAt])
+  @@index([projectId])
 }
 
 /// Who a task is assigned to. The whole model is its primary key, on the same
@@ -260,7 +307,7 @@ model AuditLog {
   @@index([entityType, entityId])
 }
 
-/// Single-row table backing the TSK-###### sequence.
+/// One row per sequence: "task" backs TSK-######, "project" PRJ-####.
 model Counter {
   name  String @id
   value Int    @default(0)
@@ -318,6 +365,10 @@ model FieldTrip {
   pinId String?
   pin   CustomerPin? @relation("FieldTripPin", fields: [pinId], references: [id], onDelete: SetNull)
 
+  /// The project this trip is part of, when it is part of one. See Project.
+  projectId String?
+  project   Project? @relation("ProjectTrips", fields: [projectId], references: [id], onDelete: SetNull)
+
   /// A pasted Google Maps place link, for when it is more precise than a name
   /// search. Only Google Maps hosts pass validation before this is stored.
   mapUrl String?
@@ -366,6 +417,71 @@ model FieldTrip {
 
   @@index([startDate, endDate])
   @@index([pinId])
+  @@index([projectId])
+}
+
+/// A job that is bigger than one task: a name, what it covers, and the tasks
+/// and trips that make it up. It exists so somebody can see the whole of a
+/// job — how much of it is done, what is late, who is on it — in one place.
+///
+/// It holds no status of its own beyond closedAt. Progress is *derived* from
+/// the work in it, never typed in, so it cannot disagree with that work.
+/// Closing is an admin's statement that the job is over; it hides the project
+/// from the dashboard band and the pickers, and changes nothing about the
+/// tasks and trips in it, which keep their own lifecycles.
+///
+/// There is no delete. A project is a record of what a job was, and the
+/// audited close is how one ends.
+///
+/// Task.projectId and FieldTrip.projectId are SetNull for the reason
+/// FieldTrip.pinId is: a task or trip is history in its own right and must
+/// never go because its grouping did. Nothing deletes a project today, so the
+/// rule only says what would happen if something ever did.
+model Project {
+  id String @id @default(cuid())
+
+  /// Sequential human-readable reference, e.g. "PRJ-0007".
+  code String @unique
+  name String
+
+  /// What the job covers, in the admin's words — the "scope" this exists for.
+  scope String?
+
+  /// Planned window, chosen by the admin. Optional, and plain dates like a
+  /// task's: they are what was planned, not what happened.
+  startDate DateTime?
+  endDate   DateTime?
+
+  closedAt DateTime?
+
+  /// Where the project sits in the band and the list, smallest first, set by
+  /// an admin. A new project takes one past the largest so it lands at the
+  /// end. Not unique: a tie (two creates racing) is broken by createdAt, and
+  /// the next move renumbers the open projects anyway.
+  position Int @default(0)
+
+  /// A small picture for the card — a logo or a photo of the job, downscaled
+  /// in the browser before upload. Held here rather than in object storage
+  /// because the app has none and the CSP opens no host for one: it is served
+  /// same-origin by /projects/[id]/image, which checks the session itself.
+  /// Raster only (PNG/JPEG/WebP, by magic bytes): an SVG is a document that
+  /// can carry script. `imageUpdatedAt` versions the URL so a replaced picture
+  /// is never served from a cache. Read it with an explicit `select`; nothing
+  /// should pull the bytes along with a project by accident.
+  image          Bytes?
+  imageType      String?
+  imageUpdatedAt DateTime?
+
+  createdById String
+  createdBy   Employee @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks Task[]      @relation("ProjectTasks")
+  trips FieldTrip[] @relation("ProjectTrips")
+
+  @@index([closedAt])
 }
 
 /// Who is on a trip. The whole model is its primary key: a person is on a trip

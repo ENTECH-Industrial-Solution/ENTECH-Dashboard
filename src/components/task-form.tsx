@@ -1,6 +1,7 @@
 "use client";
 
 import { PeoplePicker, type Person } from "@/components/people-picker";
+import { ProjectPicker } from "@/components/project-picker";
 import { Alert, FieldError, SubmitButton } from "@/components/ui";
 import type { TaskCardData } from "@/components/task-card";
 import { useTranslations } from "@/lib/i18n/client";
@@ -137,7 +138,24 @@ export function TaskForm({
             <option value="URGENT">{t("priority.URGENT")}</option>
           </select>
         </div>
+        <div>
+          <label className="label" htmlFor={`category-${id}`}>
+            {t("tasks.category")}
+          </label>
+          <select
+            id={`category-${id}`}
+            name="category"
+            className="input"
+            defaultValue={task?.category ?? "OTHER"}
+          >
+            <option value="SOFTWARE">{t("category.SOFTWARE")}</option>
+            <option value="DOCUMENT">{t("category.DOCUMENT")}</option>
+            <option value="OTHER">{t("category.OTHER")}</option>
+          </select>
+        </div>
       </div>
+
+      <ProjectPicker id={id} current={task?.project} error={errors.projectId} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>

@@ -5,6 +5,8 @@ import { EmployeeFrame } from "@/components/employee-frame";
 import { GithubSection } from "@/components/github-section";
 import { LeadSummary } from "@/components/lead-summary";
 import { PageShell } from "@/components/page-shell";
+import { ProjectBand } from "@/components/project-band";
+import { ProjectOptionsProvider } from "@/components/project-picker";
 import { ScheduleRow } from "@/components/schedule-row";
 import { SelfWorkCreator } from "@/components/self-work-creator";
 import { StaleTasks } from "@/components/stale-tasks";
@@ -24,6 +26,8 @@ import {
   getCustomerPinOptions,
   getEmployeeWorkloads,
   getLeadStatusCounts,
+  getProjectOptions,
+  getProjectSummaries,
   getStaleTasks,
   getTaskSummary,
 } from "@/server/queries";
@@ -56,6 +60,34 @@ export default async function DashboardPage({
   );
 }
 
+/**
+ * The side column, the same for both views. In the wide gutter it is exactly
+ * the screen's height and the last box stretches to its bottom, so the column
+ * ends where the screen does at any height. Stacked above the content on a
+ * narrower screen, stale work and GitHub sit side by side once there is room
+ * for two (the aside is a container, so this asks the column, not the
+ * viewport) — the wide gutter is too narrow for that, so there they stack.
+ */
+function DashboardAside({
+  summary,
+  stale,
+  github,
+}: {
+  summary: React.ReactNode;
+  stale: React.ReactNode;
+  github: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-4 min-[90rem]:flex min-[90rem]:h-full min-[90rem]:flex-col min-[90rem]:space-y-0 min-[90rem]:gap-4">
+      {summary}
+      <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 min-[90rem]:flex min-[90rem]:min-h-0 min-[90rem]:flex-1 min-[90rem]:flex-col min-[90rem]:[&>:last-child]:flex-1">
+        {stale}
+        {github}
+      </div>
+    </div>
+  );
+}
+
 /** Admin view: the workforce, one frame per person. */
 async function PeopleOverview({ user, cal }: { user: SessionUser; cal?: string }) {
   const [t, settings] = await Promise.all([getTranslations(), getSettings()]);
@@ -67,27 +99,33 @@ async function PeopleOverview({ user, cal }: { user: SessionUser; cal?: string }
   const showSummary = settings["dashboard.showSummary"];
   const showPeople = settings["dashboard.showPeople"];
 
-  const [summary, workloads, stale, leads] = await Promise.all([
+  const [summary, workloads, stale, leads, projects] = await Promise.all([
     showSummary ? getTaskSummary(user) : Promise.resolve(null),
     showPeople ? getEmployeeWorkloads(user) : Promise.resolve([]),
     getStaleTasks(user),
     // The board's own switch, so turning the map off skips this read too.
     settings["customer.enabled"] ? getLeadStatusCounts() : Promise.resolve(null),
+    settings["dashboard.showProjects"]
+      ? getProjectSummaries(user, { openOnly: true })
+      : Promise.resolve(null),
   ]);
 
   return (
     <PageShell
       className="space-y-8"
       aside={
-        <div className="space-y-4">
-          {summary && (
-            <SummaryTiles summary={summary} people={showPeople ? workloads : undefined} />
-          )}
-          <StaleTasks tasks={stale.tasks} total={stale.total} linkTo="person" />
-        </div>
+        <DashboardAside
+          summary={
+            summary && (
+              <SummaryTiles summary={summary} people={showPeople ? workloads : undefined} />
+            )
+          }
+          stale={<StaleTasks tasks={stale.tasks} total={stale.total} linkTo="person" />}
+          github={settings["github.enabled"] && <GithubSection />}
+        />
       }
     >
-      {settings["github.enabled"] && <GithubSection />}
+      {projects && <ProjectBand projects={projects} />}
 
       <ScheduleRow
         user={user}
@@ -136,7 +174,9 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
   // page keeps on this read, so `customer.enabled` still skips the query.
   const pinsEnabled = tripsEnabled && settings["customer.enabled"];
 
-  const [active, completed, summary, pins, stale, leads] = await Promise.all([
+  const showProjects = settings["dashboard.showProjects"];
+
+  const [active, completed, summary, pins, stale, leads, projects, openProjects] = await Promise.all([
     getActiveTasks(user),
     getCompletedTasks(user, { limit: 200 }),
     // Not fetched at all when the strip is off — see PeopleOverview.
@@ -144,86 +184,98 @@ async function PersonalBoard({ user, cal }: { user: SessionUser; cal?: string })
     pinsEnabled ? getCustomerPinOptions() : Promise.resolve([]),
     getStaleTasks(user),
     settings["customer.enabled"] ? getLeadStatusCounts() : Promise.resolve(null),
+    // The band and the form pickers both want the open projects; with the band
+    // on, its summaries already carry them, so one read serves both.
+    showProjects ? getProjectSummaries(user, { openOnly: true }) : Promise.resolve(null),
+    showProjects ? Promise.resolve(null) : getProjectOptions(),
   ]);
 
+  // Only the three fields the picker needs cross into the client.
+  const options = (projects ?? openProjects ?? []).map(({ id, code, name }) => ({ id, code, name }));
+
   return (
-    <PageShell
-      className="space-y-8"
-      aside={
-        <div className="space-y-4">
-          {summary && <SummaryTiles summary={summary} />}
-          <StaleTasks tasks={stale.tasks} total={stale.total} linkTo="anchor" />
-        </div>
-      }
-    >
-      {settings["github.enabled"] && <GithubSection />}
+    <ProjectOptionsProvider options={options}>
+      <PageShell
+        className="space-y-8"
+        aside={
+          <DashboardAside
+            summary={summary && <SummaryTiles summary={summary} />}
+            stale={<StaleTasks tasks={stale.tasks} total={stale.total} linkTo="anchor" />}
+            github={settings["github.enabled"] && <GithubSection />}
+          />
+        }
+      >
+        {/* Only the projects this person has work in — the others are a click
+            away on /projects, and a row of 0/0 cards says nothing about their week. */}
+        {projects && <ProjectBand projects={projects.filter((project) => project.total > 0)} />}
 
-      <ScheduleRow
-        user={user}
-        cal={cal}
-        basePath="/dashboard"
-        linkTasksTo="anchor"
-        below={leads && <LeadSummary counts={leads} />}
-      />
-
-      <TaskSection title={t("tasks.active")} hint={t("tasks.activeHint")}>
-        {/* The one place an employee creates work: for themselves, and only
-            that — both create actions pin the work to the caller. Above the
-            cards, where a new one will appear. */}
-        <SelfWorkCreator
-          self={{
-            id: user.id,
-            employeeCode: user.employeeCode,
-            fullName: user.fullName,
-            department: user.department,
-          }}
-          tripsEnabled={tripsEnabled}
-          pins={pins}
+        <ScheduleRow
+          user={user}
+          cal={cal}
+          basePath="/dashboard"
+          linkTasksTo="anchor"
+          below={leads && <LeadSummary counts={leads} />}
         />
 
-        {active.length === 0 ? (
-          <EmptyState label={t("tasks.empty")} />
-        ) : (
-          <CardGrid>
-            {active.map((task) => (
-              <ActiveTaskCard
-                key={task.id}
-                task={serialiseTask(task)}
-                canMutate={
-                  user.role === "ADMIN" ||
-                  task.assignees.some((a) => a.employee.id === user.id)
-                }
-              />
-            ))}
-          </CardGrid>
-        )}
-      </TaskSection>
+        <TaskSection title={t("tasks.active")} hint={t("tasks.activeHint")}>
+          {/* The one place an employee creates work: for themselves, and only
+              that — both create actions pin the work to the caller. Above the
+              cards, where a new one will appear. */}
+          <SelfWorkCreator
+            self={{
+              id: user.id,
+              employeeCode: user.employeeCode,
+              fullName: user.fullName,
+              department: user.department,
+            }}
+            tripsEnabled={tripsEnabled}
+            pins={pins}
+          />
 
-      <TaskSection
-        title={t("tasks.history")}
-        hint={
-          settings["dashboard.sharedHistory"]
-            ? t("tasks.historySharedHint")
-            : t("tasks.historyHint")
-        }
-        footnote={completed.length > 0 ? t("tasks.historyLocked") : undefined}
-      >
-        {completed.length === 0 ? (
-          <EmptyState label={t("tasks.empty")} />
-        ) : (
-          <CardGrid>
-            {completed.map((task) => (
-              <CompletedTaskCard
-                key={task.id}
-                task={serialiseTask(task)}
-                isAdmin={false}
-              />
-            ))}
-          </CardGrid>
-        )}
-      </TaskSection>
+          {active.length === 0 ? (
+            <EmptyState label={t("tasks.empty")} />
+          ) : (
+            <CardGrid>
+              {active.map((task) => (
+                <ActiveTaskCard
+                  key={task.id}
+                  task={serialiseTask(task)}
+                  canMutate={
+                    user.role === "ADMIN" ||
+                    task.assignees.some((a) => a.employee.id === user.id)
+                  }
+                />
+              ))}
+            </CardGrid>
+          )}
+        </TaskSection>
 
-      <TripHistory employeeId={user.id} />
-    </PageShell>
+        <TaskSection
+          title={t("tasks.history")}
+          hint={
+            settings["dashboard.sharedHistory"]
+              ? t("tasks.historySharedHint")
+              : t("tasks.historyHint")
+          }
+          footnote={completed.length > 0 ? t("tasks.historyLocked") : undefined}
+        >
+          {completed.length === 0 ? (
+            <EmptyState label={t("tasks.empty")} />
+          ) : (
+            <CardGrid>
+              {completed.map((task) => (
+                <CompletedTaskCard
+                  key={task.id}
+                  task={serialiseTask(task)}
+                  isAdmin={false}
+                />
+              ))}
+            </CardGrid>
+          )}
+        </TaskSection>
+
+        <TripHistory employeeId={user.id} />
+      </PageShell>
+    </ProjectOptionsProvider>
   );
 }

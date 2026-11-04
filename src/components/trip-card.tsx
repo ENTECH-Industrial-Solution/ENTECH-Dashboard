@@ -7,6 +7,7 @@ import { Avatar } from "@/components/avatar";
 import { MiniMap } from "@/components/map-embed";
 import { Reveal, Swap } from "@/components/motion";
 import { LinkPending } from "@/components/nav-progress";
+import { ProjectChip } from "@/components/project-chip";
 import { VideoPlayer } from "@/components/video-embed";
 import { tripHours } from "@/lib/calendar";
 import { Alert, SubmitButton } from "@/components/ui";
@@ -177,10 +178,17 @@ export function TripMapHeader({ trip }: { trip: FieldTripRow }) {
 export function TripHeadline({
   trip,
   aside,
+  clamp = false,
 }: {
   trip: FieldTripRow;
   /** Drawn top-end, beside the purpose — the card's status badge. */
   aside?: React.ReactNode;
+  /**
+   * Two lines of purpose at most, the rest in a tooltip. For the off-site
+   * panel, whose boxes share each part's height: one long purpose would
+   * otherwise stretch that part in every box on the row.
+   */
+  clamp?: boolean;
 }) {
   const t = useTranslations();
   const locale = useLocale();
@@ -209,8 +217,11 @@ export function TripHeadline({
       <div className="flex min-w-0 flex-1 flex-col justify-center">
         <div className="flex items-start gap-2">
           <div
-            className="min-w-0 flex-1 text-sm font-medium leading-snug break-words"
+            className={`min-w-0 flex-1 text-sm font-medium leading-snug break-words ${
+              clamp ? "line-clamp-2" : ""
+            }`}
             style={cancelled ? { textDecoration: "line-through" } : undefined}
+            title={clamp ? trip.purpose : undefined}
           >
             {trip.purpose}
           </div>
@@ -231,6 +242,11 @@ export function TripHeadline({
           {trip.startedAt &&
             ` · ${t("trips.startedAt")} ${formatMoment(trip.startedAt)}`}
         </div>
+        {trip.project && (
+          <div className="mt-1.5 min-w-0">
+            <ProjectChip project={trip.project} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -249,8 +265,16 @@ const MAX_FACES = 4;
  * wrapping rather than truncating: this is the line that tells four people
  * they are on the same job.
  */
-export function TripPeople({ travellers }: { travellers: FieldTripRow["travellers"] }) {
+export function TripPeople({
+  travellers,
+  clamp = false,
+}: {
+  travellers: FieldTripRow["travellers"];
+  /** Two lines of names at most, as TripHeadline's `clamp`; the faces and the count say the rest. */
+  clamp?: boolean;
+}) {
   const t = useTranslations();
+  const names = travellers.map((person) => person.fullName).join(", ");
   const faces = travellers.slice(0, MAX_FACES);
   const more = travellers.length - faces.length;
   const ring = { "--tw-ring-color": "var(--face-ring, var(--surface))" } as React.CSSProperties;
@@ -265,7 +289,7 @@ export function TripPeople({ travellers }: { travellers: FieldTripRow["traveller
             style={ring}
             title={`${person.employeeCode} — ${person.fullName}`}
           >
-            <Avatar fullName={person.fullName} />
+            <Avatar fullName={person.fullName} photo={person.photo} />
           </span>
         ))}
         {more > 0 && (
@@ -279,8 +303,11 @@ export function TripPeople({ travellers }: { travellers: FieldTripRow["traveller
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium leading-snug break-words">
-          {travellers.map((person) => person.fullName).join(", ")}
+        <div
+          className={`text-sm font-medium leading-snug break-words ${clamp ? "line-clamp-2" : ""}`}
+          title={clamp ? names : undefined}
+        >
+          {names}
         </div>
         <div className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
           {travellers.length > 1

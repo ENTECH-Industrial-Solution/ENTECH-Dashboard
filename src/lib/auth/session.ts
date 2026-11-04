@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { cache } from "react";
 
 import { db } from "@/lib/db";
+import { photoOf } from "@/lib/pictures";
 import { isProduction } from "@/lib/env";
 
 export const SESSION_COOKIE = "entech_session";
@@ -23,13 +24,17 @@ export type SessionUser = {
   role: Role;
   department: string | null;
   mustChangePassword: boolean;
+  /** Their profile picture's URL, or null — for the header's face. */
+  photo: string | null;
 };
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-function toSessionUser(employee: Employee): SessionUser {
+function toSessionUser(
+  employee: Employee & { photo: { updatedAt: Date } | null },
+): SessionUser {
   return {
     id: employee.id,
     employeeCode: employee.employeeCode,
@@ -37,6 +42,7 @@ function toSessionUser(employee: Employee): SessionUser {
     role: employee.role,
     department: employee.department,
     mustChangePassword: employee.mustChangePassword,
+    photo: photoOf(employee.id, employee.photo),
   };
 }
 
@@ -86,7 +92,9 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
 
   const session = await db.session.findUnique({
     where: { tokenHash: hashToken(token) },
-    include: { employee: true },
+    // The photo's timestamp only: its bytes live in their own table so that
+    // this lookup, made on every request, never carries them.
+    include: { employee: { include: { photo: { select: { updatedAt: true } } } } },
   });
 
   if (!session || session.revokedAt) return null;

@@ -35,6 +35,16 @@
   --warning-soft: light-dark(oklch(0.96 0.05 75), oklch(0.29 0.05 75));
   --danger: light-dark(oklch(0.55 0.19 25), oklch(0.68 0.17 25));
   --danger-soft: light-dark(oklch(0.95 0.04 25), oklch(0.28 0.06 25));
+
+  /*
+   * The calendar's open-task bars, so overlapping runs can be told apart.
+   * Hues kept clear of the three that mean something there — red overdue,
+   * green done, amber off-site — and level with --brand, which is the first.
+   */
+  --span-1: var(--brand);
+  --span-2: light-dark(oklch(0.54 0.17 300), oklch(0.7 0.15 300));
+  --span-3: light-dark(oklch(0.55 0.1 200), oklch(0.74 0.11 200));
+  --span-4: light-dark(oklch(0.55 0.17 335), oklch(0.72 0.15 335));
   --ring: light-dark(oklch(0.52 0.16 250 / 0.45), oklch(0.68 0.14 250 / 0.5));
 
   /*
@@ -276,7 +286,7 @@ body {
   }
 }
 
-/* `EdgeBlur` in slide-row.tsx: the soft edge of a rail with more beyond it.
+/* `EdgeBlur` in slide-row.tsx: the soft edge of a rail where a card is cut.
    Fades rather than snapping when the rail reaches its end — and the fade is
    on each layer, never on `.edge-blur` itself: a parent below full opacity
    becomes the layers' backdrop root, leaving them nothing behind to blur. */
@@ -513,7 +523,7 @@ body {
 .slide-rail {
   grid-auto-flow: column;
   grid-auto-columns: minmax(min(100%, clamp(17.5rem, 85%, 20rem)), 1fr);
-  /* The content fades out under `EdgeBlur` where there is more beyond it.
+  /* The content fades out under `EdgeBlur` where a card is cut by the edge.
      Blur alone left the clipped card's border standing as a hard line at the
      rail's edge — nothing past the clip is drawn, so there is nothing there to
      blur. Fading it to transparent dissolves the cut into the panel. Each
@@ -556,6 +566,45 @@ body {
 }
 .slide-card {
   scroll-snap-align: start;
+}
+
+/* `ScrollFade`: the vertical twin of the rail's fade, on whichever edge cuts
+   something. Same registered-length trick, so it eases rather than snaps. */
+.scroll-fade {
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--fade-top),
+    #000 calc(100% - var(--fade-bottom)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--fade-top),
+    #000 calc(100% - var(--fade-bottom)),
+    transparent
+  );
+  transition: --fade-top var(--dur-base) var(--ease-out),
+    --fade-bottom var(--dur-base) var(--ease-out);
+}
+.scroll-fade[data-back="true"] {
+  --fade-top: 3rem;
+}
+.scroll-fade[data-forward="true"] {
+  --fade-bottom: 3rem;
+}
+@property --fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
 }
 
 /*
@@ -1022,6 +1071,137 @@ body {
     rotate: var(--tilt);
     translate: 0 0;
   }
+}
+
+/*
+ * A project card's open tasks as a pile of notes (`NoteStack`). The drawer is
+ * an ordinary scroller over one empty slot per note; the pile is pinned over
+ * it (sticky, pulling its own height back out of flow), and the component
+ * publishes the scroll as `--p`, in notes. Each note is `--d = index − --p`
+ * from the one you are on:
+ *
+ *   d > 0   still to come: below, one note's height apart, the next peeking;
+ *   d = 0   the one you are on, in full;
+ *   d < 0   flipped past: filed above, `--strip` apart — enough to read the
+ *           code and the title's first line — for the last `--pile` of them,
+ *           closed up at the top beyond that.
+ *
+ * One formula, continuous in `--p`, so a note slides from one role to the
+ * next as you scroll. `min(--p, --pile)` is how far the note you are on has
+ * been pushed down by the pile above it, so at the start it sits at the top.
+ */
+.note-stack {
+  --note-h: 5.25rem;
+  --strip: 2.95rem;
+  --pile: 2;
+  --peek: 1.25rem;
+  --pad: 0.45rem;
+  --adv: calc(var(--note-h) + 0.5rem);
+  position: relative;
+  /* Centred in whatever room it has: the middle of its column beside the
+     details, the middle of the card's width underneath them. */
+  place-self: center;
+  inline-size: 100%;
+  max-inline-size: 18rem;
+}
+.note-drawer {
+  --p: 0;
+  /* Only as tall as the pile it can ever hold: one note alone needs no room
+     for a pile above it or a peek below it. */
+  --stack-h: calc(
+    min(var(--n) - 1, var(--pile)) * var(--strip) + var(--note-h) + min(var(--n) - 1, 1) *
+      var(--peek) + 2 * var(--pad)
+  );
+  block-size: var(--stack-h);
+  overflow-y: auto;
+  scroll-snap-type: y proximity;
+}
+.note-pile {
+  position: sticky;
+  inset-block-start: 0;
+  block-size: var(--stack-h);
+  margin-block-end: calc(-1 * var(--stack-h));
+  /* Clips the notes still to come; the padding round the paper keeps the
+     tilt and the shadow clear of that edge. */
+  overflow: hidden;
+}
+/* One scroll step per note; the last slot is the whole drawer tall, so the
+   scroll ends exactly on the last note. */
+.stack-slot {
+  block-size: var(--adv);
+  scroll-snap-align: start;
+}
+.stack-slot:last-child {
+  block-size: var(--stack-h);
+}
+.stack-note {
+  --paper: oklch(0.95 0.085 100);
+  --tilt: -1deg;
+  --d: calc(var(--k) - var(--p));
+  --y: calc(
+    min(var(--p), var(--pile)) * var(--strip) + max(var(--d), 0) * var(--adv) +
+      max(min(var(--d), 0), -1 * var(--pile)) * var(--strip)
+  );
+  /* Paper is paper in either theme, as on the calendar's notes. */
+  color-scheme: light;
+  color: var(--text);
+  position: absolute;
+  inset-inline: 0.4rem;
+  inset-block-start: var(--pad);
+  block-size: var(--note-h);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--paper);
+  border-radius: 2px;
+  rotate: var(--tilt);
+  transform: translateY(var(--y));
+  box-shadow:
+    0 6px 10px -6px oklch(0 0 0 / 0.4),
+    0 1px 2px oklch(0 0 0 / 0.16);
+  transition:
+    translate var(--dur-base) var(--ease-out),
+    rotate var(--dur-base) var(--ease-out),
+    scale var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+/* Pointing at a filed note lifts it clear of the one covering it. */
+@media (hover: hover) {
+  .stack-note:hover {
+    z-index: 10;
+    translate: 0 -0.35rem;
+    rotate: 0deg;
+    scale: 1.04;
+    box-shadow:
+      0 14px 22px -10px oklch(0 0 0 / 0.45),
+      0 2px 4px oklch(0 0 0 / 0.14);
+  }
+}
+.stack-note:nth-child(3n + 2) {
+  --tilt: 1.4deg;
+}
+.stack-note:nth-child(3n) {
+  --tilt: -2deg;
+}
+.stack-note[data-paper="blue"] {
+  --paper: oklch(0.9 0.05 230);
+}
+.stack-note[data-paper="pink"] {
+  --paper: oklch(0.9 0.05 5);
+}
+.stack-more {
+  position: absolute;
+  inset-inline-end: -0.4rem;
+  inset-block-end: -0.5rem;
+  z-index: 5;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--text-muted);
+  box-shadow: 0 0 0 1px var(--border);
 }
 
 /* --- theme switch --------------------------------------------------------- */

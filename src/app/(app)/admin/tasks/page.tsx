@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { CardGrid } from "@/components/card-grid";
 import { PageShell } from "@/components/page-shell";
+import { ProjectOptionsProvider } from "@/components/project-picker";
 import { ActiveTaskCard, CompletedTaskCard } from "@/components/task-card";
 import { TaskSection } from "@/components/task-section";
 import { EmptyState } from "@/components/ui";
@@ -15,6 +16,7 @@ import {
   getCompletedTasks,
   getCustomerPinOptions,
   getFieldTrips,
+  getProjectOptions,
 } from "@/server/queries";
 
 import { TaskCreator } from "./task-creator";
@@ -42,7 +44,7 @@ export default async function AdminTasksPage() {
   // `customer.enabled` claims — see SETTING_IMPACT.
   const pinsEnabled = tripsEnabled && settings["customer.enabled"];
 
-  const [assignees, active, completed, upcomingTrips, pastTrips, pins] =
+  const [assignees, active, completed, upcomingTrips, pastTrips, pins, projects] =
     await Promise.all([
       getAssignableEmployees(),
       getActiveTasks(admin),
@@ -52,72 +54,75 @@ export default async function AdminTasksPage() {
         ? getFieldTrips({ window: "past", limit: 50 })
         : Promise.resolve([]),
       pinsEnabled ? getCustomerPinOptions() : Promise.resolve([]),
+      getProjectOptions(),
     ]);
 
   return (
-    <PageShell className="space-y-8">
-      <header className="space-y-4">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">{t("nav.allTasks")}</h1>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            {t("app.tagline")}
-          </p>
-        </div>
-        <TaskCreator
-          assignees={assignees}
-          tripsEnabled={tripsEnabled}
-          pins={pins}
-        />
-      </header>
+    <ProjectOptionsProvider options={projects}>
+      <PageShell className="space-y-8">
+        <header className="space-y-4">
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight">{t("nav.allTasks")}</h1>
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              {t("app.tagline")}
+            </p>
+          </div>
+          <TaskCreator
+            assignees={assignees}
+            tripsEnabled={tripsEnabled}
+            pins={pins}
+          />
+        </header>
 
-      <TaskSection title={t("tasks.active")} hint={t("tasks.activeHint")}>
-        {active.length === 0 ? (
-          <EmptyState label={t("tasks.empty")} />
-        ) : (
-          <CardGrid>
-            {active.map((task) => (
-              <ActiveTaskCard
-                key={task.id}
-                task={serialiseTask(task)}
-                canMutate
-                isAdmin
-                assignees={assignees}
-              />
-            ))}
-          </CardGrid>
+        <TaskSection title={t("tasks.active")} hint={t("tasks.activeHint")}>
+          {active.length === 0 ? (
+            <EmptyState label={t("tasks.empty")} />
+          ) : (
+            <CardGrid>
+              {active.map((task) => (
+                <ActiveTaskCard
+                  key={task.id}
+                  task={serialiseTask(task)}
+                  canMutate
+                  isAdmin
+                  assignees={assignees}
+                />
+              ))}
+            </CardGrid>
+          )}
+        </TaskSection>
+
+        {tripsEnabled && (
+          <TripSections
+            upcoming={upcomingTrips.map((trip) => serialiseTrip(trip, locale))}
+            past={pastTrips.map((trip) => serialiseTrip(trip, locale))}
+            people={assignees}
+            pins={pins}
+          />
         )}
-      </TaskSection>
 
-      {tripsEnabled && (
-        <TripSections
-          upcoming={upcomingTrips.map((trip) => serialiseTrip(trip, locale))}
-          past={pastTrips.map((trip) => serialiseTrip(trip, locale))}
-          people={assignees}
-          pins={pins}
-        />
-      )}
-
-      <TaskSection
-        title={t("tasks.history")}
-        hint={t("tasks.historyHint")}
-        footnote={completed.length > 0 ? t("tasks.historyLocked") : undefined}
-      >
-        {completed.length === 0 ? (
-          <EmptyState label={t("tasks.empty")} />
-        ) : (
-          <CardGrid>
-            {completed.map((task) => (
-              <CompletedTaskCard
-                key={task.id}
-                task={serialiseTask(task)}
-                isAdmin
-                assignees={assignees}
-              />
-            ))}
-          </CardGrid>
-        )}
-      </TaskSection>
-    </PageShell>
+        <TaskSection
+          title={t("tasks.history")}
+          hint={t("tasks.historyHint")}
+          footnote={completed.length > 0 ? t("tasks.historyLocked") : undefined}
+        >
+          {completed.length === 0 ? (
+            <EmptyState label={t("tasks.empty")} />
+          ) : (
+            <CardGrid>
+              {completed.map((task) => (
+                <CompletedTaskCard
+                  key={task.id}
+                  task={serialiseTask(task)}
+                  isAdmin
+                  assignees={assignees}
+                />
+              ))}
+            </CardGrid>
+          )}
+        </TaskSection>
+      </PageShell>
+    </ProjectOptionsProvider>
   );
 }
 

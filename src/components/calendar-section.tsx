@@ -105,6 +105,8 @@ export async function CalendarSection({
     title: task.title,
     status: task.status,
     priority: task.priority,
+    category: task.category,
+    project: task.project,
     dayKey,
     assigneeNames: peopleSummary(task.assignees.map((a) => a.employee)),
     href: taskHref(task),
@@ -148,10 +150,13 @@ export async function CalendarSection({
     if (from >= to) continue;
 
     spanEntries.push({
+      kind: "task",
       id: task.id,
       code: task.code,
       title: task.title,
       status: task.status,
+      category: task.category,
+      project: task.project,
       from,
       to,
       assigneeNames: peopleSummary(task.assignees.map((a) => a.employee)),
@@ -180,6 +185,24 @@ export async function CalendarSection({
 
     const from = bangkokDayKey(trip.startDate);
     const to = bangkokDayKey(trip.endDate);
+    const state = trip.completedAt
+      ? "COMPLETED"
+      : trip.startedAt
+        ? "ON_SITE"
+        : "SCHEDULED";
+
+    // A trip over several days is also a bar, as a task's planned run is.
+    if (from < to) {
+      spanEntries.push({
+        kind: "trip",
+        id: `trip:${trip.id}`,
+        title: trip.purpose,
+        project: trip.project,
+        from,
+        to,
+        state,
+      });
+    }
 
     for (let day = 1; day <= daysInMonth; day += 1) {
       const key = dayKeyOf({ year, month }, day);
@@ -189,18 +212,17 @@ export async function CalendarSection({
 
       tripEntries.push({
         id: `${trip.id}-${key}`,
+        tripId: trip.id,
         purpose: trip.purpose,
+        project: trip.project,
         dayKey: key,
+        isEnd: key === from || key === to,
         // "สมชาย +2" where a cell has room for one name. Every view of a trip
         // must still say who is on it; the card and the map popup carry the
         // full list.
         personName: peopleSummary(trip.travellers),
         locationName: trip.locationName,
-        state: trip.completedAt
-          ? "COMPLETED"
-          : trip.startedAt
-            ? "ON_SITE"
-            : "SCHEDULED",
+        state,
         hours: `${hours.start}–${hours.end}`,
         mapHref: mapsHref(trip),
       });

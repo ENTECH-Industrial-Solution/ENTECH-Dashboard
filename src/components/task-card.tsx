@@ -3,12 +3,14 @@
 import { useActionState, useEffect, useState, type ReactNode } from "react";
 
 import { Reveal } from "@/components/motion";
+import { ProjectChip } from "@/components/project-chip";
 import { TaskForm, type AssigneeOption } from "@/components/task-form";
 import { VideoPlayer } from "@/components/video-embed";
 import { Alert, PriorityBadge, StatusBadge, SubmitButton } from "@/components/ui";
 import { dueState } from "@/lib/calendar";
 import { useLocale, useTranslations } from "@/lib/i18n/client";
 import { useSettings } from "@/lib/settings/client";
+import type { ProjectRef } from "@/lib/projects";
 import { idleState } from "@/server/actions/types";
 import {
   completeTaskAction,
@@ -25,6 +27,7 @@ export type TaskCardData = {
   description: string | null;
   status: "TODO" | "IN_PROGRESS" | "BLOCKED" | "COMPLETED";
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+  category: "SOFTWARE" | "DOCUMENT" | "OTHER";
   /** Planned start, set when the work was assigned. */
   startDate: string | null;
   dueDate: string | null;
@@ -36,6 +39,8 @@ export type TaskCardData = {
   assignees: { id: string; employeeCode: string; fullName: string }[];
   /** The admin who created and assigned the task. */
   createdBy: { employeeCode: string; fullName: string };
+  /** The project this task is part of, if any. */
+  project: ProjectRef | null;
 };
 
 function useFormatter() {
@@ -229,6 +234,11 @@ export function ActiveTaskCard({
           <h3 className="mt-0.5 font-medium leading-snug break-words">
             {task.title}
           </h3>
+          {task.project && (
+            <div className="mt-1.5">
+              <ProjectChip project={task.project} />
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           {settings["task.showPriority"] && <PriorityBadge priority={task.priority} />}
@@ -455,6 +465,11 @@ export function CompletedTaskCard({
           <h3 className="mt-0.5 font-medium leading-snug break-words">
             {task.title}
           </h3>
+          {task.project && (
+            <div className="mt-1.5">
+              <ProjectChip project={task.project} />
+            </div>
+          )}
         </div>
         <StatusBadge status="COMPLETED" />
       </div>
