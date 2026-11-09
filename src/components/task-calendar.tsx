@@ -591,70 +591,79 @@ export function TaskCalendar({
 
   return (
     <div className="card space-y-4 p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="me-auto text-base font-semibold tracking-tight">
-          {shownLabel}
-        </h3>
-        {/* The width sits on a wrapper: `.input` is unlayered and sets its own. */}
-        <div className="w-36">
-          <select
-            className="input"
-            aria-label={t("calendar.filter")}
-            value={filter}
-            onChange={(event) => setFilter(event.target.value as WorkFilter)}
-          >
-            <option value="ALL">{t("calendar.filterAll")}</option>
-            <option value="SOFTWARE">{t("category.SOFTWARE")}</option>
-            <option value="DOCUMENT">{t("category.DOCUMENT")}</option>
-            <option value="OTHER">{t("category.OTHER")}</option>
-            <option value="TRIP">{t("calendar.filterTrips")}</option>
-          </select>
-        </div>
-        {projects.length > 0 && (
-          <div className="w-40">
-            <select
-              className="input"
-              aria-label={t("projects.field")}
-              value={projectId}
-              onChange={(event) => setProjectFilter(event.target.value)}
-            >
-              <option value="ALL">{t("projects.allProjects")}</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.code} · {project.name}
-                </option>
-              ))}
-            </select>
+      {/* A container query on the header alone, not the card: container
+          containment would make the card the containing block for the fixed
+          copy a dragged note uses. The header is one row from 42rem — the
+          width its five controls need — and below that the month and the
+          month buttons take the first row and the two filters the second. */}
+      <div className="@container">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="me-auto text-base font-semibold tracking-tight">
+            {shownLabel}
+          </h3>
+          <div className="order-last flex w-full gap-2 @2xl:order-none @2xl:w-auto">
+            {/* The width sits on a wrapper: `.input` is unlayered and sets its own. */}
+            <div className="min-w-0 flex-1 @2xl:w-36 @2xl:flex-none">
+              <select
+                className="input"
+                aria-label={t("calendar.filter")}
+                value={filter}
+                onChange={(event) => setFilter(event.target.value as WorkFilter)}
+              >
+                <option value="ALL">{t("calendar.filterAll")}</option>
+                <option value="SOFTWARE">{t("category.SOFTWARE")}</option>
+                <option value="DOCUMENT">{t("category.DOCUMENT")}</option>
+                <option value="OTHER">{t("category.OTHER")}</option>
+                <option value="TRIP">{t("calendar.filterTrips")}</option>
+              </select>
+            </div>
+            {projects.length > 0 && (
+              <div className="min-w-0 flex-1 @2xl:w-40 @2xl:flex-none">
+                <select
+                  className="input"
+                  aria-label={t("projects.field")}
+                  value={projectId}
+                  onChange={(event) => setProjectFilter(event.target.value)}
+                >
+                  <option value="ALL">{t("projects.allProjects")}</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.code} · {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
-        )}
-        <Link
-          href={todayHref}
-          scroll={false}
-          className="btn btn-ghost"
-          onClick={() => beginTurn(monthOf(todayKey))}
-        >
-          {t("calendar.today")}
-        </Link>
-        <Link
-          href={prevHref}
-          scroll={false}
-          className="btn btn-secondary"
-          aria-label={t("calendar.prevMonth")}
-          title={t("calendar.prevMonth")}
-          onClick={() => beginTurn(shiftMonth({ year, month }, -1))}
-        >
-          <Chevron direction="prev" />
-        </Link>
-        <Link
-          href={nextHref}
-          scroll={false}
-          className="btn btn-secondary"
-          aria-label={t("calendar.nextMonth")}
-          title={t("calendar.nextMonth")}
-          onClick={() => beginTurn(shiftMonth({ year, month }, 1))}
-        >
-          <Chevron direction="next" />
-        </Link>
+          <Link
+            href={todayHref}
+            scroll={false}
+            className="btn btn-ghost"
+            onClick={() => beginTurn(monthOf(todayKey))}
+          >
+            {t("calendar.today")}
+          </Link>
+          <Link
+            href={prevHref}
+            scroll={false}
+            className="btn btn-secondary"
+            aria-label={t("calendar.prevMonth")}
+            title={t("calendar.prevMonth")}
+            onClick={() => beginTurn(shiftMonth({ year, month }, -1))}
+          >
+            <Chevron direction="prev" />
+          </Link>
+          <Link
+            href={nextHref}
+            scroll={false}
+            className="btn btn-secondary"
+            aria-label={t("calendar.nextMonth")}
+            title={t("calendar.nextMonth")}
+            onClick={() => beginTurn(shiftMonth({ year, month }, 1))}
+          >
+            <Chevron direction="next" />
+          </Link>
+        </div>
       </div>
 
       {/* One page in flow and, while a month changes, the old one sliding

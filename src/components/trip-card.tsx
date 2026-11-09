@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { Fragment, useActionState, useState } from "react";
 
 import { Avatar } from "@/components/avatar";
 import { MiniMap } from "@/components/map-embed";
@@ -307,7 +307,20 @@ export function TripPeople({
           className={`text-sm font-medium leading-snug break-words ${clamp ? "line-clamp-2" : ""}`}
           title={clamp ? names : undefined}
         >
-          {names}
+          {/* Each word is its own box so a line breaks between words only: the
+              dictionary does not know a name like "เอลีชาย์", and without this
+              the browser splits it wherever it fits ("เอ" / "ลีชาย์"). */}
+          {travellers.map((person, i) => (
+            <Fragment key={person.id}>
+              {i > 0 && ", "}
+              {person.fullName.split(" ").map((word, w) => (
+                <Fragment key={w}>
+                  {w > 0 && " "}
+                  <span className="inline-block">{word}</span>
+                </Fragment>
+              ))}
+            </Fragment>
+          ))}
         </div>
         <div className="truncate text-xs" style={{ color: "var(--text-muted)" }}>
           {travellers.length > 1
@@ -532,7 +545,10 @@ export function TripActions({
         {showStart && (
           <form action={startAction} className="contents">
             <input type="hidden" name="fieldTripId" value={trip.id} />
-            <SubmitButton className="btn btn-secondary w-full">
+            {/* The next step is the loud one: start while the trip has not begun,
+                complete once it has. Completing early stays possible — a trip can
+                end before anyone pressed start — it is just not the headline. */}
+            <SubmitButton className="btn btn-primary w-full">
               {t("trips.start")}
             </SubmitButton>
           </form>
@@ -541,7 +557,7 @@ export function TripActions({
         {showComplete && (
           <button
             type="button"
-            className="btn btn-primary w-full"
+            className={`btn w-full ${showStart ? "btn-secondary" : "btn-primary"}`}
             onClick={() => setOpen("finishing")}
           >
             {t("trips.complete")}

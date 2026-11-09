@@ -192,7 +192,9 @@ function FrameStat({
       <div className="text-lg font-semibold leading-tight tabular-nums" style={{ color }}>
         {value}
       </div>
-      <div className="text-[0.6875rem] leading-tight" style={{ color: "var(--text-muted)" }}>
+      {/* Balanced, so "งานที่กำลังดำเนินการ" splits between words and does not
+          leave "การ" alone on a second line. */}
+      <div className="text-[0.6875rem] leading-tight text-balance" style={{ color: "var(--text-muted)" }}>
         {label}
       </div>
     </div>
