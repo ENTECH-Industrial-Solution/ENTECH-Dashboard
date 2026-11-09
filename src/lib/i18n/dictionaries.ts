@@ -91,6 +91,18 @@ export const dictionary = {
     en: "Everyone's completed work — visible to all, read only",
   },
   "tasks.empty": { th: "ยังไม่มีงานในหมวดนี้", en: "No tasks in this section" },
+  "tasks.search": { th: "ค้นหางาน", en: "Search tasks" },
+  "tasks.searchPlaceholder": { th: "ชื่องาน รหัส หรือชื่อคน", en: "Title, code or person" },
+  "tasks.filterPerson": { th: "กรองตามคน", en: "Filter by person" },
+  "tasks.filterEveryone": { th: "ทุกคน", en: "Everyone" },
+  "tasks.filterClear": { th: "ล้างตัวกรอง", en: "Clear filters" },
+  "tasks.filterCount": { th: "ตรงเงื่อนไข", en: "Matching" },
+  "tasks.noMatch": { th: "ไม่มีงานที่ตรงกับเงื่อนไข", en: "No tasks match" },
+  // `{n}` is the number of archive rows the page loads; see TaskLists.
+  "tasks.historyCapped": {
+    th: "แสดงเฉพาะงานที่เสร็จล่าสุด {n} งาน งานที่เก่ากว่านั้นยังอยู่ในระบบ แต่ไม่แสดงและค้นหาไม่เจอในหน้านี้",
+    en: "Showing only the {n} most recently completed tasks. Older ones are kept, but not listed or searchable here.",
+  },
   "tasks.new": { th: "สร้างงานใหม่", en: "New task" },
   "tasks.newSelf": { th: "เพิ่มงานของฉัน", en: "Add my task" },
   "tasks.newSelfHint": {
@@ -390,6 +402,8 @@ export const dictionary = {
   "employees.progress": { th: "ความคืบหน้า", en: "Progress" },
   "employees.noTasks": { th: "ยังไม่ได้รับมอบหมายงาน", en: "No tasks assigned yet" },
   "employees.nothingOpen": { th: "ไม่มีงานค้าง", en: "Nothing open" },
+  // The one-line count on a phone, where "งานที่กำลังดำเนินการ" would not fit.
+  "employees.activeShort": { th: "กำลังทำ", en: "Active" },
   "employees.viewTasks": { th: "ดูงานทั้งหมด", en: "View all tasks" },
   "employees.deactivateConfirm": {
     th: "ระงับบัญชีนี้? ประวัติงานทั้งหมดจะยังถูกเก็บไว้เป็นหลักฐาน",

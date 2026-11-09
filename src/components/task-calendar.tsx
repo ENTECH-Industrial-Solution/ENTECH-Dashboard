@@ -261,6 +261,37 @@ const TRIP_TONE: Record<
   },
 };
 
+/**
+ * What a mark says besides its colour, so a calendar read without colour still
+ * separates the states: a filled dot is open work, a ring is finished, a
+ * triangle is a missed deadline, and a diamond is a trip — the same diamond the
+ * project map and the note stack use for one.
+ */
+type MarkShape = "dot" | "ring" | "triangle" | "diamond";
+
+const TONE_SHAPE: Record<Tone, MarkShape> = {
+  open: "dot",
+  overdue: "triangle",
+  done: "ring",
+  start: "dot",
+};
+
+function Mark({ shape, color }: { shape: MarkShape; color: string }) {
+  const style: React.CSSProperties =
+    shape === "ring"
+      ? { boxShadow: `inset 0 0 0 1.5px ${color}` }
+      : shape === "triangle"
+        ? { background: color, clipPath: "polygon(50% 0, 100% 100%, 0 100%)" }
+        : { background: color };
+  const box =
+    shape === "diamond"
+      ? "h-1.5 w-1.5 rotate-45 rounded-[1px]"
+      : shape === "triangle"
+        ? "h-2 w-2"
+        : "h-2 w-2 rounded-full";
+  return <span aria-hidden className={`inline-block shrink-0 ${box}`} style={style} />;
+}
+
 function toneOf(task: CalendarTask, todayKey: string): Tone {
   if (task.kind === "start") return "start";
   if (task.status === "COMPLETED") return "done";
@@ -703,17 +734,24 @@ export function TaskCalendar({
             const isSelected = key === selected;
 
             // Trips first: where someone is affects everything else that day.
-            const dots = [
+            const dots: { color: string; shape: MarkShape }[] = [
               ...dayTrips
                 .filter((trip) => trip.isEnd)
-                .map((trip) => TRIP_TONE[trip.state].color),
+                .map((trip) => ({
+                  color: TRIP_TONE[trip.state].color,
+                  shape: "diamond" as const,
+                })),
               // An open deadline wears its bar's colour, so the dot and the
               // run it ends read as one task.
               ...dayTasks.map((task) => {
                 const tone = toneOf(task, todayKey);
-                return tone === "open"
-                  ? (hueOf.get(task.taskId) ?? TONE_COLOR.open)
-                  : TONE_COLOR[tone];
+                return {
+                  color:
+                    tone === "open"
+                      ? (hueOf.get(task.taskId) ?? TONE_COLOR.open)
+                      : TONE_COLOR[tone],
+                  shape: TONE_SHAPE[tone],
+                };
               }),
             ];
             // What the cell cannot show: dots past what fits, and spans past
@@ -772,15 +810,11 @@ export function TaskCalendar({
                   // One line at the foot of the cell, never wrapped: a second
                   // line on a phone-width cell would land on the span bars.
                   <span className="day-marks mt-auto flex items-center justify-center gap-0.5 whitespace-nowrap">
-                    {shownDots.map((color, dotIndex) => (
-                      <span
+                    {shownDots.map((dot, dotIndex) => (
+                      <Mark
                         key={dotIndex}
-                        className="h-1.5 w-1.5 rounded-full"
-                        style={{
-                          background: isSelected
-                            ? "var(--surface)"
-                            : color,
-                        }}
+                        shape={dot.shape}
+                        color={isSelected ? "var(--surface)" : dot.color}
                       />
                     ))}
                     {extra > 0 && (
@@ -1107,20 +1141,22 @@ export function TaskCalendar({
 }
 
 /**
- * What the colours and the two bar shapes mean, on one wrapping line. The
- * dots wear the same colours as the bars, so one key serves both.
+ * What the colours, the two bar shapes and the mark shapes mean, on one
+ * wrapping line. The marks wear the same colours as the bars, so one key serves
+ * both; each entry shows its mark first, then its bar.
  */
 function Legend({ hasTasks, hasTrips }: { hasTasks: boolean; hasTrips: boolean }) {
   const t = useTranslations();
   const group = (
     label: string,
     kind: CalendarSpan["kind"],
-    items: { color: string; label: string }[],
+    items: { color: string; label: string; shape: MarkShape; mark?: string }[],
   ) => (
     <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
       <span className="font-medium">{label}</span>
       {items.map((item) => (
         <span key={item.label} className="inline-flex items-center gap-1.5">
+          <Mark shape={item.shape} color={item.mark ?? item.color} />
           <span
             aria-hidden
             className="h-1.5 w-4 rounded-full"
@@ -1144,11 +1180,17 @@ function Legend({ hasTasks, hasTrips }: { hasTasks: boolean; hasTrips: boolean }
             color: `linear-gradient(90deg, ${SPAN_HUES.map(
               (hue, i) => `${hue} ${i * 25}% ${(i + 1) * 25}%`,
             ).join(", ")})`,
+            mark: TONE_COLOR.open,
+            shape: TONE_SHAPE.open,
             label: t("calendar.legendOpen"),
           },
-          { color: TONE_COLOR.overdue, label: t("calendar.legendOverdue") },
-          { color: TONE_COLOR.done, label: t("status.COMPLETED") },
-          { color: TONE_COLOR.start, label: t("calendar.marksStart") },
+          {
+            color: TONE_COLOR.overdue,
+            shape: TONE_SHAPE.overdue,
+            label: t("calendar.legendOverdue"),
+          },
+          { color: TONE_COLOR.done, shape: TONE_SHAPE.done, label: t("status.COMPLETED") },
+          { color: TONE_COLOR.start, shape: TONE_SHAPE.start, label: t("calendar.marksStart") },
         ])}
       {hasTrips &&
         group(
@@ -1156,6 +1198,7 @@ function Legend({ hasTasks, hasTrips }: { hasTasks: boolean; hasTrips: boolean }
           "trip",
           (["SCHEDULED", "ON_SITE", "COMPLETED"] as const).map((state) => ({
             color: TRIP_TONE[state].color,
+            shape: "diamond" as const,
             label: t(TRIP_TONE[state].label),
           })),
         )}

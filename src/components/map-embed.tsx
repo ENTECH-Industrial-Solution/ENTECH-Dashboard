@@ -122,7 +122,7 @@ export function MiniMap({
           style={{ background: "color-mix(in oklab, black 38%, transparent)" }}
         >
           <span
-            className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium leading-none text-white"
+            className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium leading-none text-white"
             style={{ background: "color-mix(in oklab, black 72%, transparent)" }}
           >
             <ExpandIcon />

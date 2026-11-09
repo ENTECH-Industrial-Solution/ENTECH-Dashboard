@@ -29,9 +29,12 @@
   --brand: light-dark(oklch(0.52 0.16 250), oklch(0.68 0.14 250));
   --brand-contrast: light-dark(oklch(0.99 0 0), oklch(0.16 0.02 260));
   --brand-soft: light-dark(oklch(0.95 0.03 250), oklch(0.29 0.05 250));
-  --success: light-dark(oklch(0.58 0.13 155), oklch(0.72 0.14 155));
+  /* The light values clear 4.5:1 as text on white and on --surface-muted
+     (success 0.58 was 3.7:1, warning 0.68 was 2.7:1); they are also the fill
+     of bars and dots, which only get a shade deeper. */
+  --success: light-dark(oklch(0.52 0.13 155), oklch(0.72 0.14 155));
   --success-soft: light-dark(oklch(0.95 0.04 155), oklch(0.27 0.05 155));
-  --warning: light-dark(oklch(0.68 0.14 75), oklch(0.78 0.13 75));
+  --warning: light-dark(oklch(0.54 0.13 75), oklch(0.78 0.13 75));
   --warning-soft: light-dark(oklch(0.96 0.05 75), oklch(0.29 0.05 75));
   --danger: light-dark(oklch(0.55 0.19 25), oklch(0.68 0.17 25));
   --danger-soft: light-dark(oklch(0.95 0.04 25), oklch(0.28 0.06 25));
@@ -1206,6 +1209,13 @@ body {
 .stack-note[data-paper="pink"] {
   --paper: oklch(0.9 0.05 5);
 }
+/* Paper is light in both themes, so the muted ink on it is the light theme's
+   but deeper: the page's 0.53 reads 3.8:1 on this paper, 0.42 clears 4.5. The
+   notes in the stack and the ones on the calendar share it. */
+.stack-note,
+.sticky-note {
+  --text-muted: oklch(0.42 0.014 260);
+}
 .stack-more {
   position: absolute;
   inset-inline-end: -0.4rem;
@@ -1213,7 +1223,7 @@ body {
   z-index: 5;
   padding: 0.05rem 0.4rem;
   border-radius: 999px;
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 600;
   background: var(--surface);
   color: var(--text-muted);
