@@ -116,7 +116,7 @@ export function TripMapHeader({ trip }: { trip: FieldTripRow }) {
   const customerLink = trip.pin && (
     <Link
       href={`/customers?pin=${trip.pin.id}`}
-      className="mt-1.5 inline-flex items-center gap-1 text-xs underline"
+      className="mt-0.5 inline-flex items-center gap-1 py-1 text-xs underline"
       style={{ color: "var(--brand)" }}
     >
       <PinIcon />

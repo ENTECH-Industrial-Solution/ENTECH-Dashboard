@@ -63,7 +63,7 @@ export async function EmployeeFrame({
   return (
     <Link
       href={`/dashboard/employee/${workload.id}`}
-      className="card card-link space-y-3 p-4"
+      className="card card-link space-y-2 p-3 sm:space-y-3 sm:p-4"
       style={workload.isActive ? undefined : { opacity: 0.7 }}
     >
       <div className="flex items-start gap-3">
@@ -104,7 +104,36 @@ export async function EmployeeFrame({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      {/* On a phone the three boxes are one line of text: six frames of boxes
+          were about 1,400px of page. The page behind the frame has the rest. */}
+      <p
+        className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs sm:hidden"
+        style={{ color: "var(--text-muted)" }}
+      >
+        <span>
+          {t("employees.activeShort")} <b className="tabular-nums" style={{ color: "var(--text)" }}>{workload.active}</b>
+        </span>
+        <span>
+          {t("tasks.overdue")}{" "}
+          <b
+            className="tabular-nums"
+            style={{ color: workload.overdue > 0 ? "var(--danger)" : "var(--text)" }}
+          >
+            {workload.overdue}
+          </b>
+        </span>
+        <span>
+          {t("status.COMPLETED")}{" "}
+          <b
+            className="tabular-nums"
+            style={{ color: workload.completed > 0 ? "var(--success)" : "var(--text)" }}
+          >
+            {workload.completed}
+          </b>
+        </span>
+      </p>
+
+      <div className="hidden grid-cols-3 gap-2 sm:grid">
         <FrameStat label={t("tasks.active")} value={workload.active} />
         <FrameStat
           label={t("tasks.overdue")}
@@ -194,7 +223,7 @@ function FrameStat({
       </div>
       {/* Balanced, so "งานที่กำลังดำเนินการ" splits between words and does not
           leave "การ" alone on a second line. */}
-      <div className="text-[0.6875rem] leading-tight text-balance" style={{ color: "var(--text-muted)" }}>
+      <div className="text-xs leading-tight text-balance" style={{ color: "var(--text-muted)" }}>
         {label}
       </div>
     </div>

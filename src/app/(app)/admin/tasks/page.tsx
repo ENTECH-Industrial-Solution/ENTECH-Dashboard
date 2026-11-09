@@ -1,11 +1,7 @@
 import type { Metadata } from "next";
 
-import { CardGrid } from "@/components/card-grid";
 import { PageShell } from "@/components/page-shell";
 import { ProjectOptionsProvider } from "@/components/project-picker";
-import { ActiveTaskCard, CompletedTaskCard } from "@/components/task-card";
-import { TaskSection } from "@/components/task-section";
-import { EmptyState } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth/rbac";
 import { getLocale, getTranslations } from "@/lib/i18n/server";
 import { serialiseTask, serialiseTrip } from "@/lib/serialise";
@@ -20,9 +16,13 @@ import {
 } from "@/server/queries";
 
 import { TaskCreator } from "./task-creator";
+import { TaskLists } from "./task-lists";
 import { TripSections } from "./trip-sections";
 
 export const metadata: Metadata = { title: "งานทั้งหมด / All tasks" };
+
+/** How many completed tasks the page loads; TaskLists says so when it is reached. */
+const COMPLETED_LIMIT = 200;
 
 /**
  * Admin view: assign work of either kind, and see every employee's tasks and
@@ -48,7 +48,7 @@ export default async function AdminTasksPage() {
     await Promise.all([
       getAssignableEmployees(),
       getActiveTasks(admin),
-      getCompletedTasks(admin, { limit: 200 }),
+      getCompletedTasks(admin, { limit: COMPLETED_LIMIT }),
       tripsEnabled ? getFieldTrips({ window: "upcoming" }) : Promise.resolve([]),
       tripsEnabled
         ? getFieldTrips({ window: "past", limit: 50 })
@@ -74,53 +74,21 @@ export default async function AdminTasksPage() {
           />
         </header>
 
-        <TaskSection title={t("tasks.active")} hint={t("tasks.activeHint")}>
-          {active.length === 0 ? (
-            <EmptyState label={t("tasks.empty")} />
-          ) : (
-            <CardGrid>
-              {active.map((task) => (
-                <ActiveTaskCard
-                  key={task.id}
-                  task={serialiseTask(task)}
-                  canMutate
-                  isAdmin
-                  assignees={assignees}
-                />
-              ))}
-            </CardGrid>
-          )}
-        </TaskSection>
-
-        {tripsEnabled && (
-          <TripSections
-            upcoming={upcomingTrips.map((trip) => serialiseTrip(trip, locale))}
-            past={pastTrips.map((trip) => serialiseTrip(trip, locale))}
-            people={assignees}
-            pins={pins}
-          />
-        )}
-
-        <TaskSection
-          title={t("tasks.history")}
-          hint={t("tasks.historyHint")}
-          footnote={completed.length > 0 ? t("tasks.historyLocked") : undefined}
+        <TaskLists
+          active={active.map(serialiseTask)}
+          completed={completed.map(serialiseTask)}
+          completedLimit={COMPLETED_LIMIT}
+          assignees={assignees}
         >
-          {completed.length === 0 ? (
-            <EmptyState label={t("tasks.empty")} />
-          ) : (
-            <CardGrid>
-              {completed.map((task) => (
-                <CompletedTaskCard
-                  key={task.id}
-                  task={serialiseTask(task)}
-                  isAdmin
-                  assignees={assignees}
-                />
-              ))}
-            </CardGrid>
+          {tripsEnabled && (
+            <TripSections
+              upcoming={upcomingTrips.map((trip) => serialiseTrip(trip, locale))}
+              past={pastTrips.map((trip) => serialiseTrip(trip, locale))}
+              people={assignees}
+              pins={pins}
+            />
           )}
-        </TaskSection>
+        </TaskLists>
       </PageShell>
     </ProjectOptionsProvider>
   );
