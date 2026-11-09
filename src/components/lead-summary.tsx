@@ -25,7 +25,7 @@ export async function LeadSummary({ counts }: { counts: Record<CustomerStatus, n
         <h2 className="text-lg font-semibold tracking-tight">{t("dashboard.leads")}</h2>
         <Link
           href="/customers/leads"
-          className="shrink-0 text-sm underline"
+          className="-my-1.5 shrink-0 py-1.5 text-sm underline"
           style={{ color: "var(--text-muted)" }}
         >
           {t("dashboard.leadsAll")}

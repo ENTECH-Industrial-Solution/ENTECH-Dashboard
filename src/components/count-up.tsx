@@ -51,8 +51,18 @@ export function CountUp({ value }: { value: number }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the count is a mount flourish only
   }, [reduced]);
 
-  if (reduced) return <>{value}</>;
-  return counted ? <PopDigits value={value} /> : <>{shown}</>;
+  // The digits are split into one box each and mid-count they are not the
+  // value, so a screen reader gets the final number as one piece of text and
+  // the drawn digits are hidden from it. The same two spans whatever `reduced`
+  // says, so hydration sees the structure the server rendered.
+  return (
+    <>
+      <span className="sr-only">{value}</span>
+      <span aria-hidden="true">
+        {reduced ? value : counted ? <PopDigits value={value} /> : shown}
+      </span>
+    </>
+  );
 }
 
 /**

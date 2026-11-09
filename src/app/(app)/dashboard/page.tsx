@@ -63,10 +63,11 @@ export default async function DashboardPage({
 /**
  * The side column, the same for both views. In the wide gutter it is exactly
  * the screen's height and the last box stretches to its bottom, so the column
- * ends where the screen does at any height. Stacked above the content on a
- * narrower screen, stale work and GitHub sit side by side once there is room
- * for two (the aside is a container, so this asks the column, not the
- * viewport) — the wide gutter is too narrow for that, so there they stack.
+ * ends where the screen does at any height. On a narrower screen the counts
+ * and stale work stack above the content and GitHub — the one box that is not
+ * about the team's work — drops below everything else (`order-last`). Each
+ * `contents` wrapper makes its children items of the page shell, which is
+ * what lets one of them take a different place.
  */
 function DashboardAside({
   summary,
@@ -78,11 +79,15 @@ function DashboardAside({
   github: React.ReactNode;
 }) {
   return (
-    <div className="space-y-4 min-[90rem]:flex min-[90rem]:h-full min-[90rem]:flex-col min-[90rem]:space-y-0 min-[90rem]:gap-4">
+    <div className="contents min-[90rem]:flex min-[90rem]:h-full min-[90rem]:flex-col min-[90rem]:gap-4">
       {summary}
-      <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 min-[90rem]:flex min-[90rem]:min-h-0 min-[90rem]:flex-1 min-[90rem]:flex-col min-[90rem]:[&>:last-child]:flex-1">
+      <div className="contents min-[90rem]:flex min-[90rem]:min-h-0 min-[90rem]:flex-1 min-[90rem]:flex-col min-[90rem]:[&>:last-child]:flex-1">
         {stale}
-        {github}
+        {github && (
+          <div className="order-last min-[90rem]:order-none min-[90rem]:flex min-[90rem]:flex-col min-[90rem]:[&>*]:flex-1">
+            {github}
+          </div>
+        )}
       </div>
     </div>
   );
