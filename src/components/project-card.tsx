@@ -223,7 +223,7 @@ export function ProjectProgress({
               {more > 0 && (
                 <span
                   aria-hidden
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-[0.65rem] font-semibold ring-2"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ring-2"
                   style={
                     {
                       "--tw-ring-color": "var(--surface)",

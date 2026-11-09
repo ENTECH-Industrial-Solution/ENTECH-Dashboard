@@ -63,7 +63,7 @@ export function NoteStack({ notes, more }: { notes: ProjectNote[]; more: number 
               data-paper={PAPERS[i % PAPERS.length]}
               style={{ "--k": i } as React.CSSProperties}
             >
-              <div className="flex items-center gap-1.5 font-mono text-[0.65rem]">
+              <div className="flex items-center gap-1.5 font-mono text-xs">
                 {/* A trip is a diamond, as on the project map; a task a dot. */}
                 <span
                   className={`h-2 w-2 shrink-0 ${note.kind === "trip" ? "rotate-45 rounded-[1px]" : "rounded-full"}`}
@@ -78,7 +78,7 @@ export function NoteStack({ notes, more }: { notes: ProjectNote[]; more: number 
               </p>
               {note.assignees.length > 0 && (
                 <p
-                  className="mt-auto truncate text-end text-[0.65rem]"
+                  className="mt-auto truncate text-end text-xs"
                   style={{ color: "var(--text-muted)" }}
                 >
                   {peopleSummary(note.assignees)}

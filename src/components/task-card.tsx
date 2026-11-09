@@ -266,13 +266,13 @@ export function ActiveTaskCard({
             out. The calendar and the capsules summarise instead. */}
         <Meta label={t("tasks.assignee")}>
           {task.assignees
-            .map((person) => `${person.employeeCode} — ${person.fullName}`)
+            .map((person) => `${person.fullName} (${person.employeeCode})`)
             .join(", ")}
         </Meta>
 
         {settings["task.showAssigner"] && (
           <Meta label={t("tasks.assignedBy")}>
-            {task.createdBy.employeeCode} — {task.createdBy.fullName}
+            {task.createdBy.fullName} ({task.createdBy.employeeCode})
           </Meta>
         )}
 
@@ -485,13 +485,13 @@ export function CompletedTaskCard({
             out. The calendar and the capsules summarise instead. */}
         <Meta label={t("tasks.assignee")}>
           {task.assignees
-            .map((person) => `${person.employeeCode} — ${person.fullName}`)
+            .map((person) => `${person.fullName} (${person.employeeCode})`)
             .join(", ")}
         </Meta>
 
         {settings["task.showAssigner"] && (
           <Meta label={t("tasks.assignedBy")}>
-            {task.createdBy.employeeCode} — {task.createdBy.fullName}
+            {task.createdBy.fullName} ({task.createdBy.employeeCode})
           </Meta>
         )}
 
