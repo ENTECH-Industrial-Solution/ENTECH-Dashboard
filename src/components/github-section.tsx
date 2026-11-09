@@ -79,7 +79,7 @@ export async function GithubSection() {
                 href={/^https?:\/\//.test(org.blog) ? org.blog : `https://${org.blog}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="underline"
+                className="-my-1 inline-block py-1 underline"
               >
                 {org.blog}
               </a>
@@ -101,7 +101,9 @@ export async function GithubSection() {
               className="text-xs font-medium uppercase tracking-wide"
               style={{ color: "var(--text-muted)" }}
             >
-              {repos.length} {t("github.repos")}
+              {/* "5 / 6" when an admin has hidden one, so it matches the header. */}
+              {repos.length}
+              {repos.length < org.public_repos ? ` / ${org.public_repos}` : ""} {t("github.repos")}
             </div>
           }
         >

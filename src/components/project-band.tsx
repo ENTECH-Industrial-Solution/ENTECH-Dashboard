@@ -24,7 +24,12 @@ export async function ProjectBand({ projects }: { projects: ProjectSummary[] }) 
             {t("projects.bandHint")}
           </p>
         </div>
-        <Link href="/projects" className="text-sm font-medium" style={{ color: "var(--brand)" }}>
+        {/* -my/py grow the hit area to 32px without moving the heading's baseline. */}
+        <Link
+          href="/projects"
+          className="-my-1.5 inline-block py-1.5 text-sm font-medium"
+          style={{ color: "var(--brand)" }}
+        >
           <LinkPending />
           {t("projects.viewAll")} →
         </Link>
