@@ -1,9 +1,9 @@
 import Link from "next/link";
 
 import { Avatar } from "@/components/avatar";
-import { dueState } from "@/lib/calendar";
+import { bangkokDayKey, dueState, todayKey } from "@/lib/calendar";
 import { formatDate, getLocale, getTranslations } from "@/lib/i18n/server";
-import type { EmployeeWorkload } from "@/server/queries";
+import { PROGRESS_WINDOW_DAYS, type EmployeeWorkload } from "@/server/queries";
 import { LinkPending } from "@/components/nav-progress";
 
 /**
@@ -22,6 +22,14 @@ const NEXT_DUE_COLOR = {
   open: "var(--text)",
 } as const;
 
+/** Whole Bangkok days a deadline is behind `today`; both are calendar days. */
+function daysLate(due: Date, today: string): number {
+  const day = 24 * 60 * 60 * 1000;
+  return Math.round(
+    (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${bangkokDayKey(due)}T00:00:00Z`)) / day,
+  );
+}
+
 export async function EmployeeFrame({
   workload,
   isSelf = false,
@@ -32,8 +40,16 @@ export async function EmployeeFrame({
   const t = await getTranslations();
   const locale = await getLocale();
 
+  const today = todayKey();
+  const dueNow = workload.nextDueDate ? dueState(workload.nextDueDate, today) : null;
+
   const total = workload.active + workload.completed;
-  const progress = total === 0 ? 0 : Math.round((workload.completed / total) * 100);
+  // Open work against what was finished lately, not against everything ever
+  // finished — see EmployeeWorkload.completedRecent. With nothing open there is
+  // nothing to make progress on, and the bar is left out rather than drawn full.
+  const recentTotal = workload.active + workload.completedRecent;
+  const progress =
+    recentTotal === 0 ? 0 : Math.round((workload.completedRecent / recentTotal) * 100);
   const subtitle = [workload.department, workload.position]
     .filter(Boolean)
     .join(" · ");
@@ -102,9 +118,9 @@ export async function EmployeeFrame({
         />
       </div>
 
-      {total === 0 ? (
+      {total === 0 || workload.active === 0 ? (
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          {t("employees.noTasks")}
+          {total === 0 ? t("employees.noTasks") : t("employees.nothingOpen")}
         </p>
       ) : (
         <div className="space-y-1.5">
@@ -116,7 +132,7 @@ export async function EmployeeFrame({
             style={{ color: "var(--text-muted)" }}
           >
             <span>
-              {t("employees.progress")} {progress}%
+              {t("employees.progress")} ({PROGRESS_WINDOW_DAYS} {t("trips.days")}) {progress}%
             </span>
             {breakdown.length > 0 && (
               <span className="truncate">
@@ -127,14 +143,24 @@ export async function EmployeeFrame({
         </div>
       )}
 
-      {workload.nextDueDate && (
+      {workload.nextDueDate && dueNow && (
         <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-          {t("tasks.nextDue")}:{" "}
-          <span
-            style={{ color: NEXT_DUE_COLOR[dueState(workload.nextDueDate)] }}
-          >
-            {formatDate(workload.nextDueDate, locale)}
-          </span>
+          {dueNow === "overdue" ? (
+            // "Next due" with a date behind us reads as an upcoming one that is
+            // simply wrong, so a missed deadline says how late it is instead.
+            <span style={{ color: NEXT_DUE_COLOR.overdue }}>
+              {t("tasks.overdueBy")} {daysLate(workload.nextDueDate, today)} {t("trips.days")}
+              {" · "}
+              {formatDate(workload.nextDueDate, locale)}
+            </span>
+          ) : (
+            <>
+              {t("tasks.nextDue")}:{" "}
+              <span style={{ color: NEXT_DUE_COLOR[dueNow] }}>
+                {formatDate(workload.nextDueDate, locale)}
+              </span>
+            </>
+          )}
         </div>
       )}
       <LinkPending />

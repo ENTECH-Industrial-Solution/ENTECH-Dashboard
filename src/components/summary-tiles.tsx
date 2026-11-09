@@ -48,6 +48,21 @@ export async function SummaryTiles({
     return rows.length > 0 ? rows : undefined;
   };
 
+  const rowsBy = {
+    active: breakdown("active"),
+    overdue: breakdown("overdue"),
+    completed: breakdown("completed"),
+  };
+
+  // The big number counts a job once; the names count it under each person on
+  // it (`getTaskSummary` vs `getEmployeeWorkloads`). Where the names add up to
+  // more than the number, the bar reads as a share of something it is not, so
+  // the strip says why — once, not on every tile.
+  const hasSharedWork = (["active", "overdue", "completed"] as const).some((metric) => {
+    const rows = rowsBy[metric];
+    return rows !== undefined && rows.reduce((sum, row) => sum + row.value, 0) > summary[metric];
+  });
+
   return (
     // A container query rather than a viewport one: the same strip runs across
     // a person's page and stands as a column in the dashboard's gutter, and
@@ -58,7 +73,7 @@ export async function SummaryTiles({
           label={t("tasks.active")}
           value={summary.active}
           metric="active"
-          rows={breakdown("active")}
+          rows={rowsBy.active}
           morePeople={morePeople}
           moreTasks={moreTasks}
         />
@@ -67,7 +82,7 @@ export async function SummaryTiles({
           value={summary.overdue}
           tone={summary.overdue > 0 ? "danger" : undefined}
           metric="overdue"
-          rows={breakdown("overdue")}
+          rows={rowsBy.overdue}
           morePeople={morePeople}
           moreTasks={moreTasks}
         />
@@ -76,11 +91,16 @@ export async function SummaryTiles({
           value={summary.completed}
           tone="success"
           metric="completed"
-          rows={breakdown("completed")}
+          rows={rowsBy.completed}
           morePeople={morePeople}
           moreTasks={moreTasks}
         />
       </section>
+      {hasSharedWork && (
+        <p className="mt-2 px-1 text-xs" style={{ color: "var(--text-muted)" }}>
+          {t("dashboard.sharedNote")}
+        </p>
+      )}
     </div>
   );
 }

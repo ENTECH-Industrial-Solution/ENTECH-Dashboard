@@ -135,6 +135,8 @@ export const dictionary = {
   },
   "tasks.timeline": { th: "ประวัติการเปลี่ยนแปลง", en: "Activity trail" },
   "tasks.nextDue": { th: "ครบกำหนดถัดไป", en: "Next due" },
+  // Followed by "{n} {trips.days}" — the dictionary has no interpolation.
+  "tasks.overdueBy": { th: "เลยกำหนดมา", en: "Overdue by" },
   "tasks.edit": { th: "แก้ไขข้อมูล", en: "Edit" },
   "tasks.editTitle": { th: "แก้ไขข้อมูลงาน", en: "Edit task" },
   "tasks.editArchivedHint": {
@@ -205,6 +207,10 @@ export const dictionary = {
   "dashboard.back": { th: "กลับหน้าหลัก", en: "Back to dashboard" },
   "dashboard.morePeople": { th: "คนอื่น", en: "others" },
   "dashboard.moreTasks": { th: "งานอื่น", en: "more" },
+  "dashboard.sharedNote": {
+    th: "ตัวเลขใหญ่นับงานละครั้ง ส่วนรายชื่อนับงานที่ทำร่วมกันซ้ำในแต่ละคน",
+    en: "The big number counts each job once; the names count a shared job under each person.",
+  },
   "dashboard.stale": { th: "งานที่ค้างนาน", en: "Stalled work" },
   "dashboard.staleHint": {
     th: "กำลังทำหรือติดปัญหา และไม่มีความเคลื่อนไหวเกิน",
@@ -383,6 +389,7 @@ export const dictionary = {
   "employees.openTasks": { th: "งานค้าง", en: "Open tasks" },
   "employees.progress": { th: "ความคืบหน้า", en: "Progress" },
   "employees.noTasks": { th: "ยังไม่ได้รับมอบหมายงาน", en: "No tasks assigned yet" },
+  "employees.nothingOpen": { th: "ไม่มีงานค้าง", en: "Nothing open" },
   "employees.viewTasks": { th: "ดูงานทั้งหมด", en: "View all tasks" },
   "employees.deactivateConfirm": {
     th: "ระงับบัญชีนี้? ประวัติงานทั้งหมดจะยังถูกเก็บไว้เป็นหลักฐาน",
