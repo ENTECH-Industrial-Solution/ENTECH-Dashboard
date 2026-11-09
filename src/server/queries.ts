@@ -689,10 +689,19 @@ export type EmployeeWorkload = {
    */
   active: number;
   completed: number;
+  /**
+   * The part of `completed` closed out in the last PROGRESS_WINDOW_DAYS. A frame's
+   * progress is measured against this and not against `completed`: the archive
+   * only grows, so a ratio over all of it drifts to 100% whatever is on the desk.
+   */
+  completedRecent: number;
   overdue: number;
   /** Task deadlines only; a trip is a span, not a due date. */
   nextDueDate: Date | null;
 };
+
+/** How far back a person's progress looks; see EmployeeWorkload.completedRecent. */
+export const PROGRESS_WINDOW_DAYS = 30;
 
 /**
  * The dashboard's per-person frames.
@@ -727,6 +736,7 @@ export async function getEmployeeWorkloads(
   if (ids.length === 0) return [];
 
   const boundary = dayStart(todayKey());
+  const recentSince = new Date(Date.now() - PROGRESS_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
   /*
    * Two grouped passes, run together rather than one UNION.
@@ -755,6 +765,7 @@ export async function getEmployeeWorkloads(
         inProgress: bigint;
         blocked: bigint;
         completed: bigint;
+        completedRecent: bigint;
         overdue: bigint;
         nextDueDate: Date | null;
       }[]
@@ -765,6 +776,7 @@ export async function getEmployeeWorkloads(
         count(*) FILTER (WHERE status = 'IN_PROGRESS')                       AS "inProgress",
         count(*) FILTER (WHERE status = 'BLOCKED')                           AS "blocked",
         count(*) FILTER (WHERE status = 'COMPLETED')                         AS "completed",
+        count(*) FILTER (WHERE status = 'COMPLETED' AND "completedAt" >= ${recentSince}) AS "completedRecent",
         count(*) FILTER (WHERE ${taskOverdue(boundary)})                     AS "overdue",
         min("dueDate") FILTER (WHERE status <> 'COMPLETED')                  AS "nextDueDate"
       FROM ${TASK_ASSIGNEE_TABLE} ta
@@ -777,6 +789,7 @@ export async function getEmployeeWorkloads(
         employeeId: string;
         active: bigint;
         completed: bigint;
+        completedRecent: bigint;
         overdue: bigint;
       }[]
     >`
@@ -784,6 +797,7 @@ export async function getEmployeeWorkloads(
         tt."employeeId",
         count(*) FILTER (WHERE ${TRIP_ACTIVE})              AS "active",
         count(*) FILTER (WHERE ${TRIP_COMPLETED})           AS "completed",
+        count(*) FILTER (WHERE ${TRIP_COMPLETED} AND "completedAt" >= ${recentSince}) AS "completedRecent",
         count(*) FILTER (WHERE ${tripOverdue(boundary)})    AS "overdue"
       FROM ${TRIP_TRAVELLER_TABLE} tt
       JOIN ${TRIP_TABLE} t ON t."id" = tt."fieldTripId"
@@ -816,6 +830,7 @@ export async function getEmployeeWorkloads(
       blocked,
       active: todo + inProgress + blocked + Number(trips?.active ?? 0),
       completed: Number(w?.completed ?? 0) + Number(trips?.completed ?? 0),
+      completedRecent: Number(w?.completedRecent ?? 0) + Number(trips?.completedRecent ?? 0),
       overdue: Number(w?.overdue ?? 0) + Number(trips?.overdue ?? 0),
       nextDueDate: w?.nextDueDate ?? null,
     };
